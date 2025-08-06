@@ -1,0 +1,55 @@
+# CiteSeer Node Classification Configuration
+# Out-of-domain task (not used in pre-training)
+
+model_artifact:
+  path: 'checkpoints/s5_domain_invariant/best_model.pt'
+
+downstream_task:
+  dataset_name: 'CiteSeer'
+  task_type: 'node_classification'
+  batch_size: 1  # Full-batch for node classification
+  num_classes: 6
+  in_domain: false
+  input_dim: 3703  # Bag-of-words features
+
+training:
+  epochs: 300
+  patience: 30
+  optimizer: 'AdamW'
+  learning_rate: 0.001
+  weight_decay: 0.0005
+  
+  scheduler:
+    type: 'cosine'
+    warmup_epochs: 50
+    min_lr_ratio: 0.001
+  
+  validation_metric: 'val_accuracy'
+  metric_mode: 'max'
+
+fine_tuning_strategy:
+  freeze_encoder: true
+  unfreeze_epoch: 100
+  adaptation_method: 'full'
+  
+  pretrained_component_lr: 0.0001
+  new_component_lr: 0.01
+
+wandb:
+  enabled: true
+  project_name: 'gnn-evaluation-citeseer'
+  run_name: null
+  tags: ['citeseer', 'node-classification', 'out-of-domain']
+  notes: 'CiteSeer node classification - out-of-domain evaluation'
+
+evaluation:
+  metrics:
+    - 'accuracy'
+    - 'f1_score'
+    - 'precision'
+    - 'recall'
+  
+  eval_frequency: 5
+
+reproducibility:
+  seed: 42

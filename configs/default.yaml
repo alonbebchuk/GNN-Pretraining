@@ -1,0 +1,79 @@
+data:
+  batch_size: 32
+  domain_balanced_sampling: true
+  drop_last: true
+  num_workers: 4
+  pin_memory: true
+  pretrain_datasets:
+  - MUTAG
+  - PROTEINS
+  - NCI1
+  - ENZYMES
+  shuffle: true
+domain_adversarial:
+  enabled: true
+  final_lambda: 1.0
+  gamma: 10.0
+  initial_lambda: 0.0
+  schedule_type: dann
+  warmup_epochs: 0
+model:
+  dropout_rate: 0.2
+  enable_augmentations: true
+  hidden_dim: 256
+  num_layers: 5
+optimizer:
+  beta1: 0.9
+  beta2: 0.999
+  eps: 1.0e-08
+  lr: 0.0005
+  name: AdamW
+  weight_decay: 0.01
+run:
+  entity: null
+  notes: Default configuration for GNN pre-training
+  project_name: Graph-Multitask-Learning
+  run_name: default-experiment
+  tags: []
+scheduler:
+  min_lr_ratio: 0.01
+  type: cosine
+  warmup_epochs: 10
+  warmup_fraction: 0.1
+tasks:
+  domain_adv:
+    enabled: true
+    weight: 1.0
+  graph_contrast:
+    enabled: true
+    weight: 1.0
+  graph_prop:
+    enabled: true
+    weight: 1.0
+  link_pred:
+    enabled: true
+    negative_sampling_ratio: 1.0
+    weight: 1.0
+  node_contrast:
+    enabled: true
+    temperature: 0.1
+    weight: 1.0
+  node_feat_mask:
+    enabled: true
+    mask_rate: 0.15
+    weight: 1.0
+training:
+  checkpoint_dir: ./checkpoints
+  grad_clip_norm: 0.0
+  keep_n_checkpoints: 3
+  log_freq: 100
+  max_epochs: 100
+  max_steps: 100000
+  metric_mode: min
+  min_delta: 0.0001
+  patience: 10
+  save_checkpoint_freq: 10
+  uncertainty_init: 0.0
+  use_uncertainty_weighting: true
+  validation_freq: 1
+  validation_metric: val/loss_total

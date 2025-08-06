@@ -1,0 +1,83 @@
+# B3: Single-Task (Contrastive) - Node Contrastive Only
+# Purpose: Baseline for contrastive single-task model (RQ1 & RQ2)
+
+run:
+  project_name: 'Graph-Multitask-Learning'
+  run_name: 'B3-single-contrastive-nc'
+  entity: null
+  tags: ['baseline', 'single-task', 'contrastive', 'node-contrastive']
+  notes: 'B3: Single-task contrastive baseline with Node Contrastive only'
+
+data:
+  pretrain_datasets: ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
+  batch_size: 32
+  domain_balanced_sampling: true
+  num_workers: 4
+  pin_memory: true
+  shuffle: true
+  drop_last: true
+
+model:
+  hidden_dim: 256
+  num_layers: 5
+  dropout_rate: 0.2
+  enable_augmentations: true  # Required for contrastive learning
+
+optimizer:
+  name: 'AdamW'
+  lr: 5.0e-4
+  beta1: 0.9
+  beta2: 0.999
+  weight_decay: 0.01
+  eps: 1.0e-8
+
+scheduler:
+  type: 'cosine'
+  warmup_epochs: 10
+  warmup_fraction: 0.1
+  min_lr_ratio: 0.01
+
+training:
+  max_epochs: 100
+  max_steps: 100000
+  validation_freq: 1
+  log_freq: 100
+  patience: 10
+  min_delta: 1.0e-4
+  validation_metric: 'val/loss_total'
+  metric_mode: 'min'
+  checkpoint_dir: './checkpoints/B3_single_contrastive'
+  save_checkpoint_freq: 10
+  keep_n_checkpoints: 3
+  use_uncertainty_weighting: false  # Single task, no weighting needed
+  uncertainty_init: 0.0
+  grad_clip_norm: 1.0
+  use_amp: true
+  amp_init_scale: 65536.0
+  gradient_accumulation_steps: 1
+
+domain_adversarial:
+  enabled: false  # Not used in B3
+
+tasks:
+  node_feat_mask:
+    enabled: false  # Disabled for B3
+    weight: 1.0
+    mask_rate: 0.15
+  link_pred:
+    enabled: false  # Disabled for B3
+    weight: 1.0
+    negative_sampling_ratio: 1.0
+  node_contrast:
+    enabled: true
+    weight: 1.0
+    temperature: 0.1
+  graph_contrast:
+    enabled: false  # Disabled for B3
+    weight: 1.0
+  graph_prop:
+    enabled: false  # Disabled for B3
+    weight: 1.0
+  domain_adv:
+    enabled: false  # Disabled for B3
+    weight: 1.0 
