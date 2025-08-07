@@ -1,5 +1,6 @@
 # Data folders
-data/
+data/raw/
+data/processed/
 
 # Python cache
 __pycache__/
