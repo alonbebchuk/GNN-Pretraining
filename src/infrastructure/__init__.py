@@ -11,10 +11,10 @@ This module contains:
 
 from .config import Config, load_config, create_default_config_file
 from .config_validator import validate_config, ConfigValidator
-from .checkpointing import CheckpointManager, EarlyStopping
+from .checkpointing import CheckpointManager
 from .experiment_tracking import WandBTracker, MetricsLogger
 from .scheduler import (
-    CosineAnnealingWithWarmup, 
+    CosineAnnealingWithWarmup,
     LinearWarmupScheduler,
     DomainAdversarialScheduler,
     SchedulerManager
@@ -22,16 +22,15 @@ from .scheduler import (
 
 __all__ = [
     'Config',
-    'load_config', 
+    'load_config',
     'create_default_config_file',
     'validate_config',
     'ConfigValidator',
     'CheckpointManager',
-    'EarlyStopping',
     'WandBTracker',
     'MetricsLogger',
     'CosineAnnealingWithWarmup',
-    'LinearWarmupScheduler', 
+    'LinearWarmupScheduler',
     'DomainAdversarialScheduler',
     'SchedulerManager'
 ]

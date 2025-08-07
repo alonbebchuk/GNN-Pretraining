@@ -299,28 +299,195 @@ def negative_sampling(edge_index: torch.Tensor, num_nodes: int,
 
 def compute_graph_properties(data: Data) -> torch.Tensor:
     """
-    Compute graph-level properties for auxiliary supervision.
+    Compute comprehensive graph-level properties for auxiliary supervision.
+    
+    This function computes 15 graph properties following scientific standards:
+    1. num_nodes - Number of nodes
+    2. num_edges - Number of edges  
+    3. density - Graph density
+    4. avg_degree - Average node degree
+    5. degree_variance - Variance of node degrees
+    6. max_degree - Maximum node degree
+    7. global_clustering - Global clustering coefficient
+    8. transitivity - Transitivity (alternative clustering measure)
+    9. num_triangles - Total number of triangles
+    10. num_components - Number of connected components
+    11. diameter_approx - Approximate diameter (capped for efficiency)
+    12. assortativity_approx - Approximate degree assortativity
+    13. density_weighted_degree - Density-weighted average degree
+    14. edge_connectivity_ratio - Ratio of actual to maximum possible edges
+    15. degree_centralization - Degree centralization measure
     
     Args:
         data: PyTorch Geometric Data object
         
     Returns:
-        Tensor of graph properties [num_nodes, num_edges, avg_clustering]
+        Tensor of 15 comprehensive graph properties
     """
-    num_nodes = data.x.shape[0] if data.x is not None else 0
+    from torch_geometric.utils import degree, to_networkx
+    import networkx as nx
+    import torch
+    
+    # Handle completely empty data
+    if data.x is None:
+        return torch.zeros(15, dtype=torch.float)
+    
+    num_nodes = data.x.shape[0]
     num_edges = data.edge_index.shape[1] if data.edge_index is not None else 0
     
-    # Compute average clustering coefficient (simplified version)
-    # For efficiency, we'll use a simple approximation
-    if num_nodes > 0 and num_edges > 0:
-        # Average degree as a proxy for clustering
-        avg_degree = (2 * num_edges) / num_nodes
-        # Normalize to [0, 1] range (rough approximation)
-        avg_clustering = min(avg_degree / num_nodes, 1.0)
-    else:
-        avg_clustering = 0.0
+    # Handle empty graph (no nodes)
+    if num_nodes == 0:
+        return torch.zeros(15, dtype=torch.float)
     
-    return torch.tensor([num_nodes, num_edges, avg_clustering], dtype=torch.float)
+    # Handle single node case
+    if num_nodes == 1:
+        properties = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        return torch.tensor(properties, dtype=torch.float)
+    
+    # For undirected graphs, divide edges by 2
+    if data.edge_index.shape[1] > 0:
+        # Check if graph is undirected (has both (i,j) and (j,i) for most edges)
+        edge_set = set()
+        reverse_edges = 0
+        for i in range(min(100, data.edge_index.shape[1])):  # Sample check
+            edge = (data.edge_index[0, i].item(), data.edge_index[1, i].item())
+            reverse_edge = (edge[1], edge[0])
+            if reverse_edge in edge_set:
+                reverse_edges += 1
+            edge_set.add(edge)
+        
+        is_undirected = reverse_edges > len(edge_set) * 0.8  # Heuristic check
+        if is_undirected:
+            num_edges = num_edges // 2
+    
+    # 1-3: Basic structural properties
+    max_possible_edges = num_nodes * (num_nodes - 1) // 2
+    density = num_edges / max_possible_edges if max_possible_edges > 0 else 0.0
+    
+    # 4-6: Degree statistics
+    degrees = degree(data.edge_index[0], num_nodes=num_nodes).float()
+    avg_degree = degrees.mean().item()
+    degree_variance = degrees.var().item() if degrees.numel() > 1 else 0.0
+    max_degree = degrees.max().item()
+    
+    # 7-9: Clustering and triangle properties
+    try:
+        # For efficiency, limit graph size for complex computations
+        if num_nodes <= 1000:
+            # Convert to NetworkX for accurate clustering computation
+            G = to_networkx(data, to_undirected=True)
+            G.remove_edges_from(nx.selfloop_edges(G))  # Remove self-loops
+            
+            # Global clustering coefficient
+            global_clustering = nx.average_clustering(G) if len(G.edges()) > 0 else 0.0
+            
+            # Transitivity
+            transitivity = nx.transitivity(G)
+            
+            # Triangle count
+            triangles = sum(nx.triangles(G).values()) // 3  # Each triangle counted 3 times
+            num_triangles = float(triangles)
+            
+        else:
+            # Approximations for large graphs
+            # Simple clustering approximation
+            if num_edges > 0:
+                expected_triangles = (avg_degree ** 2) * num_nodes / 6
+                global_clustering = min(expected_triangles / (num_nodes * avg_degree), 1.0) if avg_degree > 0 else 0.0
+            else:
+                global_clustering = 0.0
+            
+            transitivity = global_clustering  # Use same approximation
+            num_triangles = global_clustering * num_nodes * avg_degree if avg_degree > 0 else 0.0
+            
+    except Exception:
+        # Fallback to simple approximations
+        global_clustering = min(avg_degree / num_nodes, 1.0) if num_nodes > 0 and avg_degree > 0 else 0.0
+        transitivity = global_clustering
+        num_triangles = 0.0
+    
+    # 10: Connected components
+    try:
+        if num_nodes <= 1000:
+            G = to_networkx(data, to_undirected=True)
+            num_components = float(nx.number_connected_components(G))
+        else:
+            # Approximation: assume mostly connected for large graphs
+            num_components = 1.0 if num_edges > 0 else float(num_nodes)
+    except Exception:
+        num_components = 1.0 if num_edges > 0 else float(num_nodes)
+    
+    # 11: Approximate diameter (capped for efficiency)
+    try:
+        if num_nodes <= 500 and num_edges > 0:
+            G = to_networkx(data, to_undirected=True)
+            if nx.is_connected(G):
+                diameter_approx = float(nx.diameter(G))
+            else:
+                # Use largest component diameter
+                largest_cc = max(nx.connected_components(G), key=len)
+                if len(largest_cc) > 1:
+                    diameter_approx = float(nx.diameter(G.subgraph(largest_cc)))
+                else:
+                    diameter_approx = 0.0
+        else:
+            # Approximation based on graph structure
+            if num_edges > 0:
+                diameter_approx = min(num_nodes - 1, max(3.0, torch.log2(torch.tensor(float(num_nodes))).item()))
+            else:
+                diameter_approx = 0.0
+    except Exception:
+        diameter_approx = min(num_nodes - 1, 6.0) if num_edges > 0 else 0.0
+    
+    # 12: Approximate assortativity
+    try:
+        if num_nodes <= 1000 and num_edges > 0:
+            G = to_networkx(data, to_undirected=True)
+            assortativity_approx = nx.degree_assortativity_coefficient(G)
+            if torch.isnan(torch.tensor(assortativity_approx)):
+                assortativity_approx = 0.0
+        else:
+            # Simple approximation: high degree variance suggests disassortative mixing
+            assortativity_approx = -min(degree_variance / (avg_degree + 1e-8), 1.0) if avg_degree > 0 else 0.0
+    except Exception:
+        assortativity_approx = 0.0
+    
+    # 13: Density-weighted degree
+    density_weighted_degree = avg_degree * density
+    
+    # 14: Edge connectivity ratio
+    edge_connectivity_ratio = num_edges / max(num_nodes - 1, 1) if num_nodes > 1 else 0.0
+    
+    # 15: Degree centralization
+    if max_degree > 0 and num_nodes > 2:
+        degree_centralization = ((max_degree - avg_degree) * num_nodes) / ((num_nodes - 1) * (num_nodes - 2))
+        degree_centralization = min(degree_centralization, 1.0)
+    else:
+        degree_centralization = 0.0
+    
+    # Compile all properties
+    properties = [
+        float(num_nodes),           # 1
+        float(num_edges),           # 2  
+        density,                    # 3
+        avg_degree,                 # 4
+        degree_variance,            # 5
+        max_degree,                 # 6
+        global_clustering,          # 7
+        transitivity,               # 8
+        num_triangles,              # 9
+        num_components,             # 10
+        diameter_approx,            # 11
+        assortativity_approx,       # 12
+        density_weighted_degree,    # 13
+        edge_connectivity_ratio,    # 14
+        degree_centralization       # 15
+    ]
+    
+    # Ensure all properties are finite
+    properties = [p if torch.isfinite(torch.tensor(p)) else 0.0 for p in properties]
+    
+    return torch.tensor(properties, dtype=torch.float)
 
 
 def create_data_loaders(processed_data_dir: Union[str, Path],

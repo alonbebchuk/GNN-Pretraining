@@ -195,9 +195,9 @@ The pipeline implements all 6 pre-training tasks from the research plan:
 
 ### 5. Graph Property Prediction (Auxiliary Supervised)
 - **Objective**: Predict structural properties
-- **Properties**: Number of nodes, edges, average clustering coefficient
+- **Properties**: 15 comprehensive graph properties including structural, degree, clustering, connectivity, and centralization metrics
 - **Loss**: MSE (z-score normalized targets)
-- **Head**: MLP (256 → 256 → 3)
+- **Head**: MLP (256 → 512 → 15)
 
 ### 6. Domain Adversarial Training
 - **Objective**: Learn domain-invariant representations

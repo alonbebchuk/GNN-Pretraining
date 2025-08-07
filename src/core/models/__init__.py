@@ -13,11 +13,11 @@ from .pretrain_model import PretrainableGNN, create_full_pretrain_model
 
 __all__ = [
     'InputEncoder',
-    'GINLayer', 
+    'GINLayer',
     'GIN_Backbone',
     'MLPHead',
     'DotProductDecoder',
     'BilinearDiscriminator',
     'PretrainableGNN',
     'create_full_pretrain_model'
-] 
+]

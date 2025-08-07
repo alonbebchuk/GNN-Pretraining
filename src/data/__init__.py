@@ -14,7 +14,7 @@ from .downstream_data_loading import load_downstream_data, get_dataset_info
 __all__ = [
     'setup_data',
     'create_data_loaders',
-    'GraphDataset', 
+    'GraphDataset',
     'DomainBalancedSampler',
     'load_downstream_data',
     'get_dataset_info'

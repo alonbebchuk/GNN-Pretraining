@@ -541,7 +541,7 @@ def main():
                     except ImportError:
                         from models import create_full_pretrain_model
                 
-                pretrained_model = create_full_pretrain_model()
+                pretrained_model = create_full_pretrain_model(enable_augmentations=False)
         
         if pretrained_model is None:
             logger.error("Failed to create or load model")

@@ -5,36 +5,36 @@ import torch.nn as nn
 class GradientReversalFn(torch.autograd.Function):
     """
     Gradient Reversal Function for domain-adversarial training.
-    
+
     This function acts as an identity in the forward pass but reverses 
     and scales the gradient in the backward pass.
     """
-    
+
     @staticmethod
     def forward(ctx, x, lambda_val):
         """
         Forward pass: identity function.
-        
+
         Args:
             ctx: Context object to save information for backward pass
             x: Input tensor
             lambda_val: Scaling factor for gradient reversal
-            
+
         Returns:
             Input tensor x unchanged
         """
         ctx.lambda_val = lambda_val
         return x
-    
+
     @staticmethod
     def backward(ctx, grad_output):
         """
         Backward pass: reverse and scale the gradient.
-        
+
         Args:
             ctx: Context object containing saved information
             grad_output: Gradient flowing from the next layer
-            
+
         Returns:
             Tuple of gradients: (reversed gradient for x, None for lambda_val)
         """
@@ -45,25 +45,25 @@ class GradientReversalFn(torch.autograd.Function):
 class GradientReversalLayer(nn.Module):
     """
     Gradient Reversal Layer wrapper.
-    
+
     This layer applies gradient reversal during backpropagation while
     acting as an identity during the forward pass. Used for domain-adversarial
     training to encourage domain-invariant features.
     """
-    
+
     def __init__(self):
         """Initialize the Gradient Reversal Layer."""
         super(GradientReversalLayer, self).__init__()
-    
+
     def forward(self, x, lambda_val):
         """
         Forward pass through the gradient reversal layer.
-        
+
         Args:
             x: Input tensor of any shape
             lambda_val: Scaling factor for gradient reversal (scalar)
-            
+
         Returns:
             Input tensor x unchanged (identity in forward pass)
         """
-        return GradientReversalFn.apply(x, lambda_val) 
+        return GradientReversalFn.apply(x, lambda_val)

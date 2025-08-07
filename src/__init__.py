@@ -25,7 +25,7 @@ __author__ = "GNN Research Team"
 
 __all__ = [
     'core',
-    'data', 
+    'data',
     'training',
     'evaluation',
     'infrastructure'

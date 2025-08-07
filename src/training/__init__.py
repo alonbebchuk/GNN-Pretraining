@@ -8,18 +8,19 @@ This module contains:
 - Graph augmentations
 """
 
-from .main_pretrain import main as pretrain_main
-from .trainer import PretrainTrainer, MemoryMonitor, PerformanceProfiler
+# Core training components
+from .trainer import PretrainTrainer, MemoryMonitor, EarlyStopping
 from .losses import MultiTaskLossComputer, UncertaintyWeighting
-from .augmentations import create_augmented_views, GraphAugmentation
+from .augmentations import GraphAugmentor, AttributeMasking, EdgeDropping, SubgraphSampling
 
 __all__ = [
-    'pretrain_main',
     'PretrainTrainer',
     'MemoryMonitor',
-    'PerformanceProfiler', 
+    'EarlyStopping',
     'MultiTaskLossComputer',
     'UncertaintyWeighting',
-    'create_augmented_views',
-    'GraphAugmentation'
+    'GraphAugmentor',
+    'AttributeMasking',
+    'EdgeDropping',
+    'SubgraphSampling'
 ]
