@@ -11,6 +11,8 @@ from tqdm import tqdm
 # --- Configuration -----------------------------------------------------------
 
 SEED = 42
+torch.manual_seed(SEED)
+np.random.seed(SEED)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = ROOT_DIR / 'data'
@@ -45,11 +47,12 @@ def apply_preprocessing(dataset, train_idx, dataset_name):
         train_graphs = [dataset[i] for i in train_idx]
         all_train_x = torch.cat([g.x for g in train_graphs if g.x is not None], dim=0)
 
+        # Compute statistics only from training set
         mean = all_train_x.mean(dim=0)
-        std = all_train_x.std(dim=0)
-        std[std == 0] = 1  # Avoid division by zero
+        std = all_train_x.std(dim=0, unbiased=True)
+        std[std < 1e-8] = 1.0
 
-        # Apply normalization to all graphs
+        # Apply normalization to all graphs using training statistics
         for g in dataset:
             if g.x is not None:
                 g.x = (g.x - mean) / std
@@ -90,11 +93,11 @@ def process_tudatasets():
         dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=True)
         logging.info(f"Downloaded {name}: {len(dataset)} graphs")
 
-        # Pre-training splits (90/10)
+        # Pre-training splits (80/20)
         if name in PRETRAIN_TUDATASETS:
             pretrain_dataset = copy.deepcopy(dataset)
             num_graphs = len(pretrain_dataset)
-            splitter = ShuffleSplit(n_splits=1, test_size=0.1, random_state=SEED)
+            splitter = ShuffleSplit(n_splits=1, test_size=0.2, random_state=SEED)
             train_idx, val_idx = next(splitter.split(np.arange(num_graphs)))
 
             # Apply preprocessing

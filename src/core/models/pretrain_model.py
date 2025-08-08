@@ -61,9 +61,9 @@ class PretrainableGNN(nn.Module):
         self.mask_tokens = nn.ParameterDict()
         for domain_name, dim_in in domain_dimensions.items():
             # Each domain needs its own [MASK] token with the correct input dimension
-            # Use Xavier uniform initialization for better training dynamics
-            mask_token = torch.empty(dim_in)
-            nn.init.xavier_uniform_(mask_token.unsqueeze(0))
+            # Use normal initialization (0 mean, small std)
+            mask_token = torch.zeros(dim_in)
+            nn.init.normal_(mask_token, mean=0.0, std=0.02)  # BERT-style initialization
             self.mask_tokens[domain_name] = nn.Parameter(mask_token)
 
         # --- Shared GNN Backbone ---
