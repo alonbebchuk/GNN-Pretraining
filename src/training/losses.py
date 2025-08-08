@@ -338,7 +338,8 @@ class MultiTaskLossComputer:
     
     def compute_losses(self, model_outputs: Dict[str, Any], 
                       targets: Dict[str, Any],
-                      task_weights: Optional[Dict[str, float]] = None) -> LossOutput:
+                      task_weights: Optional[Dict[str, float]] = None,
+                      lambda_da: float = 0.0) -> LossOutput:
         """
         Compute all task losses and return comprehensive results.
         
@@ -386,13 +387,16 @@ class MultiTaskLossComputer:
                 logging.error(f"Error computing loss for task {task_name}: {str(e)}")
                 continue
         
-        # Apply weighting
+        # Separate domain adversarial loss for special handling (negative sign)
+        domain_adv_loss = individual_losses.pop('domain_adv', None)
+        
+        # Apply weighting to non-domain-adversarial tasks
         if self.use_uncertainty_weighting and self.uncertainty_weighting is not None:
-            # Use uncertainty weighting
+            # Use uncertainty weighting for main tasks
             total_loss, weighted_losses = self.uncertainty_weighting(individual_losses)
             uncertainty_params = self.uncertainty_weighting.get_uncertainty_params()
         else:
-            # Use manual weights
+            # Use manual weights for main tasks
             weighted_losses = {}
             if individual_losses:
                 total_loss = torch.tensor(0.0, device=next(iter(individual_losses.values())).device)
@@ -411,6 +415,19 @@ class MultiTaskLossComputer:
                 total_loss = total_loss + weighted_loss
             
             uncertainty_params = None
+        
+        # Handle domain adversarial loss with negative sign: - λ * L_domain
+        # This implements the formula: L_total = Σ[(1/2σᵢ²)Lᵢ + log σᵢ] - λ L_domain
+        if domain_adv_loss is not None:
+            # Add back to individual losses for tracking
+            individual_losses['domain_adv'] = domain_adv_loss
+            
+            # Apply negative lambda weighting
+            domain_weighted_loss = -lambda_da * domain_adv_loss
+            weighted_losses['domain_adv'] = domain_weighted_loss
+            
+            # Subtract from total loss (negative sign in the formula)
+            total_loss = total_loss + domain_weighted_loss
         
         return LossOutput(
             total_loss=total_loss,
@@ -460,8 +477,9 @@ def compute_domain_adversarial_lambda(epoch: int, total_epochs: int,
     elif schedule_type == 'dann':
         # DANN schedule: λ_p = 2 / (1 + exp(-γ * p)) - 1
         progress = (epoch - warmup_epochs) / max(1, total_epochs - warmup_epochs)
-        lambda_p = 2 / (1 + torch.exp(-gamma * progress)) - 1
-        return initial_lambda + lambda_p.item() * (final_lambda - initial_lambda)
+        import math
+        lambda_p = 2 / (1 + math.exp(-gamma * progress)) - 1
+        return initial_lambda + lambda_p * (final_lambda - initial_lambda)
     else:
         raise ValueError(f"Unknown schedule type: {schedule_type}")
 
@@ -469,14 +487,22 @@ def compute_domain_adversarial_lambda(epoch: int, total_epochs: int,
 if __name__ == '__main__':
     # Test the loss computation system
     
-    # Test configuration
+    # Test configuration using proper config objects
+    from dataclasses import dataclass
+    
+    @dataclass
+    class TestTaskConfig:
+        enabled: bool = True
+        weight: float = 1.0
+        temperature: float = 0.1
+    
     task_configs = {
-        'node_feat_mask': {'enabled': True, 'weight': 1.0},
-        'link_pred': {'enabled': True, 'weight': 1.0},
-        'node_contrast': {'enabled': True, 'weight': 1.0, 'temperature': 0.1},
-        'graph_contrast': {'enabled': True, 'weight': 1.0},
-        'graph_prop': {'enabled': True, 'weight': 1.0},
-        'domain_adv': {'enabled': True, 'weight': 1.0}
+        'node_feat_mask': TestTaskConfig(),
+        'link_pred': TestTaskConfig(),
+        'node_contrast': TestTaskConfig(temperature=0.1),
+        'graph_contrast': TestTaskConfig(),
+        'graph_prop': TestTaskConfig(),
+        'domain_adv': TestTaskConfig()
     }
     
     # Initialize loss computer
@@ -508,7 +534,7 @@ if __name__ == '__main__':
     }
     
     # Compute losses
-    loss_output = loss_computer.compute_losses(model_outputs, targets)
+    loss_output = loss_computer.compute_losses(model_outputs, targets, lambda_da=0.5)
     
     print("Loss computation test:")
     print(f"Total loss: {loss_output.total_loss.item():.4f}")

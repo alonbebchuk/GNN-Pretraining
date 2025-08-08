@@ -152,7 +152,8 @@ def load_downstream_data(processed_data_dir: Union[str, Path],
                         task_type: str,
                         batch_size: int = 32,
                         num_workers: int = 4,
-                        pin_memory: bool = True) -> Dict[str, DataLoader]:
+                        pin_memory: bool = True,
+                        seed: Optional[int] = None) -> Dict[str, DataLoader]:
     """
     Load downstream task data from processed files.
     
@@ -180,6 +181,16 @@ def load_downstream_data(processed_data_dir: Union[str, Path],
     splits = torch.load(splits_file, weights_only=False)
     
     data_loaders = {}
+
+    # Reproducibility utilities
+    try:
+        from ..infrastructure.reproducibility import seed_worker, get_generator
+    except Exception:
+        try:
+            from infrastructure.reproducibility import seed_worker, get_generator
+        except Exception:
+            seed_worker = None  # type: ignore
+            get_generator = lambda s: None  # type: ignore
     
     if task_type == 'graph_classification':
         # Extract labels from graphs
@@ -199,7 +210,9 @@ def load_downstream_data(processed_data_dir: Union[str, Path],
                     shuffle=(split_name == 'train'),
                     num_workers=num_workers,
                     pin_memory=pin_memory,
-                    drop_last=False  # Keep all samples for evaluation
+                    drop_last=False,  # Keep all samples for evaluation
+                    worker_init_fn=seed_worker if seed is not None and seed_worker is not None else None,
+                    generator=get_generator(seed) if seed is not None else None
                 )
     
     elif task_type in ['node_classification', 'link_prediction']:
@@ -227,7 +240,9 @@ def load_downstream_data(processed_data_dir: Union[str, Path],
                         batch_size=1,  # Full-batch for node classification
                         shuffle=False,  # Order doesn't matter for full-batch
                         num_workers=0,  # No multiprocessing for single large graph
-                        pin_memory=pin_memory
+                        pin_memory=pin_memory,
+                        worker_init_fn=seed_worker if seed is not None and seed_worker is not None else None,
+                        generator=get_generator(seed) if seed is not None else None
                     )
         
         elif task_type == 'link_prediction':
@@ -267,7 +282,9 @@ def load_downstream_data(processed_data_dir: Union[str, Path],
                         batch_size=1,  # Full-batch for link prediction
                         shuffle=False,
                         num_workers=0,
-                        pin_memory=pin_memory
+                        pin_memory=pin_memory,
+                        worker_init_fn=seed_worker if seed is not None and seed_worker is not None else None,
+                        generator=get_generator(seed) if seed is not None else None
                     )
     
     else:
@@ -281,7 +298,7 @@ def load_downstream_data(processed_data_dir: Union[str, Path],
     return data_loaders
 
 
-def create_downstream_data_loaders(config: Dict) -> Dict[str, DataLoader]:
+def create_downstream_data_loaders(config: Dict, seed: Optional[int] = None) -> Dict[str, DataLoader]:
     """
     Create data loaders for downstream tasks based on configuration.
     
@@ -297,7 +314,8 @@ def create_downstream_data_loaders(config: Dict) -> Dict[str, DataLoader]:
         task_type=config['task_type'],
         batch_size=config.get('batch_size', 32),
         num_workers=config.get('num_workers', 4),
-        pin_memory=config.get('pin_memory', True)
+        pin_memory=config.get('pin_memory', True),
+        seed=seed
     )
 
 

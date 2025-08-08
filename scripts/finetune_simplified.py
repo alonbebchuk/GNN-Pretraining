@@ -137,11 +137,18 @@ def main():
             temp_config = f.name
         
         try:
-            # Set up arguments
+            # Set up arguments (ensure seed is passed if present)
             original_argv = sys.argv
             sys.argv = ['main_finetune.py', '--downstream-config', temp_config, '--strategy', args.strategy]
             if args.offline:
                 sys.argv.append('--offline')
+            # Pass seed from config if present
+            try:
+                seed = config.get('reproducibility', {}).get('seed', None)
+                if seed is not None:
+                    sys.argv.extend(['--seed', str(seed)])
+            except Exception:
+                pass
             
             results = finetune_main()
             logger.info("✅ Fine-tuning completed successfully!")

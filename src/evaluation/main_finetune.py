@@ -429,8 +429,12 @@ def main():
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     
-    # Set random seed
-    torch.manual_seed(args.seed)
+    # Set random seed (comprehensive)
+    try:
+        from ..infrastructure.reproducibility import set_seed
+    except ImportError:
+        from infrastructure.reproducibility import set_seed
+    set_seed(args.seed)
     
     logger.info("Starting downstream fine-tuning...")
     if args.pretrain_checkpoint:
@@ -562,7 +566,7 @@ def main():
         
         # Load downstream data
         from downstream_data_loading import create_downstream_data_loaders
-        data_loaders = create_downstream_data_loaders(downstream_config)
+        data_loaders = create_downstream_data_loaders(downstream_config, seed=args.seed)
         
         if not data_loaders:
             logger.error("No data loaders created - check if data is processed")

@@ -101,7 +101,12 @@ DOWNSTREAM_TASKS = {
 FINE_TUNING_STRATEGIES = ['full', 'linear']
 
 # Random seeds for statistical robustness
-RANDOM_SEEDS = [42, 84, 126]
+try:
+    from src.infrastructure.reproducibility import get_run_seeds
+except Exception:
+    from infrastructure.reproducibility import get_run_seeds
+
+RANDOM_SEEDS = get_run_seeds()
 
 
 class ExperimentRunner:

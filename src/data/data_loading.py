@@ -497,7 +497,8 @@ def create_data_loaders(processed_data_dir: Union[str, Path],
                        num_workers: int = 4,
                        pin_memory: bool = True,
                        shuffle: bool = True,
-                       drop_last: bool = True) -> Dict[str, DataLoader]:
+                       drop_last: bool = True,
+                       seed: Optional[int] = None) -> Dict[str, DataLoader]:
     """
     Create data loaders for training and validation.
     
@@ -515,6 +516,16 @@ def create_data_loaders(processed_data_dir: Union[str, Path],
         Dictionary containing 'train' and 'val' data loaders
     """
     data_loaders = {}
+
+    # Reproducibility utilities (optional import path depending on execution context)
+    try:
+        from ..infrastructure.reproducibility import seed_worker, get_generator
+    except Exception:
+        try:
+            from infrastructure.reproducibility import seed_worker, get_generator
+        except Exception:
+            seed_worker = None  # type: ignore
+            get_generator = lambda s: None  # type: ignore
     
     for split in ['train', 'val']:
         # Create dataset
@@ -551,7 +562,9 @@ def create_data_loaders(processed_data_dir: Union[str, Path],
             num_workers=num_workers,
             pin_memory=pin_memory,
             drop_last=drop_last,
-            collate_fn=graph_collate_fn
+            collate_fn=graph_collate_fn,
+            worker_init_fn=seed_worker if seed is not None and seed_worker is not None else None,
+            generator=get_generator(seed) if seed is not None else None
         )
         
         data_loaders[split] = data_loader

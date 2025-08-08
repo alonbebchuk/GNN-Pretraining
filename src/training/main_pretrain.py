@@ -24,6 +24,7 @@ sys.path.insert(0, str(src_path))
 
 try:
     from infrastructure.config import load_config, create_default_config_file
+    from infrastructure.reproducibility import set_seed
     from data.data_loading import create_data_loaders
     from core.models import create_full_pretrain_model
     from training.losses import MultiTaskLossComputer
@@ -155,12 +156,7 @@ def main():
         # Override seed if provided
         if args.seed is not None:
             logger.info(f"Overriding config seed with: {args.seed}")
-            # Set seed for reproducibility
-            torch.manual_seed(args.seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed(args.seed)
-                torch.cuda.manual_seed_all(args.seed)
-            
+            set_seed(args.seed)
             # Update run name to include seed
             if hasattr(config, 'run') and hasattr(config.run, 'run_name'):
                 config.run.run_name = f"{config.run.run_name}_seed_{args.seed}"
@@ -191,7 +187,8 @@ def main():
             num_workers=config.data.num_workers,
             pin_memory=config.data.pin_memory,
             shuffle=config.data.shuffle,
-            drop_last=config.data.drop_last
+            drop_last=config.data.drop_last,
+            seed=(args.seed if args.seed is not None else getattr(config.training, 'seed', None))
         )
         
         if 'train' not in data_loaders:

@@ -272,7 +272,7 @@ class PretrainTrainer:
         self.memory_monitor = MemoryMonitor() if config.training.dynamic_batch_sizing else None
         
         # Performance profiler for optimization insights
-        self.performance_profiler = PerformanceProfiler() if logging.getLogger().isEnabledFor(logging.DEBUG) else None
+        self.performance_profiler = self.PerformanceProfiler() if logging.getLogger().isEnabledFor(logging.DEBUG) else None
         
         # Validate trainer setup
         self._validate_trainer_setup()
@@ -1168,8 +1168,9 @@ class PretrainTrainer:
                 model_outputs['domain_adv'] = torch.stack(domain_predictions, dim=0)
                 targets['domain_adv'] = domain_labels
         
-        # Compute losses
-        loss_output = self.loss_computer.compute_losses(model_outputs, targets)
+        # Compute losses with domain adversarial lambda
+        lambda_da = self.scheduler_manager.get_current_lambda()
+        loss_output = self.loss_computer.compute_losses(model_outputs, targets, lambda_da=lambda_da)
         return loss_output
     
     def _get_model_outputs_and_targets(self, batch_data, domain_labels) -> Tuple[Dict[str, Any], Dict[str, Any]]:

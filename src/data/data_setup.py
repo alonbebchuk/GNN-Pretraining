@@ -7,13 +7,15 @@ from pathlib import Path
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 from torch_geometric.datasets import Planetoid, TUDataset
 from tqdm import tqdm
+from infrastructure.reproducibility import set_seed
 
 # --- Configuration -----------------------------------------------------------
 
-SEED = 42
-torch.manual_seed(SEED)
-np.random.seed(SEED)
+# Set seed for reproducibility
+SEED = 7
+set_seed(SEED)
 
+# Define paths
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = ROOT_DIR / 'data'
 RAW_DIR = DATA_DIR / 'raw'

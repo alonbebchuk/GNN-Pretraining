@@ -25,6 +25,12 @@ import json
 from datetime import datetime
 import os
 
+try:
+    # Use central reproducibility seeds
+    from src.infrastructure.reproducibility import get_run_seeds
+except Exception:
+    from infrastructure.reproducibility import get_run_seeds
+
 # Experimental configuration based on research plan
 PRETRAIN_SCHEMES = [
     'b2_single_generative',
@@ -48,7 +54,7 @@ DOWNSTREAM_TASKS = [
 ]
 
 FINETUNE_STRATEGIES = ['full', 'linear']
-RANDOM_SEEDS = [42, 84, 126]  # As specified in research plan
+RANDOM_SEEDS = get_run_seeds()
 
 
 class ExperimentRunner:
