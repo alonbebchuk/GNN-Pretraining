@@ -1012,8 +1012,7 @@ class PretrainTrainer:
                 
                 masked_data, mask_indices, target_h0 = self.model.apply_node_masking(
                     graph, domain_name, 
-                    mask_rate=self.config.tasks['node_feat_mask'].mask_rate,
-                    compute_targets=True
+                    mask_rate=self.config.tasks['node_feat_mask'].mask_rate
                 )
                 
                 if len(mask_indices) > 0:

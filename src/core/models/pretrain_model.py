@@ -150,15 +150,14 @@ class PretrainableGNN(nn.Module):
             walk_length=10
         )
 
-    def apply_node_masking(self, data, domain_name: str, mask_rate: float = 0.15, compute_targets: bool = True):
+    def apply_node_masking(self, data, domain_name: str, mask_rate: float = 0.15):
         """
         Apply node feature masking for the node feature masking pre-training task.
 
         Args:
             data: PyTorch Geometric Data object
             domain_name: Name of the domain
-            mask_rate: Fraction of nodes to mask (default: 15%)
-            compute_targets: Whether to compute reconstruction targets (set False for efficiency)
+            mask_rate: Fraction of nodes to mask
 
         Returns:
             Tuple of (masked_data, mask_indices, target_h0):
@@ -169,12 +168,10 @@ class PretrainableGNN(nn.Module):
         # Move data to the correct device
         data = data.to(self.device)
 
-        # Compute original h_0 embeddings only if needed (memory efficiency)
-        target_h0 = None
-        if compute_targets:
-            encoder = self.input_encoders[domain_name]
-            with torch.no_grad():
-                original_h0 = encoder(data.x)
+        # Compute original h_0 embeddings
+        encoder = self.input_encoders[domain_name]
+        with torch.no_grad():
+            original_h0 = encoder(data.x)
 
         # Clone the data to avoid modifying the original
         masked_data = data.clone()
@@ -185,8 +182,7 @@ class PretrainableGNN(nn.Module):
         mask_indices = torch.randperm(num_nodes, device=self.device)[:num_mask]
 
         # Store original h_0 embeddings for reconstruction targets
-        if compute_targets:
-            target_h0 = original_h0[mask_indices].clone()
+        target_h0 = original_h0[mask_indices].clone()
 
         # Replace selected node features with the learnable [MASK] token
         mask_token = self.mask_tokens[domain_name]
