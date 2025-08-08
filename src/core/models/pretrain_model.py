@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, Union, Any
-import warnings
+from typing import Dict, Optional, Union
 
 # Core components
 from .gnn import InputEncoder, GIN_Backbone
@@ -63,7 +62,8 @@ class PretrainableGNN(nn.Module):
             # Each domain needs its own [MASK] token with the correct input dimension
             # Use normal initialization (0 mean, small std)
             mask_token = torch.zeros(dim_in)
-            nn.init.normal_(mask_token, mean=0.0, std=0.02)  # BERT-style initialization
+            # BERT-style initialization
+            nn.init.normal_(mask_token, mean=0.0, std=0.02)
             self.mask_tokens[domain_name] = nn.Parameter(mask_token)
 
         # --- Shared GNN Backbone ---
@@ -163,7 +163,7 @@ class PretrainableGNN(nn.Module):
             Tuple of (masked_data, mask_indices, target_h0):
                 - masked_data: Data object with masked node features
                 - mask_indices: Indices of masked nodes
-                - target_h0: Original h_0 embeddings for masked nodes (None if compute_targets=False)
+                - target_h0: Original h_0 embeddings for masked nodes
         """
         # Move data to the correct device
         data = data.to(self.device)
@@ -176,7 +176,9 @@ class PretrainableGNN(nn.Module):
         # Clone the data to avoid modifying the original
         masked_data = data.clone()
         num_nodes = data.x.shape[0]
-        num_mask = int(num_nodes * mask_rate)
+
+        # Ensure at least 1 node is masked
+        num_mask = max(1, int(num_nodes * mask_rate))
 
         # Randomly select nodes to mask
         mask_indices = torch.randperm(num_nodes, device=self.device)[:num_mask]
