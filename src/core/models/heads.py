@@ -106,8 +106,6 @@ class BilinearDiscriminator(nn.Module):
             Scores of shape (N,)
         """
         # Apply bilinear transformation: x^T * W * y
-        # This is equivalent to (W(x) * y).sum(dim=-1)
-        transformed_x = self.W(x)  # Shape: (N, GNN_HIDDEN_DIM)
-        scores = torch.sigmoid((transformed_x * y).sum(dim=-1))
+        scores = torch.sigmoid((self.W(x) * y).sum(dim=-1))
 
         return scores

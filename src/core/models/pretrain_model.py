@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from typing import Dict, Optional, Union
 
-from src.common import GNN_HIDDEN_DIM, NODE_FEATURE_MASKING_MASK_RATE
+from src.common import AUGMENTATION_NUM_VIEWS, DOMAIN_DIMENSIONS, GNN_HIDDEN_DIM, NODE_FEATURE_MASKING_MASK_RATE
 from src.core.layers import GradientReversalLayer
 from src.core.models.gnn import InputEncoder, GIN_Backbone
 from src.core.models.heads import MLPHead, DotProductDecoder, BilinearDiscriminator
@@ -22,7 +21,7 @@ class PretrainableGNN(nn.Module):
     - Graph augmentation capabilities for contrastive learning
     """
 
-    def __init__(self, domain_dimensions: Dict[str, int], device: Optional[Union[str, torch.device]] = None, enable_augmentations: bool = True):
+    def __init__(self, device: torch.device, domain_names: list[str], task_names: list[str], enable_augmentations: bool):
         """
         Initialize the pretrainable GNN model.
 
@@ -33,24 +32,19 @@ class PretrainableGNN(nn.Module):
         """
         super(PretrainableGNN, self).__init__()
 
-        # Device handling
-        if device is None:
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        elif isinstance(device, str):
-            device = torch.device(device)
         self.device = device
-
-        self.num_domains = len(domain_dimensions)
-        self.domain_dimensions = domain_dimensions
+        self.num_domains = len(domain_names)
 
         # --- Domain-specific Input Encoders ---
         self.input_encoders = nn.ModuleDict()
-        for domain_name, dim_in in domain_dimensions.items():
+        for domain_name in domain_names:
+            dim_in = DOMAIN_DIMENSIONS[domain_name]
             self.input_encoders[domain_name] = InputEncoder(dim_in=dim_in)
 
         # --- Domain-specific [MASK] tokens for node feature masking ---
         self.mask_tokens = nn.ParameterDict()
-        for domain_name, dim_in in domain_dimensions.items():
+        for domain_name in domain_names:
+            dim_in = DOMAIN_DIMENSIONS[domain_name]
             # Each domain needs its own [MASK] token with the correct input dimension
             # Use normal initialization (0 mean, small std)
             mask_token = torch.zeros(dim_in)
@@ -62,31 +56,35 @@ class PretrainableGNN(nn.Module):
         self.gnn_backbone = GIN_Backbone()
 
         # --- Task-specific Prediction Heads ---
-        self.heads = nn.ModuleDict({
-            # Node feature masking head (reconstruction)
-            'node_feat_mask': MLPHead(),
-
-            # Link prediction head (non-parametric)
-            'link_pred': DotProductDecoder(),
-
-            # Node contrastive learning projection head
-            'node_contrast': MLPHead(dim_out=GNN_HIDDEN_DIM // 2),
-
-            # Graph contrastive learning discriminator
-            'graph_contrast': BilinearDiscriminator(),
-
-            # Graph property prediction head
-            'graph_prop': MLPHead(dim_hidden=GNN_HIDDEN_DIM * 2, dim_out=15),
-
-            # Domain adversarial classifier
-            'domain_adv': MLPHead(dim_hidden=GNN_HIDDEN_DIM // 2, dim_out=self.num_domains)
-        })
+        self.heads = nn.ModuleDict()
+        for task_name in task_names:
+            if task_name == 'node_feat_mask':
+                # Node feature masking head (reconstruction)
+                self.heads[task_name] = MLPHead()
+            elif task_name == 'link_pred':
+                # Link prediction head (non-parametric)
+                self.heads[task_name] = DotProductDecoder()
+            elif task_name == 'node_contrast':
+                # Node contrastive learning projection head
+                self.heads[task_name] = MLPHead(dim_out=GNN_HIDDEN_DIM // 2)
+            elif task_name == 'graph_contrast':
+                # Graph contrastive learning discriminator
+                self.heads[task_name] = BilinearDiscriminator()
+            elif task_name == 'graph_prop':
+                # Graph property prediction head
+                self.heads[task_name] = MLPHead(dim_hidden=GNN_HIDDEN_DIM * 2, dim_out=15)
+            elif task_name == 'domain_adv':
+                # Domain adversarial classifier
+                self.heads[task_name] = MLPHead(dim_hidden=GNN_HIDDEN_DIM // 2, dim_out=self.num_domains)
 
         # --- Gradient Reversal Layer ---
         self.grl = GradientReversalLayer()
 
         # --- Graph Augmentation ---
-        self.augmentor = GraphAugmentor() if enable_augmentations else None
+        if enable_augmentations:
+            self.augmentor = GraphAugmentor()
+        else:
+            self.augmentor = None
 
         # Move to device
         self.to(self.device)
@@ -132,18 +130,17 @@ class PretrainableGNN(nn.Module):
 
         return masked_data, mask_indices, target_h0
 
-    def create_augmented_views(self, data, num_views: int = 2):
+    def create_augmented_views(self, data):
         """
         Create multiple augmented views of the graph for contrastive learning.
 
         Args:
             data: PyTorch Geometric Data object
-            num_views: Number of augmented views to create
 
         Returns:
             List of augmented data objects
         """
-        return [self.augmentor(data) for _ in range(num_views)]
+        return [self.augmentor(data) for _ in range(AUGMENTATION_NUM_VIEWS)]
 
     def forward(self, data, domain_name: str):
         """
@@ -154,10 +151,7 @@ class PretrainableGNN(nn.Module):
             domain_name: Name of the domain
 
         Returns:
-            Dictionary containing:
-                - 'node_embeddings': Final node embeddings (num_nodes, hidden_dim)
-                - 'graph_embedding': Graph-level embedding (hidden_dim,)
-                - 'h_0': Initial embeddings for masking reconstruction
+            Final node embeddings (num_nodes, hidden_dim)
         """
         # Move data to the correct device
         data = data.to(self.device)
@@ -171,14 +165,7 @@ class PretrainableGNN(nn.Module):
         # 3. Process with shared GNN backbone
         final_node_embeddings = self.gnn_backbone(h_0, data.edge_index)
 
-        # 4. Compute graph-level summary embedding (mean pooling)
-        graph_summary_embedding = final_node_embeddings.mean(dim=0)
-
-        return {
-            'node_embeddings': final_node_embeddings,
-            'graph_embedding': graph_summary_embedding,
-            'h_0': h_0  # Include initial embeddings for masking reconstruction
-        }
+        return final_node_embeddings
 
     def get_head(self, head_name: str):
         """
@@ -204,24 +191,3 @@ class PretrainableGNN(nn.Module):
             Embeddings with gradient reversal applied
         """
         return self.grl(embeddings, lambda_val)
-
-    def get_domain_list(self):
-        """
-        Get list of available domains.
-
-        Returns:
-            List of domain names
-        """
-        return list(self.input_encoders.keys())
-
-    def get_mask_token(self, domain_name: str):
-        """
-        Get the learnable [MASK] token for a specific domain.
-
-        Args:
-            domain_name: Name of the domain
-
-        Returns:
-            The [MASK] token parameter for the domain
-        """
-        return self.mask_tokens[domain_name]

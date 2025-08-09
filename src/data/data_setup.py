@@ -110,8 +110,7 @@ def process_tudatasets():
                 'val': torch.tensor(val_idx, dtype=torch.long),
                 'test': torch.tensor(test_idx, dtype=torch.long)
             }
-            save_processed_data(f"{name}_pretrain", list(
-                pretrain_dataset), pretrain_splits)
+            save_processed_data(f"{name}_pretrain", list(pretrain_dataset), pretrain_splits)
 
         # Downstream splits (80/10/10)
         if name in DOWNSTREAM_TUDATASETS:
@@ -153,11 +152,11 @@ def process_planetoid_datasets():
         apply_preprocessing([data], train_idx, name)
 
         splits = {
-            'train': data.train_mask,
-            'val': data.val_mask,
-            'test': data.test_mask
+            'train': torch.where(data.train_mask)[0],
+            'val': torch.where(data.val_mask)[0],
+            'test': torch.where(data.test_mask)[0]
         }
-        save_processed_data(f"{name}_downstream", data, splits)
+        save_processed_data(f"{name}_downstream", [data], splits)
 
 # --- Main Execution ----------------------------------------------------------
 
