@@ -126,8 +126,8 @@ def main():
                        help='Run in offline mode (no WandB logging)')
     parser.add_argument('--dry-run', action='store_true',
                        help='Validate configuration and setup without training')
-    parser.add_argument('--seed', type=int, default=None,
-                       help='Override random seed from configuration')
+    parser.add_argument('--seed', type=int, required=True,
+                        help='Random seed (single source of truth)')
     
     args = parser.parse_args()
     
@@ -153,16 +153,13 @@ def main():
         logger.info("Loading configuration...")
         config = load_config(args.config)
         
-        # Determine and set reproducibility seed
-        # Priority: CLI --seed > config.training.seed (if present) > first default run seed
-        config_seed = getattr(config.training, 'seed', None)
-        seed_to_use = args.seed if args.seed is not None else (config_seed if config_seed is not None else get_run_seeds()[0])
-        set_seed(seed_to_use)
-        logger.info(f"Using random seed: {seed_to_use}")
+        # Set reproducibility seed from CLI (single source of truth)
+        set_seed(args.seed)
+        logger.info(f"Using random seed: {args.seed}")
         # Update run name to include seed for clarity
         if hasattr(config, 'run') and hasattr(config.run, 'run_name'):
-            if f"seed_{seed_to_use}" not in config.run.run_name:
-                config.run.run_name = f"{config.run.run_name}_seed_{seed_to_use}"
+            if f"seed_{args.seed}" not in config.run.run_name:
+                config.run.run_name = f"{config.run.run_name}_seed_{args.seed}"
         
         logger.info(f"Configuration loaded successfully")
         logger.info(f"Device: {config.device}")
@@ -191,7 +188,7 @@ def main():
             pin_memory=config.data.pin_memory,
             shuffle=config.data.shuffle,
             drop_last=config.data.drop_last,
-            seed=seed_to_use
+            seed=args.seed
         )
         
         if 'train' not in data_loaders:

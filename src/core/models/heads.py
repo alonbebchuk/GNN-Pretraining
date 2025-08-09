@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from src.common import DROPOUT_RATE, GNN_HIDDEN_DIM
+
 
 class MLPHead(nn.Module):
     """
@@ -10,22 +12,19 @@ class MLPHead(nn.Module):
     This is used as the standard prediction head throughout the system.
     """
 
-    def __init__(self, dim_in: int, dim_hidden: int, dim_out: int, dropout_rate: float):
+    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM):
         """
         Initialize the MLP head.
 
         Args:
-            dim_in: Input dimension
-            dim_hidden: Hidden layer dimension
             dim_out: Output dimension
-            dropout_rate: Dropout probability
         """
         super(MLPHead, self).__init__()
 
         self.mlp = nn.Sequential(
-            nn.Linear(dim_in, dim_hidden),
+            nn.Linear(GNN_HIDDEN_DIM, dim_hidden),
             nn.ReLU(),
-            nn.Dropout(p=dropout_rate),
+            nn.Dropout(p=DROPOUT_RATE),
             nn.Linear(dim_hidden, dim_out)
         )
 
@@ -34,7 +33,7 @@ class MLPHead(nn.Module):
         Forward pass through the MLP.
 
         Args:
-            x: Input tensor of shape (batch_size, dim_in)
+            x: Input tensor of shape (batch_size, GNN_HIDDEN_DIM)
 
         Returns:
             Output tensor of shape (batch_size, dim_out)
@@ -86,33 +85,29 @@ class BilinearDiscriminator(nn.Module):
     D(x, y) = sigmoid(x^T * W * y)
     """
 
-    def __init__(self, dim1: int, dim2: int):
+    def __init__(self):
         """
         Initialize the bilinear discriminator.
-
-        Args:
-            dim1: Dimension of the first input (e.g., node embeddings)
-            dim2: Dimension of the second input (e.g., graph embeddings)
         """
         super(BilinearDiscriminator, self).__init__()
 
         # Bilinear transformation matrix (no bias)
-        self.W = nn.Linear(dim1, dim2, bias=False)
+        self.W = nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, bias=False)
 
     def forward(self, x, y):
         """
         Compute discriminator scores for input pairs.
 
         Args:
-            x: First input tensor of shape (N, dim1)
-            y: Second input tensor of shape (N, dim2)
+            x: First input tensor of shape (N, GNN_HIDDEN_DIM)
+            y: Second input tensor of shape (N, GNN_HIDDEN_DIM)
 
         Returns:
             Scores of shape (N,)
         """
         # Apply bilinear transformation: x^T * W * y
         # This is equivalent to (W(x) * y).sum(dim=-1)
-        transformed_x = self.W(x)  # Shape: (N, dim2)
+        transformed_x = self.W(x)  # Shape: (N, GNN_HIDDEN_DIM)
         scores = torch.sigmoid((transformed_x * y).sum(dim=-1))
 
         return scores

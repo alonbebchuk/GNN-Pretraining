@@ -1,8 +1,9 @@
 """
 Utilities for strict reproducibility across Python, NumPy, PyTorch, and DataLoader workers.
 
-This module centralizes seed handling to ensure consistent results across runs and
-provides helpers for seeding DataLoader workers and creating seeded generators.
+This module provides helpers for setting seeds, seeding DataLoader workers, and
+creating seeded generators. It intentionally does not define or hardcode any
+global seeds; the entry points should provide the seed via CLI.
 """
 
 from __future__ import annotations
@@ -13,10 +14,6 @@ from typing import Optional
 
 import numpy as np
 import torch
-
-SPLIT_SEED = 7
-SEEDS = [42, 84, 126]
-
 
 def set_seed(seed: int) -> None:
     """
@@ -63,23 +60,3 @@ def get_generator(seed: Optional[int]) -> Optional[torch.Generator]:
     g = torch.Generator()
     g.manual_seed(int(seed))
     return g
-
-
-def get_split_seed() -> int:
-    """
-    Return the fixed global seed to use for creating dataset splits.
-
-    This is intentionally centralized to guarantee that all preprocessing
-    and split generation steps are reproducible across machines and runs.
-    """
-    return SPLIT_SEED
-
-
-def get_run_seeds() -> list[int]:
-    """
-    Return the fixed list of seeds used in this project.
-
-    We standardize on SEEDS for statistical robustness and
-    comparability. Environment overrides are intentionally disabled.
-    """
-    return SEEDS

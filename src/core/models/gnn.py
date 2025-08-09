@@ -1,6 +1,8 @@
 import torch.nn as nn
 from torch_geometric.nn import GINConv
 
+from src.common import DROPOUT_RATE, GNN_HIDDEN_DIM, GNN_NUM_LAYERS
+
 
 class InputEncoder(nn.Module):
     """
@@ -10,22 +12,20 @@ class InputEncoder(nn.Module):
     This creates a standardized representation from domain-specific features.
     """
 
-    def __init__(self, dim_in: int, hidden_dim: int, dropout_rate: float):
+    def __init__(self, dim_in: int):
         """
         Initialize the input encoder.
 
         Args:
             dim_in: Input feature dimension (domain-specific)
-            hidden_dim: Output hidden dimension (shared across domains)
-            dropout_rate: Dropout probability
         """
         super(InputEncoder, self).__init__()
 
         self.encoder = nn.Sequential(
-            nn.Linear(dim_in, hidden_dim),
-            nn.LayerNorm(hidden_dim),
+            nn.Linear(dim_in, GNN_HIDDEN_DIM),
+            nn.LayerNorm(GNN_HIDDEN_DIM),
             nn.ReLU(),
-            nn.Dropout(p=dropout_rate)
+            nn.Dropout(p=DROPOUT_RATE)
         )
 
     def forward(self, x):
@@ -51,30 +51,26 @@ class GINLayer(nn.Module):
     3. Post-activation: LayerNorm -> ReLU -> Dropout
     """
 
-    def __init__(self, hidden_dim: int, dropout_rate: float):
+    def __init__(self):
         """
         Initialize a single GIN layer.
-
-        Args:
-            hidden_dim: Hidden dimension (same for input and output)
-            dropout_rate: Dropout probability
         """
         super(GINLayer, self).__init__()
 
         # GIN MLP: Linear -> ReLU -> Linear
         gin_mlp = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim)
+            nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM)
         )
 
         # GIN convolution with learnable epsilon
         self.gin_conv = GINConv(gin_mlp, train_eps=True)
 
         # Post-activation layers
-        self.layer_norm = nn.LayerNorm(hidden_dim)
+        self.layer_norm = nn.LayerNorm(GNN_HIDDEN_DIM)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(p=dropout_rate)
+        self.dropout = nn.Dropout(p=DROPOUT_RATE)
 
     def forward(self, h, edge_index):
         """
@@ -108,24 +104,17 @@ class GIN_Backbone(nn.Module):
     This is the shared component that processes all domains after input encoding.
     """
 
-    def __init__(self, num_layers: int, hidden_dim: int, dropout_rate: float):
+    def __init__(self):
         """
         Initialize the GIN backbone.
-
-        Args:
-            num_layers: Number of GIN layers to stack
-            hidden_dim: Hidden dimension throughout the backbone
-            dropout_rate: Dropout probability for each layer
         """
         super(GIN_Backbone, self).__init__()
 
         # Stack of GIN layers
         self.layers = nn.ModuleList([
-            GINLayer(hidden_dim, dropout_rate)
-            for _ in range(num_layers)
+            GINLayer()
+            for _ in range(GNN_NUM_LAYERS)
         ])
-
-        self.num_layers = num_layers
 
     def forward(self, h, edge_index):
         """

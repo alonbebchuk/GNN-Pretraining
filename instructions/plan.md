@@ -338,7 +338,7 @@ pretrain_datasets: ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
 *   **Preprocessing:** Implement the specified preprocessing logic (z-score for continuous, one-hot for categorical).
 *   **Splits:**
     *   Implement the data splitting logic as described in **Sec 2.2.1**.
-    *   Use a fixed global random seed of **7** for all splits to ensure reproducibility.
+    *   Use a fixed global random seed of **0** for all splits to ensure reproducibility.
     *   Save the processed `Data` objects and the train/val/test indices to disk (e.g., using `torch.save`) in the `data/processed/` directory. This script should be run only once before any training.
 
 #### **5.5. Core Implementation Details**

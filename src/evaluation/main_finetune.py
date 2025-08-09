@@ -26,7 +26,6 @@ sys.path.insert(0, str(src_path))
 
 try:
     from infrastructure.config import load_config
-    from data.data_loading import create_data_loaders
     from core.models.pretrain_model import PretrainableGNN
     from core.models.heads import MLPHead, DotProductDecoder
     from infrastructure.experiment_tracking import create_experiment_tracker
@@ -418,8 +417,8 @@ def main():
                        help='Fine-tuning strategy: full or linear probing')
     parser.add_argument('--output-dir', type=str, default='results/finetune',
                        help='Output directory for results')
-    parser.add_argument('--seed', type=int, default=42,
-                       help='Random seed')
+    parser.add_argument('--seed', type=int, required=True,
+                       help='Random seed (single source of truth)')
     parser.add_argument('--offline', action='store_true',
                        help='Run without WandB logging')
     
@@ -486,8 +485,8 @@ def main():
         pretrained_model = None
         
         try:
-            # Try to use the enhanced model adapter
-            from model_adapter import create_model_adapter
+            # Try to use the enhanced model adapter (package-qualified)
+            from evaluation.model_adapter import create_model_adapter
             
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             adapter = create_model_adapter(device)
@@ -512,12 +511,12 @@ def main():
                     
                     # Try different import paths
                     try:
-                        from models.pretrain_model import create_full_pretrain_model
+                        from core.models.pretrain_model import create_full_pretrain_model
                     except ImportError:
                         try:
-                            from src.models.pretrain_model import create_full_pretrain_model
+                            from models.pretrain_model import create_full_pretrain_model
                         except ImportError:
-                            from models import create_full_pretrain_model
+                            from src.models.pretrain_model import create_full_pretrain_model
                     
                     pretrained_model = create_full_pretrain_model()
                     
@@ -538,12 +537,12 @@ def main():
                 # B1: From-scratch training or fallback
                 logger.info("Creating fresh model (B1 baseline or fallback)...")
                 try:
-                    from models.pretrain_model import create_full_pretrain_model
+                    from core.models.pretrain_model import create_full_pretrain_model
                 except ImportError:
                     try:
-                        from src.models.pretrain_model import create_full_pretrain_model
+                        from models.pretrain_model import create_full_pretrain_model
                     except ImportError:
-                        from models import create_full_pretrain_model
+                        from src.models.pretrain_model import create_full_pretrain_model
                 
                 pretrained_model = create_full_pretrain_model(enable_augmentations=False)
         
@@ -551,21 +550,35 @@ def main():
             logger.error("Failed to create or load model")
             return 1
         
-        # Create downstream model
+        # Extract downstream settings (support nested config structure)
+        ds_cfg = downstream_config.get('downstream_task', {}) if isinstance(downstream_config, dict) else {}
+        task_type = ds_cfg.get('task_type', downstream_config.get('task_type'))
+        num_classes = ds_cfg.get('num_classes', downstream_config.get('num_classes'))
+        input_dim = ds_cfg.get('input_dim', downstream_config.get('input_dim'))
+        dataset_name = ds_cfg.get('dataset_name', downstream_config.get('task_name', 'task'))
+        in_domain = ds_cfg.get('in_domain', downstream_config.get('in_domain', False))
+
+        if task_type is None or num_classes is None:
+            logger.error("Downstream configuration missing required fields: task_type and/or num_classes")
+            return 1
+
+        # Fine-tuning strategy settings
+        ft_strategy = downstream_config.get('fine_tuning_strategy', {})
         freeze_backbone = (args.strategy == 'linear')
-        freeze_encoder = (args.strategy == 'linear' and downstream_config.get('in_domain', False))
-        
+        freeze_encoder = ft_strategy.get('freeze_encoder', (args.strategy == 'linear' and in_domain))
+
+        # Create downstream model
         downstream_model = DownstreamModel(
             pretrained_model=pretrained_model,
-            task_type=downstream_config['task_type'],
-            num_classes=downstream_config['num_classes'],
-            input_dim=downstream_config.get('input_dim'),  # For out-of-domain tasks
+            task_type=task_type,
+            num_classes=num_classes,
+            input_dim=input_dim,  # For out-of-domain tasks
             freeze_backbone=freeze_backbone,
             freeze_encoder=freeze_encoder
         )
         
         # Load downstream data
-        from downstream_data_loading import create_downstream_data_loaders
+        from data.downstream_data_loading import create_downstream_data_loaders
         data_loaders = create_downstream_data_loaders(downstream_config, seed=args.seed)
         
         if not data_loaders:
@@ -580,6 +593,22 @@ def main():
             except Exception as e:
                 logger.warning(f"Failed to create experiment tracker: {e}")
         
+        # Prepare trainer configuration
+        train_cfg = downstream_config.get('training', {})
+        pretrained_component_lr = ft_strategy.get('pretrained_component_lr', downstream_config.get('pretrained_component_lr', 1e-4))
+        new_component_lr = ft_strategy.get('new_component_lr', downstream_config.get('new_component_lr', 1e-3))
+        weight_decay = train_cfg.get('weight_decay', 0.05)
+        max_epochs = train_cfg.get('epochs', 200)
+        patience = train_cfg.get('patience', 10)
+
+        trainer_config = {
+            'task_type': task_type,
+            'num_classes': num_classes,
+            'pretrained_component_lr': pretrained_component_lr,
+            'new_component_lr': new_component_lr,
+            'weight_decay': weight_decay
+        }
+
         # Create trainer with enhanced capabilities
         try:
             # Try to use enhanced trainer
@@ -592,7 +621,7 @@ def main():
                 train_loader=data_loaders.get('train'),
                 val_loader=data_loaders.get('val'),
                 test_loader=data_loaders.get('test'),
-                config=downstream_config,
+                config=trainer_config,
                 device=device,
                 experiment_tracker=experiment_tracker
             )
@@ -607,7 +636,7 @@ def main():
                 train_loader=data_loaders.get('train'),
                 val_loader=data_loaders.get('val'),
                 test_loader=data_loaders.get('test'),
-                config=downstream_config,
+                config=trainer_config,
                 experiment_tracker=experiment_tracker
             )
             
@@ -615,12 +644,12 @@ def main():
         
         # Train and evaluate
         results = trainer.train(
-            max_epochs=downstream_config.get('max_epochs', 200),
-            patience=downstream_config.get('patience', 10)
+            max_epochs=max_epochs,
+            patience=patience
         )
         
         # Save results
-        output_path = Path(args.output_dir) / f"{downstream_config['task_name']}_{args.strategy}_seed{args.seed}.json"
+        output_path = Path(args.output_dir) / f"{dataset_name}_{args.strategy}_seed{args.seed}.json"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w') as f:
             json.dump(results, f, indent=2, default=str)

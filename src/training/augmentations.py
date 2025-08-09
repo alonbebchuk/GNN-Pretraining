@@ -20,6 +20,8 @@ from torch_geometric.transforms import BaseTransform
 import random
 from typing import List, Tuple
 
+from src.common import AUGMENTATION_ATTR_MASK_PROB, AUGMENTATION_ATTR_MASK_RATE, AUGMENTATION_EDGE_DROP_PROB, AUGMENTATION_EDGE_DROP_RATE, AUGMENTATION_SUBGRAPH_PROB, AUGMENTATION_WALK_LENGTH, AUGMENTATION_MIN_NODES_RATIO
+
 
 class AttributeMasking(BaseTransform):
     """
@@ -28,15 +30,6 @@ class AttributeMasking(BaseTransform):
     This augmentation sets selected feature dimensions to zero,
     forcing the model to be robust to missing features.
     """
-
-    def __init__(self, mask_rate: float = 0.15):
-        """
-        Initialize attribute masking transform.
-
-        Args:
-            mask_rate: Fraction of feature dimensions to mask
-        """
-        self.mask_rate = mask_rate
 
     def __call__(self, data: Data) -> Data:
         """
@@ -52,7 +45,7 @@ class AttributeMasking(BaseTransform):
         num_features = data.x.shape[1]
 
         # Ensure at least 1 feature is masked
-        num_mask = max(1, int(num_features * self.mask_rate))
+        num_mask = max(1, int(num_features * AUGMENTATION_ATTR_MASK_RATE))
 
         # Randomly select feature dimensions to mask
         mask_dims = torch.randperm(num_features)[:num_mask]
@@ -70,15 +63,6 @@ class EdgeDropping(BaseTransform):
     while preserving the overall connectivity.
     """
 
-    def __init__(self, drop_rate: float = 0.15):
-        """
-        Initialize edge dropping transform.
-
-        Args:
-            drop_rate: Fraction of edges to drop
-        """
-        self.drop_rate = drop_rate
-
     def __call__(self, data: Data) -> Data:
         """
         Apply edge dropping to the data.
@@ -91,7 +75,7 @@ class EdgeDropping(BaseTransform):
         """
         data = data.clone()
         num_edges = data.edge_index.shape[1]
-        num_keep = int(num_edges * (1 - self.drop_rate))
+        num_keep = int(num_edges * (1 - AUGMENTATION_EDGE_DROP_RATE))
 
         # Randomly select edges to keep
         keep_indices = torch.randperm(num_edges)[:num_keep]
@@ -108,25 +92,13 @@ class SubgraphSampling(BaseTransform):
     from randomly selected starting nodes.
     """
 
-    def __init__(self, walk_length: int = 10, min_nodes_ratio: float = 0.3):
-        """
-        Initialize subgraph sampling transform.
-
-        Args:
-            walk_length: Length of each random walk
-            min_nodes_ratio: Minimum ratio of nodes to keep in subgraph
-        """
-        self.walk_length = walk_length
-        self.min_nodes_ratio = min_nodes_ratio
-
-    def _random_walk(self, edge_index: torch.Tensor, start_node: int, walk_length: int, num_nodes: int) -> List[int]:
+    def _random_walk(self, edge_index: torch.Tensor, start_node: int, num_nodes: int) -> List[int]:
         """
         Perform a single random walk starting from a given node.
 
         Args:
             edge_index: Edge connectivity
             start_node: Starting node for the walk
-            walk_length: Length of the walk
             num_nodes: Total number of nodes in the graph
 
         Returns:
@@ -141,7 +113,7 @@ class SubgraphSampling(BaseTransform):
         walk = [start_node]
         current_node = start_node
 
-        for _ in range(walk_length - 1):
+        for _ in range(AUGMENTATION_WALK_LENGTH - 1):
             neighbors = adj_list[current_node]
             if len(neighbors) == 0:
                 break
@@ -168,20 +140,23 @@ class SubgraphSampling(BaseTransform):
         sampled_nodes = set()
 
         # Start random walks from random nodes
-        num_start_nodes = max(1, int(num_nodes * self.min_nodes_ratio))
+        num_start_nodes = max(1, int(num_nodes * AUGMENTATION_MIN_NODES_RATIO))
         start_nodes = torch.randperm(num_nodes)[:num_start_nodes]
 
         for start_node in start_nodes:
-            walk = self._random_walk(data.edge_index, start_node.item(), self.walk_length, num_nodes)
+            walk = self._random_walk(
+                data.edge_index, start_node.item(), num_nodes)
             sampled_nodes.update(walk)
 
         sampled_nodes = torch.tensor(list(sampled_nodes), dtype=torch.long)
 
         # Extract subgraph with node relabeling for proper indexing
-        edge_index, edge_attr = subgraph(sampled_nodes, data.edge_index, data.edge_attr, relabel_nodes=True, num_nodes=num_nodes)
+        edge_index, edge_attr = subgraph(
+            sampled_nodes, data.edge_index, data.edge_attr, relabel_nodes=True, num_nodes=num_nodes)
 
         # Create new data object with subgraph
-        new_data = Data(x=data.x[sampled_nodes], edge_index=edge_index, edge_attr=edge_attr)
+        new_data = Data(x=data.x[sampled_nodes],
+                        edge_index=edge_index, edge_attr=edge_attr)
 
         # Store original node indices for contrastive learning
         # This maps the new node indices (0, 1, 2, ...) to original indices
@@ -204,30 +179,14 @@ class GraphAugmentor:
     the node set need to update this mapping.
     """
 
-    def __init__(self,
-                 attr_mask_prob: float = 0.5,
-                 attr_mask_rate: float = 0.15,
-                 edge_drop_prob: float = 0.5,
-                 edge_drop_rate: float = 0.15,
-                 subgraph_prob: float = 0.5,
-                 walk_length: int = 10,
-                 min_nodes_ratio: float = 0.3):
+    def __init__(self):
         """
         Initialize the graph augmentor.
-
-        Args:
-            attr_mask_prob: Probability of applying attribute masking
-            attr_mask_rate: Rate of attribute masking when applied
-            edge_drop_prob: Probability of applying edge dropping
-            edge_drop_rate: Rate of edge dropping when applied
-            subgraph_prob: Probability of applying subgraph sampling
-            walk_length: Length of random walks for subgraph sampling 
-            min_nodes_ratio: Minimum ratio of nodes to keep in subgraph
         """
         self.transforms = [
-            (AttributeMasking(attr_mask_rate), attr_mask_prob),
-            (EdgeDropping(edge_drop_rate), edge_drop_prob),
-            (SubgraphSampling(walk_length, min_nodes_ratio=min_nodes_ratio), subgraph_prob)
+            (AttributeMasking(), AUGMENTATION_ATTR_MASK_PROB),
+            (EdgeDropping(), AUGMENTATION_EDGE_DROP_PROB),
+            (SubgraphSampling(), AUGMENTATION_SUBGRAPH_PROB)
         ]
 
     def __call__(self, data: Data) -> Data:
@@ -247,7 +206,8 @@ class GraphAugmentor:
 
         # Initialize node indices for contrastive learning
         # This maps each node in the augmented graph to its original index
-        augmented_data.node_indices = torch.arange(augmented_data.x.shape[0], dtype=torch.long)
+        augmented_data.node_indices = torch.arange(
+            augmented_data.x.shape[0], dtype=torch.long)
 
         for transform, prob in self.transforms:
             if random.random() < prob:
@@ -313,7 +273,8 @@ class GraphAugmentor:
             Tuple[torch.Tensor, torch.Tensor]: (view1_indices, view2_indices)
                 where view1_indices[i] and view2_indices[i] form a positive pair
         """
-        overlapping_nodes = GraphAugmentor.get_overlapping_nodes(view1_data, view2_data)
+        overlapping_nodes = GraphAugmentor.get_overlapping_nodes(
+            view1_data, view2_data)
 
         # Get node indices from both views (these map local indices to original indices)
         view1_nodes = view1_data.node_indices
@@ -321,37 +282,15 @@ class GraphAugmentor:
 
         # Find positions of overlapping nodes in each view using broadcasting
         # view1_mask[i,j] = True if overlapping_nodes[i] == view1_nodes[j]
-        view1_mask = view1_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(1)  # [len(overlap), len(view1)]
-        view2_mask = view2_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(1)  # [len(overlap), len(view2)]
+        view1_mask = view1_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(
+            1)  # [len(overlap), len(view1)]
+        view2_mask = view2_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(
+            1)  # [len(overlap), len(view2)]
 
         # Get the local indices (positions) in each view for overlapping nodes
-        view1_indices = view1_mask.nonzero(as_tuple=True)[1]  # Local positions in view1
-        view2_indices = view2_mask.nonzero(as_tuple=True)[1]  # Local positions in view2
+        view1_indices = view1_mask.nonzero(
+            as_tuple=True)[1]  # Local positions in view1
+        view2_indices = view2_mask.nonzero(
+            as_tuple=True)[1]  # Local positions in view2
 
         return view1_indices, view2_indices
-
-
-# Convenience function for easy usage
-def create_default_augmentor() -> GraphAugmentor:
-    """
-    Create a default graph augmentor.
-
-    This creates an augmentor that exactly matches the specifications
-    for GraphCL-style node-level contrastive learning:
-    - Each transformation applied with p=0.5 probability
-    - Attribute masking at 15% rate
-    - Edge dropping at 15% rate  
-    - Subgraph sampling via random walks of length 10
-
-    Returns:
-        GraphAugmentor configured with research plan parameters
-    """
-    return GraphAugmentor(
-        attr_mask_prob=0.5,
-        attr_mask_rate=0.15,
-        edge_drop_prob=0.5,
-        edge_drop_rate=0.15,
-        subgraph_prob=0.5,
-        walk_length=10,
-        min_nodes_ratio=0.3
-    )

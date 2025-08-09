@@ -7,13 +7,10 @@ from pathlib import Path
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 from torch_geometric.datasets import Planetoid, TUDataset
 from tqdm import tqdm
-from infrastructure.reproducibility import set_seed, get_split_seed
 
 # --- Configuration -----------------------------------------------------------
 
-# Set seed for reproducibility
-SEED = get_split_seed()
-set_seed(SEED)
+SEED = 0
 
 # Define paths
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -158,6 +155,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     # Create directories
+    os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(RAW_DIR, exist_ok=True)
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     logging.info(f"Raw data: {RAW_DIR}")
@@ -166,7 +164,7 @@ def main():
     # Process datasets
     process_tudatasets()
     process_planetoid_datasets()
-    logging.info("✅ Data processing completed!")
+    logging.info("Data processing completed!")
 
 
 if __name__ == "__main__":

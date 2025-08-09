@@ -2,10 +2,11 @@ import torch
 import torch.nn as nn
 from typing import Dict, Optional, Union
 
-# Core components
-from .gnn import InputEncoder, GIN_Backbone
-from .heads import MLPHead, DotProductDecoder, BilinearDiscriminator
-from ..layers import GradientReversalLayer
+from src.common import GNN_HIDDEN_DIM, NODE_FEATURE_MASKING_MASK_RATE
+from src.core.layers import GradientReversalLayer
+from src.core.models.gnn import InputEncoder, GIN_Backbone
+from src.core.models.heads import MLPHead, DotProductDecoder, BilinearDiscriminator
+from src.training.augmentations import GraphAugmentor
 
 
 class PretrainableGNN(nn.Module):
@@ -21,15 +22,12 @@ class PretrainableGNN(nn.Module):
     - Graph augmentation capabilities for contrastive learning
     """
 
-    def __init__(self, domain_dimensions: Dict[str, int], hidden_dim: int = 256, num_layers: int = 5, dropout_rate: float = 0.2, device: Optional[Union[str, torch.device]] = None, enable_augmentations: bool = True):
+    def __init__(self, domain_dimensions: Dict[str, int], device: Optional[Union[str, torch.device]] = None, enable_augmentations: bool = True):
         """
         Initialize the pretrainable GNN model.
 
         Args:
             domain_dimensions: Dict mapping domain names to their input dimensions
-            hidden_dim: Hidden dimension for the shared representation
-            num_layers: Number of GIN layers in the backbone
-            dropout_rate: Dropout rate for regularization
             device: Device to place the model on ('cpu', 'cuda', or torch.device)
             enable_augmentations: Whether to enable graph augmentations
         """
@@ -42,19 +40,13 @@ class PretrainableGNN(nn.Module):
             device = torch.device(device)
         self.device = device
 
-        self.hidden_dim = hidden_dim
         self.num_domains = len(domain_dimensions)
         self.domain_dimensions = domain_dimensions
-        self.dropout_rate = dropout_rate
 
         # --- Domain-specific Input Encoders ---
         self.input_encoders = nn.ModuleDict()
         for domain_name, dim_in in domain_dimensions.items():
-            self.input_encoders[domain_name] = InputEncoder(
-                dim_in=dim_in,
-                hidden_dim=hidden_dim,
-                dropout_rate=dropout_rate
-            )
+            self.input_encoders[domain_name] = InputEncoder(dim_in=dim_in)
 
         # --- Domain-specific [MASK] tokens for node feature masking ---
         self.mask_tokens = nn.ParameterDict()
@@ -67,97 +59,45 @@ class PretrainableGNN(nn.Module):
             self.mask_tokens[domain_name] = nn.Parameter(mask_token)
 
         # --- Shared GNN Backbone ---
-        self.gnn_backbone = GIN_Backbone(
-            num_layers=num_layers,
-            hidden_dim=hidden_dim,
-            dropout_rate=dropout_rate
-        )
+        self.gnn_backbone = GIN_Backbone()
 
         # --- Task-specific Prediction Heads ---
         self.heads = nn.ModuleDict({
             # Node feature masking head (reconstruction)
-            'node_feat_mask': MLPHead(
-                dim_in=hidden_dim,
-                dim_hidden=hidden_dim,
-                dim_out=hidden_dim,
-                dropout_rate=dropout_rate
-            ),
+            'node_feat_mask': MLPHead(),
 
             # Link prediction head (non-parametric)
             'link_pred': DotProductDecoder(),
 
             # Node contrastive learning projection head
-            'node_contrast': MLPHead(
-                dim_in=hidden_dim,
-                dim_hidden=hidden_dim,
-                dim_out=hidden_dim // 2,
-                dropout_rate=dropout_rate
-            ),
+            'node_contrast': MLPHead(dim_out=GNN_HIDDEN_DIM // 2),
 
             # Graph contrastive learning discriminator
-            'graph_contrast': BilinearDiscriminator(
-                dim1=hidden_dim,  # Node embeddings
-                dim2=hidden_dim   # Graph embeddings
-            ),
+            'graph_contrast': BilinearDiscriminator(),
 
             # Graph property prediction head
-            'graph_prop': MLPHead(
-                dim_in=hidden_dim,
-                dim_hidden=hidden_dim * 2,
-                dim_out=15,  # Predict 15 comprehensive graph properties
-                dropout_rate=dropout_rate
-            ),
+            'graph_prop': MLPHead(dim_hidden=GNN_HIDDEN_DIM * 2, dim_out=15),
 
             # Domain adversarial classifier
-            'domain_adv': MLPHead(
-                dim_in=hidden_dim,
-                dim_hidden=hidden_dim // 2,
-                dim_out=self.num_domains,
-                dropout_rate=0.0  # No dropout for strongest classifier
-            )
+            'domain_adv': MLPHead(dim_hidden=GNN_HIDDEN_DIM // 2, dim_out=self.num_domains)
         })
 
         # --- Gradient Reversal Layer ---
         self.grl = GradientReversalLayer()
 
         # --- Graph Augmentation ---
-        if enable_augmentations:
-            # Lazy import to avoid circular dependency
-            self.augmentor = self._create_default_augmentor()
-        else:
-            self.augmentor = None
+        self.augmentor = GraphAugmentor() if enable_augmentations else None
 
         # Move to device
         self.to(self.device)
 
-    def _create_default_augmentor(self):
-        """Create default augmentor with lazy import to avoid circular dependency."""
-        try:
-            from ...training.augmentations import GraphAugmentor
-        except ImportError:
-            # Fallback for different import contexts
-            import sys
-            import os
-            sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-            from training.augmentations import GraphAugmentor
-
-        return GraphAugmentor(
-            attr_mask_prob=0.5,
-            attr_mask_rate=0.15,
-            edge_drop_prob=0.5,
-            edge_drop_rate=0.15,
-            subgraph_prob=0.5,
-            walk_length=10
-        )
-
-    def apply_node_masking(self, data, domain_name: str, mask_rate: float = 0.15):
+    def apply_node_masking(self, data, domain_name: str):
         """
         Apply node feature masking for the node feature masking pre-training task.
 
         Args:
             data: PyTorch Geometric Data object
             domain_name: Name of the domain
-            mask_rate: Fraction of nodes to mask
 
         Returns:
             Tuple of (masked_data, mask_indices, target_h0):
@@ -178,7 +118,7 @@ class PretrainableGNN(nn.Module):
         num_nodes = data.x.shape[0]
 
         # Ensure at least 1 node is masked
-        num_mask = max(1, int(num_nodes * mask_rate))
+        num_mask = max(1, int(num_nodes * NODE_FEATURE_MASKING_MASK_RATE))
 
         # Randomly select nodes to mask
         mask_indices = torch.randperm(num_nodes, device=self.device)[:num_mask]
@@ -285,39 +225,3 @@ class PretrainableGNN(nn.Module):
             The [MASK] token parameter for the domain
         """
         return self.mask_tokens[domain_name]
-
-
-# Convenience function to create model with complete domain configuration
-def create_full_pretrain_model(device: Optional[Union[str, torch.device]] = None, **kwargs) -> PretrainableGNN:
-    """
-    Create a PretrainableGNN model with the complete domain configuration.
-
-    Args:
-        device: Device to place the model on
-        **kwargs: Additional arguments to pass to PretrainableGNN
-
-    Returns:
-        PretrainableGNN model with all domains configured
-    """
-    # Complete domain configuration
-    complete_domain_configs = {
-        # Pre-training domains
-        'MUTAG': 7,
-        'PROTEINS': 4,
-        'NCI1': 37,
-        'ENZYMES': 21,
-
-        # Additional TUDatasets
-        'FRANKENSTEIN': 780,
-        'PTC_MR': 18,
-
-        # Planetoid datasets
-        'Cora': 1433,
-        'CiteSeer': 3703
-    }
-
-    return PretrainableGNN(
-        domain_dimensions=complete_domain_configs,
-        device=device,
-        **kwargs
-    )
