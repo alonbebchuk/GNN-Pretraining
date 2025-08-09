@@ -144,22 +144,19 @@ class SubgraphSampling(BaseTransform):
         start_nodes = torch.randperm(num_nodes)[:num_start_nodes]
 
         for start_node in start_nodes:
-            walk = self._random_walk(
-                data.edge_index, start_node.item(), num_nodes)
+            walk = self._random_walk(data.edge_index, start_node.item(), num_nodes)
             sampled_nodes.update(walk)
 
         sampled_nodes = torch.tensor(list(sampled_nodes), dtype=torch.long)
 
         # Extract subgraph with node relabeling for proper indexing
-        edge_index, edge_attr = subgraph(
-            sampled_nodes, data.edge_index, data.edge_attr, relabel_nodes=True, num_nodes=num_nodes)
+        edge_index, _ = subgraph(sampled_nodes, data.edge_index)
 
         # Create new data object with subgraph
-        new_data = Data(x=data.x[sampled_nodes],
-                        edge_index=edge_index, edge_attr=edge_attr)
+        new_data = Data(x=data.x[sampled_nodes], edge_index=edge_index)
 
         # Store original node indices for contrastive learning
-        # This maps the new node indices (0, 1, 2, ...) to original indices
+        # This maps the new node indices to original indices
         new_data.node_indices = sampled_nodes
 
         return new_data
@@ -206,8 +203,7 @@ class GraphAugmentor:
 
         # Initialize node indices for contrastive learning
         # This maps each node in the augmented graph to its original index
-        augmented_data.node_indices = torch.arange(
-            augmented_data.x.shape[0], dtype=torch.long)
+        augmented_data.node_indices = torch.arange(augmented_data.x.shape[0], dtype=torch.long)
 
         for transform, prob in self.transforms:
             if random.random() < prob:
@@ -273,8 +269,7 @@ class GraphAugmentor:
             Tuple[torch.Tensor, torch.Tensor]: (view1_indices, view2_indices)
                 where view1_indices[i] and view2_indices[i] form a positive pair
         """
-        overlapping_nodes = GraphAugmentor.get_overlapping_nodes(
-            view1_data, view2_data)
+        overlapping_nodes = GraphAugmentor.get_overlapping_nodes(view1_data, view2_data)
 
         # Get node indices from both views (these map local indices to original indices)
         view1_nodes = view1_data.node_indices
@@ -282,15 +277,11 @@ class GraphAugmentor:
 
         # Find positions of overlapping nodes in each view using broadcasting
         # view1_mask[i,j] = True if overlapping_nodes[i] == view1_nodes[j]
-        view1_mask = view1_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(
-            1)  # [len(overlap), len(view1)]
-        view2_mask = view2_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(
-            1)  # [len(overlap), len(view2)]
+        view1_mask = view1_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(1)  # [len(overlap), len(view1)]
+        view2_mask = view2_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(1)  # [len(overlap), len(view2)]
 
         # Get the local indices (positions) in each view for overlapping nodes
-        view1_indices = view1_mask.nonzero(
-            as_tuple=True)[1]  # Local positions in view1
-        view2_indices = view2_mask.nonzero(
-            as_tuple=True)[1]  # Local positions in view2
+        view1_indices = view1_mask.nonzero(as_tuple=True)[1]  # Local positions in view1
+        view2_indices = view2_mask.nonzero(as_tuple=True)[1]  # Local positions in view2
 
         return view1_indices, view2_indices

@@ -1070,7 +1070,7 @@ class PretrainTrainer:
             
             for (_, domain_name, graph), domain_label in zip(graph_outputs, domain_labels):
                 # Create two augmented views
-                aug1, aug2 = self.model.create_augmented_views(graph, num_views=2)
+                aug1, aug2 = self.model.create_augmented_pair(graph)
                 
                 # Forward pass on augmented views
                 out1 = self.model(aug1, domain_name)

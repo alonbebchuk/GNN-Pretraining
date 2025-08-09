@@ -130,17 +130,17 @@ class PretrainableGNN(nn.Module):
 
         return masked_data, mask_indices, target_h0
 
-    def create_augmented_views(self, data):
+    def create_augmented_pair(self, data):
         """
-        Create multiple augmented views of the graph for contrastive learning.
+        Create two augmented views of the graph for contrastive learning.
 
         Args:
             data: PyTorch Geometric Data object
 
         Returns:
-            List of augmented data objects
+            Tuple of two augmented data objects (G', G'')
         """
-        return [self.augmentor(data) for _ in range(AUGMENTATION_NUM_VIEWS)]
+        return self.augmentor.create_augmented_pair(data)
 
     def forward(self, data, domain_name: str):
         """
