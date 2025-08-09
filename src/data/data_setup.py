@@ -12,12 +12,6 @@ from tqdm import tqdm
 
 SEED = 0
 
-# Define paths
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-DATA_DIR = ROOT_DIR / 'data'
-RAW_DIR = DATA_DIR / 'raw'
-PROCESSED_DIR = DATA_DIR / 'processed'
-
 PRETRAIN_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
 DOWNSTREAM_TUDATASETS = ['ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
 ALL_TUDATASETS = sorted(list(set(PRETRAIN_TUDATASETS + DOWNSTREAM_TUDATASETS)))
@@ -34,12 +28,20 @@ FEATURE_TYPES = {
     'CiteSeer': 'bow'
 }
 
+# Define paths
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+DATA_DIR = ROOT_DIR / 'data'
+RAW_DIR = DATA_DIR / 'raw'
+PROCESSED_DIR = DATA_DIR / 'processed'
+
 # --- Helper Functions --------------------------------------------------------
 
 
 def apply_preprocessing(dataset, train_idx, dataset_name):
     """Apply preprocessing based on feature type."""
-    if FEATURE_TYPES[dataset_name] == 'continuous':
+    feature_type = FEATURE_TYPES[dataset_name]
+
+    if feature_type == 'continuous':
         # Z-score normalization for continuous features
         if isinstance(train_idx, torch.Tensor):
             train_idx = train_idx.tolist()
@@ -53,18 +55,16 @@ def apply_preprocessing(dataset, train_idx, dataset_name):
 
         # Apply normalization to all graphs using training statistics
         for g in dataset:
-            if g.x is not None:
-                g.x = (g.x - mean) / std
+            g.x = (g.x - mean) / std
 
         logging.info(f"Applied z-score normalization to {dataset_name}")
 
-    elif FEATURE_TYPES[dataset_name] == 'bow':
+    elif feature_type == 'bow':
         # Row-normalize Bag-of-Words features
         for g in dataset:
-            if hasattr(g, 'x') and g.x is not None:
-                row_sum = g.x.sum(axis=1, keepdim=True)
-                row_sum[row_sum == 0] = 1
-                g.x = g.x / row_sum
+            row_sum = g.x.sum(dim=1, keepdim=True)
+            row_sum[row_sum == 0] = 1
+            g.x = g.x / row_sum
 
         logging.info(f"Applied row normalization to {dataset_name}")
 
@@ -96,14 +96,22 @@ def process_tudatasets():
         if name in PRETRAIN_TUDATASETS:
             pretrain_dataset = copy.deepcopy(dataset)
             num_graphs = len(pretrain_dataset)
-            splitter = ShuffleSplit(n_splits=1, test_size=0.2, random_state=SEED)
-            train_idx, val_idx = next(splitter.split(np.arange(num_graphs)))
+            ss_train_val = ShuffleSplit(n_splits=1, test_size=0.2, random_state=SEED)
+            train_idx, val_test_idx = next(ss_train_val.split(np.arange(num_graphs)))
+            ss_val_test = ShuffleSplit(n_splits=1, test_size=0.5, random_state=SEED)
+            val_idx_rel, test_idx_rel = next(ss_val_test.split(np.arange(len(val_test_idx))))
+            val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
 
             # Apply preprocessing
             apply_preprocessing(pretrain_dataset, train_idx, name)
 
-            pretrain_splits = {'train': torch.tensor(train_idx, dtype=torch.long), 'val': torch.tensor(val_idx, dtype=torch.long)}
-            save_processed_data(f"{name}_pretrain", list(pretrain_dataset), pretrain_splits)
+            pretrain_splits = {
+                'train': torch.tensor(train_idx, dtype=torch.long),
+                'val': torch.tensor(val_idx, dtype=torch.long),
+                'test': torch.tensor(test_idx, dtype=torch.long)
+            }
+            save_processed_data(f"{name}_pretrain", list(
+                pretrain_dataset), pretrain_splits)
 
         # Downstream splits (80/10/10)
         if name in DOWNSTREAM_TUDATASETS:
@@ -144,7 +152,11 @@ def process_planetoid_datasets():
         # Apply preprocessing
         apply_preprocessing([data], train_idx, name)
 
-        splits = {'train': data.train_mask, 'val': data.val_mask, 'test': data.test_mask}
+        splits = {
+            'train': data.train_mask,
+            'val': data.val_mask,
+            'test': data.test_mask
+        }
         save_processed_data(f"{name}_downstream", data, splits)
 
 # --- Main Execution ----------------------------------------------------------
