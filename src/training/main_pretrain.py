@@ -24,7 +24,7 @@ sys.path.insert(0, str(src_path))
 
 try:
     from infrastructure.config import load_config, create_default_config_file
-    from infrastructure.reproducibility import set_seed
+    from infrastructure.reproducibility import set_seed, get_run_seeds
     from data.data_loading import create_data_loaders
     from core.models import create_full_pretrain_model
     from training.losses import MultiTaskLossComputer
@@ -153,13 +153,16 @@ def main():
         logger.info("Loading configuration...")
         config = load_config(args.config)
         
-        # Override seed if provided
-        if args.seed is not None:
-            logger.info(f"Overriding config seed with: {args.seed}")
-            set_seed(args.seed)
-            # Update run name to include seed
-            if hasattr(config, 'run') and hasattr(config.run, 'run_name'):
-                config.run.run_name = f"{config.run.run_name}_seed_{args.seed}"
+        # Determine and set reproducibility seed
+        # Priority: CLI --seed > config.training.seed (if present) > first default run seed
+        config_seed = getattr(config.training, 'seed', None)
+        seed_to_use = args.seed if args.seed is not None else (config_seed if config_seed is not None else get_run_seeds()[0])
+        set_seed(seed_to_use)
+        logger.info(f"Using random seed: {seed_to_use}")
+        # Update run name to include seed for clarity
+        if hasattr(config, 'run') and hasattr(config.run, 'run_name'):
+            if f"seed_{seed_to_use}" not in config.run.run_name:
+                config.run.run_name = f"{config.run.run_name}_seed_{seed_to_use}"
         
         logger.info(f"Configuration loaded successfully")
         logger.info(f"Device: {config.device}")
@@ -188,7 +191,7 @@ def main():
             pin_memory=config.data.pin_memory,
             shuffle=config.data.shuffle,
             drop_last=config.data.drop_last,
-            seed=(args.seed if args.seed is not None else getattr(config.training, 'seed', None))
+            seed=seed_to_use
         )
         
         if 'train' not in data_loaders:

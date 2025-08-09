@@ -7,12 +7,12 @@ from pathlib import Path
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 from torch_geometric.datasets import Planetoid, TUDataset
 from tqdm import tqdm
-from infrastructure.reproducibility import set_seed
+from infrastructure.reproducibility import set_seed, get_split_seed
 
 # --- Configuration -----------------------------------------------------------
 
 # Set seed for reproducibility
-SEED = 7
+SEED = get_split_seed()
 set_seed(SEED)
 
 # Define paths
