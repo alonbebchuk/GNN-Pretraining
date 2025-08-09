@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 
-from src.common import AUGMENTATION_NUM_VIEWS, DOMAIN_DIMENSIONS, GNN_HIDDEN_DIM, NODE_FEATURE_MASKING_MASK_RATE
-from src.core.layers import GradientReversalLayer
-from src.core.models.gnn import InputEncoder, GIN_Backbone
-from src.core.models.heads import MLPHead, DotProductDecoder, BilinearDiscriminator
-from src.training.augmentations import GraphAugmentor
+from src.common import DOMAIN_DIMENSIONS, GNN_HIDDEN_DIM, NODE_FEATURE_MASKING_MASK_RATE
+from src.model.layers import GradientReversalLayer
+from src.model.gnn import InputEncoder, GIN_Backbone
+from src.model.heads import MLPHead, DotProductDecoder, BilinearDiscriminator
+from src.pretraining.augmentations import GraphAugmentor
 
 
 class PretrainableGNN(nn.Module):
@@ -21,14 +21,13 @@ class PretrainableGNN(nn.Module):
     - Graph augmentation capabilities for contrastive learning
     """
 
-    def __init__(self, device: torch.device, domain_names: list[str], task_names: list[str], enable_augmentations: bool):
+    def __init__(self, device: torch.device, domain_names: list[str], task_names: list[str]):
         """
         Initialize the pretrainable GNN model.
 
         Args:
             domain_dimensions: Dict mapping domain names to their input dimensions
             device: Device to place the model on ('cpu', 'cuda', or torch.device)
-            enable_augmentations: Whether to enable graph augmentations
         """
         super(PretrainableGNN, self).__init__()
 
@@ -80,12 +79,6 @@ class PretrainableGNN(nn.Module):
         # --- Gradient Reversal Layer ---
         self.grl = GradientReversalLayer()
 
-        # --- Graph Augmentation ---
-        if enable_augmentations:
-            self.augmentor = GraphAugmentor()
-        else:
-            self.augmentor = None
-
         # Move to device
         self.to(self.device)
 
@@ -129,18 +122,6 @@ class PretrainableGNN(nn.Module):
         masked_data.x[mask_indices] = mask_token.unsqueeze(0).expand(num_mask, -1)
 
         return masked_data, mask_indices, target_h0
-
-    def create_augmented_pair(self, data):
-        """
-        Create two augmented views of the graph for contrastive learning.
-
-        Args:
-            data: PyTorch Geometric Data object
-
-        Returns:
-            Tuple of two augmented data objects (G', G'')
-        """
-        return self.augmentor.create_augmented_pair(data)
 
     def forward(self, data, domain_name: str):
         """

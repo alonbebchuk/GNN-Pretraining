@@ -7,6 +7,7 @@ from pathlib import Path
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 from torch_geometric.datasets import Planetoid, TUDataset
 from tqdm import tqdm
+from src.pretraining.graph_properties import GraphPropertyCalculator
 
 # --- Configuration -----------------------------------------------------------
 
@@ -69,6 +70,32 @@ def apply_preprocessing(dataset, train_idx, dataset_name):
         logging.info(f"Applied row normalization to {dataset_name}")
 
 
+def attach_standardized_graph_properties(dataset, train_idx, dataset_name):
+    """Compute and attach standardized 15-D graph property vectors for pretraining datasets only."""
+    if isinstance(train_idx, torch.Tensor):
+        train_idx = train_idx.tolist()
+
+    calculator = GraphPropertyCalculator()
+
+    # Collect properties for training graphs
+    train_props_list = []
+    for idx in train_idx:
+        props = calculator(dataset[idx]).to(torch.float32)
+        train_props_list.append(props)
+
+    train_props = torch.stack(train_props_list, dim=0)  # [N_train, 15]
+    prop_mean = train_props.mean(dim=0)
+    prop_std = train_props.std(dim=0, unbiased=True)
+    prop_std[prop_std < 1e-8] = 1.0
+
+    # Attach standardized properties to all graphs using train stats
+    for g in dataset:
+        props = calculator(g).to(torch.float32)
+        g.graph_properties = (props - prop_mean) / prop_std
+
+    logging.info(f"Computed and standardized graph properties for {dataset_name}")
+
+
 def save_processed_data(dataset_name, data, splits):
     """Save processed data and splits to disk."""
     save_dir = PROCESSED_DIR / dataset_name
@@ -104,6 +131,9 @@ def process_tudatasets():
 
             # Apply preprocessing
             apply_preprocessing(pretrain_dataset, train_idx, name)
+
+            # Attach standardized graph properties
+            attach_standardized_graph_properties(pretrain_dataset, train_idx, name)
 
             pretrain_splits = {
                 'train': torch.tensor(train_idx, dtype=torch.long),
