@@ -7,27 +7,24 @@ from pathlib import Path
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 from torch_geometric.datasets import Planetoid, TUDataset
 from tqdm import tqdm
-from src.pretraining.graph_properties import GraphPropertyCalculator
+from src.data.graph_properties import GraphPropertyCalculator
+from src.common import (
+    RANDOM_SEED,
+    PRETRAIN_TUDATASETS,
+    DOWNSTREAM_TUDATASETS,
+    ALL_TUDATASETS,
+    ALL_PLANETOID_DATASETS,
+    FEATURE_TYPES,
+    CV_N_SPLITS,
+    PRETRAIN_VAL_TEST_FRACTION,
+    VAL_TEST_SPLIT_RATIO,
+    NORMALIZATION_EPS,
+    NORMALIZATION_STD_FALLBACK,
+    BOW_ROW_SUM_FALLBACK,
+    TUDATASET_USE_NODE_ATTR,
+)
 
-# --- Configuration -----------------------------------------------------------
-
-SEED = 0
-
-PRETRAIN_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
-DOWNSTREAM_TUDATASETS = ['ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
-ALL_TUDATASETS = sorted(list(set(PRETRAIN_TUDATASETS + DOWNSTREAM_TUDATASETS)))
-ALL_PLANETOID_DATASETS = ['Cora', 'CiteSeer']
-
-FEATURE_TYPES = {
-    'MUTAG': 'categorical',
-    'PROTEINS': 'categorical',
-    'NCI1': 'categorical',
-    'ENZYMES': 'continuous',
-    'FRANKENSTEIN': 'categorical',
-    'PTC_MR': 'categorical',
-    'Cora': 'bow',
-    'CiteSeer': 'bow'
-}
+# --- Configuration (centralized in src.common) -------------------------------
 
 # Define paths
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -52,7 +49,7 @@ def apply_preprocessing(dataset, train_idx, dataset_name):
         # Compute statistics only from training set
         mean = all_train_x.mean(dim=0)
         std = all_train_x.std(dim=0, unbiased=True)
-        std[std < 1e-8] = 1.0
+        std[std < NORMALIZATION_EPS] = NORMALIZATION_STD_FALLBACK
 
         # Apply normalization to all graphs using training statistics
         for g in dataset:
@@ -64,7 +61,7 @@ def apply_preprocessing(dataset, train_idx, dataset_name):
         # Row-normalize Bag-of-Words features
         for g in dataset:
             row_sum = g.x.sum(dim=1, keepdim=True)
-            row_sum[row_sum == 0] = 1
+            row_sum[row_sum == 0] = BOW_ROW_SUM_FALLBACK
             g.x = g.x / row_sum
 
         logging.info(f"Applied row normalization to {dataset_name}")
@@ -86,7 +83,7 @@ def attach_standardized_graph_properties(dataset, train_idx, dataset_name):
     train_props = torch.stack(train_props_list, dim=0)  # [N_train, 15]
     prop_mean = train_props.mean(dim=0)
     prop_std = train_props.std(dim=0, unbiased=True)
-    prop_std[prop_std < 1e-8] = 1.0
+    prop_std[prop_std < NORMALIZATION_EPS] = NORMALIZATION_STD_FALLBACK
 
     # Attach standardized properties to all graphs using train stats
     for g in dataset:
@@ -116,16 +113,16 @@ def process_tudatasets():
     for name in tqdm(ALL_TUDATASETS, desc="Processing TU datasets"):
         # Download dataset
         logging.info(f"Downloading {name}...")
-        dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=True)
+        dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=TUDATASET_USE_NODE_ATTR)
         logging.info(f"Downloaded {name}: {len(dataset)} graphs")
 
         # Pre-training splits (80/20)
         if name in PRETRAIN_TUDATASETS:
             pretrain_dataset = copy.deepcopy(dataset)
             num_graphs = len(pretrain_dataset)
-            ss_train_val = ShuffleSplit(n_splits=1, test_size=0.2, random_state=SEED)
+            ss_train_val = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_VAL_TEST_FRACTION, random_state=RANDOM_SEED)
             train_idx, val_test_idx = next(ss_train_val.split(np.arange(num_graphs)))
-            ss_val_test = ShuffleSplit(n_splits=1, test_size=0.5, random_state=SEED)
+            ss_val_test = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
             val_idx_rel, test_idx_rel = next(ss_val_test.split(np.arange(len(val_test_idx))))
             val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
 
@@ -147,10 +144,10 @@ def process_tudatasets():
             downstream_dataset = copy.deepcopy(dataset)
             num_graphs = len(downstream_dataset)
             labels = downstream_dataset.y.numpy()
-            sss_train_val = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=SEED)
+            sss_train_val = StratifiedShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_VAL_TEST_FRACTION, random_state=RANDOM_SEED)
             train_idx, val_test_idx = next(sss_train_val.split(np.arange(num_graphs), labels))
             val_test_labels = labels[val_test_idx]
-            sss_val_test = StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=SEED)
+            sss_val_test = StratifiedShuffleSplit(n_splits=CV_N_SPLITS, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
             val_idx_rel, test_idx_rel = next(sss_val_test.split(np.arange(len(val_test_idx)), val_test_labels))
             val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
 

@@ -8,9 +8,13 @@ from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.utils import negative_sampling
 
-from src.common import NODE_CONTRASTIVE_TEMPERATURE
+from src.common import (
+    NODE_CONTRASTIVE_TEMPERATURE,
+    CONTRASTIVE_SYMMETRY_COEF,
+    NEGATIVE_SAMPLING_RATIO,
+)
 from src.pretraining.augmentations import GraphAugmentor
-from src.pretraining.schedulers import GRLLambdaScheduler
+ 
 
 
 class BasePretrainTask(ABC):
@@ -96,12 +100,12 @@ class LinkPredictionTask(BasePretrainTask):
             # Positive edges
             pos_edge_index: Tensor = graph.edge_index.to(self.model.device)
 
-            # Negative edges: 1:1 ratio with positives
+            # Negative edges: ratio w.r.t. positives
             num_pos = pos_edge_index.size(1)
             neg_edge_index = negative_sampling(
                 edge_index=pos_edge_index,
                 num_nodes=graph.x.size(0),
-                num_neg_samples=num_pos,
+                num_neg_samples=int(num_pos * NEGATIVE_SAMPLING_RATIO),
             ).to(self.model.device)
 
             # Combine edges and labels
@@ -155,7 +159,7 @@ class NodeContrastiveTask(BasePretrainTask):
         targets = torch.arange(z1.size(0), device=z1.device)
         loss_12 = F.cross_entropy(logits_12, targets)
         loss_21 = F.cross_entropy(logits_21, targets)
-        return 0.5 * (loss_12 + loss_21)
+        return CONTRASTIVE_SYMMETRY_COEF * (loss_12 + loss_21)
 
     def compute_loss(self, batch: Sequence) -> Tensor:
         graphs, domains = self._unpack_batch(batch)
@@ -250,7 +254,7 @@ class GraphContrastiveTask(BasePretrainTask):
 class GraphPropertyPredictionTask(BasePretrainTask):
     """
     Predict pre-computed, standardized graph-level properties.
-    Graph embedding via mean pooling; MLP head outputs 15-D properties.
+    Graph embedding via mean pooling; MLP head outputs GRAPH_PROPERTY_DIM properties.
     Loss: MSE averaged over batch.
     """
 
@@ -268,7 +272,7 @@ class GraphPropertyPredictionTask(BasePretrainTask):
         for graph, domain_name in zip(graphs, domains):
             h = self.model(graph, domain_name)
             s = self._mean_pool_node_embeddings(h).unsqueeze(0)  # [1, D]
-            pred = head(s).squeeze(0)  # [15]
+            pred = head(s).squeeze(0)  # [GRAPH_PROPERTY_DIM]
 
             # Precomputed standardized properties
             target_props = graph.graph_properties.to(self.model.device).to(torch.float32)
@@ -290,18 +294,12 @@ class DomainAdversarialTask(BasePretrainTask):
     Note: The trainer should apply a negative weight to this loss when combining.
     """
 
-    def __init__(self, model: nn.Module, lambda_scheduler: GRLLambdaScheduler):
+    def __init__(self, model: nn.Module):
         super().__init__(model)
-        self.lambda_scheduler = lambda_scheduler
         self.domain_to_idx = {name: i for i, name in enumerate(self.model.input_encoders.keys())}
 
-    def _get_lambda_val(self) -> float:
-        return float(self.lambda_scheduler())
-
-    def compute_loss(self, batch: Sequence) -> Tensor:
+    def compute_loss(self, batch: Sequence, lambda_val: float = 0.0) -> Tensor:
         graphs, domains = self._unpack_batch(batch)
-
-        lambda_val: float = self._get_lambda_val()
 
         # Map domain_name -> index based on model's encoder order
         domain_labels = torch.tensor([self.domain_to_idx[d] for d in domains], device=self.model.device, dtype=torch.long)

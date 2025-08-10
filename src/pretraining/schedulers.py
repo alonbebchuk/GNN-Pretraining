@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass
+from src.common import GRL_GAMMA, GRL_LAMBDA_MIN, GRL_LAMBDA_MAX
 
 
 @dataclass
@@ -16,9 +17,9 @@ class GRLLambdaScheduler:
     """
 
     total_steps: int
-    gamma: float = 10.0
-    lambda_min: float = 0.0
-    lambda_max: float = 1.0
+    gamma: float = GRL_GAMMA
+    lambda_min: float = GRL_LAMBDA_MIN
+    lambda_max: float = GRL_LAMBDA_MAX
 
     def __post_init__(self) -> None:
         self._current_step: int = 0

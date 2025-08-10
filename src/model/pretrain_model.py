@@ -1,7 +1,17 @@
 import torch
 import torch.nn as nn
 
-from src.common import DOMAIN_DIMENSIONS, GNN_HIDDEN_DIM, NODE_FEATURE_MASKING_MASK_RATE
+from src.common import (
+    DOMAIN_DIMENSIONS,
+    GNN_HIDDEN_DIM,
+    NODE_FEATURE_MASKING_MASK_RATE,
+    MASK_TOKEN_INIT_MEAN,
+    MASK_TOKEN_INIT_STD,
+    GRAPH_PROPERTY_DIM,
+    CONTRASTIVE_PROJ_DIM_FACTOR,
+    GRAPH_PROP_HEAD_HIDDEN_FACTOR,
+    DOMAIN_ADV_HEAD_HIDDEN_FACTOR,
+)
 from src.model.layers import GradientReversalLayer
 from src.model.gnn import InputEncoder, GIN_Backbone
 from src.model.heads import MLPHead, DotProductDecoder, BilinearDiscriminator
@@ -45,10 +55,9 @@ class PretrainableGNN(nn.Module):
         for domain_name in domain_names:
             dim_in = DOMAIN_DIMENSIONS[domain_name]
             # Each domain needs its own [MASK] token with the correct input dimension
-            # Use normal initialization (0 mean, small std)
             mask_token = torch.zeros(dim_in)
             # BERT-style initialization
-            nn.init.normal_(mask_token, mean=0.0, std=0.02)
+            nn.init.normal_(mask_token, mean=MASK_TOKEN_INIT_MEAN, std=MASK_TOKEN_INIT_STD)
             self.mask_tokens[domain_name] = nn.Parameter(mask_token)
 
         # --- Shared GNN Backbone ---
@@ -65,16 +74,19 @@ class PretrainableGNN(nn.Module):
                 self.heads[task_name] = DotProductDecoder()
             elif task_name == 'node_contrast':
                 # Node contrastive learning projection head
-                self.heads[task_name] = MLPHead(dim_out=GNN_HIDDEN_DIM // 2)
+                proj_dim = int(GNN_HIDDEN_DIM * CONTRASTIVE_PROJ_DIM_FACTOR)
+                self.heads[task_name] = MLPHead(dim_out=proj_dim)
             elif task_name == 'graph_contrast':
                 # Graph contrastive learning discriminator
                 self.heads[task_name] = BilinearDiscriminator()
             elif task_name == 'graph_prop':
                 # Graph property prediction head
-                self.heads[task_name] = MLPHead(dim_hidden=GNN_HIDDEN_DIM * 2, dim_out=15)
+                hidden_dim = int(GNN_HIDDEN_DIM * GRAPH_PROP_HEAD_HIDDEN_FACTOR)
+                self.heads[task_name] = MLPHead(dim_hidden=hidden_dim, dim_out=GRAPH_PROPERTY_DIM)
             elif task_name == 'domain_adv':
                 # Domain adversarial classifier
-                self.heads[task_name] = MLPHead(dim_hidden=GNN_HIDDEN_DIM // 2, dim_out=self.num_domains)
+                hidden_dim = int(GNN_HIDDEN_DIM * DOMAIN_ADV_HEAD_HIDDEN_FACTOR)
+                self.heads[task_name] = MLPHead(dim_hidden=hidden_dim, dim_out=self.num_domains)
 
         # --- Gradient Reversal Layer ---
         self.grl = GradientReversalLayer()
@@ -108,8 +120,9 @@ class PretrainableGNN(nn.Module):
         masked_data = data.clone()
         num_nodes = data.x.shape[0]
 
-        # Ensure at least 1 node is masked
-        num_mask = max(1, int(num_nodes * NODE_FEATURE_MASKING_MASK_RATE))
+        # Ensure at least a minimum number of nodes are masked
+        from src.common import NODE_FEATURE_MASKING_MIN_NODES  # local import to avoid circulars
+        num_mask = max(NODE_FEATURE_MASKING_MIN_NODES, int(num_nodes * NODE_FEATURE_MASKING_MASK_RATE))
 
         # Randomly select nodes to mask
         mask_indices = torch.randperm(num_nodes, device=self.device)[:num_mask]

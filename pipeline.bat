@@ -1,0 +1,1 @@
+python -m src.data.data_setup

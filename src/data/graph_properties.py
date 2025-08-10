@@ -27,7 +27,7 @@ class GraphPropertyCalculator:
      11: degree_assortativity
      12: degree_centralization (Freeman)
      13: closeness_centralization
-     14: betweenness_centralization
+      14: betweenness_centralization
     """
 
     def __call__(self, graph: Data) -> Tensor:
@@ -73,10 +73,13 @@ class GraphPropertyCalculator:
             if H.number_of_nodes() > 1:
                 diameter = float(nx.diameter(H))
 
-        # Assortativity (can be NaN)
-        assortativity = float(nx.degree_assortativity_coefficient(G))
-        if math.isnan(assortativity):
+        # Assortativity
+        if float(degrees.std()) == 0.0:
             assortativity = 0.0
+        else:
+            assortativity = float(nx.degree_assortativity_coefficient(G))
+            if math.isnan(assortativity) or math.isinf(assortativity):
+                assortativity = 0.0
 
         # Degree centralization (Freeman): sum(max_deg - deg_i) / ((N-1)*(N-2))
         if N > 2:

@@ -20,7 +20,17 @@ from torch_geometric.transforms import BaseTransform
 import random
 from typing import List, Tuple
 
-from src.common import AUGMENTATION_ATTR_MASK_PROB, AUGMENTATION_ATTR_MASK_RATE, AUGMENTATION_EDGE_DROP_PROB, AUGMENTATION_EDGE_DROP_RATE, AUGMENTATION_SUBGRAPH_PROB, AUGMENTATION_WALK_LENGTH, AUGMENTATION_MIN_NODES_RATIO
+from src.common import (
+    AUGMENTATION_ATTR_MASK_PROB,
+    AUGMENTATION_ATTR_MASK_RATE,
+    AUGMENTATION_EDGE_DROP_PROB,
+    AUGMENTATION_EDGE_DROP_RATE,
+    AUGMENTATION_SUBGRAPH_PROB,
+    AUGMENTATION_WALK_LENGTH,
+    AUGMENTATION_MIN_NODES_RATIO,
+    AUGMENTATION_MIN_ATTR_MASK_DIM,
+    AUGMENTATION_MIN_START_NODES,
+)
 
 
 class AttributeMasking(BaseTransform):
@@ -44,8 +54,8 @@ class AttributeMasking(BaseTransform):
         data = data.clone()
         num_features = data.x.shape[1]
 
-        # Ensure at least 1 feature is masked
-        num_mask = max(1, int(num_features * AUGMENTATION_ATTR_MASK_RATE))
+        # Ensure at least a minimum number of features are masked
+        num_mask = max(AUGMENTATION_MIN_ATTR_MASK_DIM, int(num_features * AUGMENTATION_ATTR_MASK_RATE))
 
         # Randomly select feature dimensions to mask
         mask_dims = torch.randperm(num_features)[:num_mask]
@@ -92,24 +102,17 @@ class SubgraphSampling(BaseTransform):
     from randomly selected starting nodes.
     """
 
-    def _random_walk(self, edge_index: torch.Tensor, start_node: int, num_nodes: int) -> List[int]:
+    def _random_walk(self, adj_list: List[List[int]], start_node: int) -> List[int]:
         """
         Perform a single random walk starting from a given node.
 
         Args:
-            edge_index: Edge connectivity
+            adj_list: Precomputed adjacency list mapping node -> list of neighbors
             start_node: Starting node for the walk
-            num_nodes: Total number of nodes in the graph
 
         Returns:
             List of nodes visited during the walk
         """
-        # Create adjacency list for efficient neighbor lookup
-        adj_list = [[] for _ in range(num_nodes)]
-        for i in range(edge_index.shape[1]):
-            src, dst = edge_index[0, i].item(), edge_index[1, i].item()
-            adj_list[src].append(dst)
-
         walk = [start_node]
         current_node = start_node
 
@@ -140,11 +143,19 @@ class SubgraphSampling(BaseTransform):
         sampled_nodes = set()
 
         # Start random walks from random nodes
-        num_start_nodes = max(1, int(num_nodes * AUGMENTATION_MIN_NODES_RATIO))
+        num_start_nodes = max(AUGMENTATION_MIN_START_NODES, int(num_nodes * AUGMENTATION_MIN_NODES_RATIO))
         start_nodes = torch.randperm(num_nodes)[:num_start_nodes]
 
+        # Precompute adjacency list once for efficient neighbor lookup
+        adj_list: List[List[int]] = [[] for _ in range(num_nodes)]
+        edge_index = data.edge_index
+        for i in range(edge_index.shape[1]):
+            src = int(edge_index[0, i])
+            dst = int(edge_index[1, i])
+            adj_list[src].append(dst)
+
         for start_node in start_nodes:
-            walk = self._random_walk(data.edge_index, start_node.item(), num_nodes)
+            walk = self._random_walk(adj_list, int(start_node.item()))
             sampled_nodes.update(walk)
 
         sampled_nodes = torch.tensor(list(sampled_nodes), dtype=torch.long)
