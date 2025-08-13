@@ -1,0 +1,4 @@
+exp_name: "s4_all_objectives"
+pretrain_domains: ["MUTAG", "PROTEINS", "NCI1", "ENZYMES"]
+active_tasks: ["node_feat_mask", "link_pred", "node_contrast", "graph_contrast", "graph_prop"]
+

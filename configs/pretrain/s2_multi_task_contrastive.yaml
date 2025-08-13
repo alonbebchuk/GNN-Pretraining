@@ -1,0 +1,4 @@
+exp_name: "s2_multi_task_contrastive"
+pretrain_domains: ["MUTAG", "PROTEINS", "NCI1", "ENZYMES"]
+active_tasks: ["node_contrast", "graph_contrast"]
+

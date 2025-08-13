@@ -1,8 +1,5 @@
 """
 Central hub for all experiment hyperparameters and configuration.
-
-Organized by logical groups to make it easy to configure experiments
-without searching through the codebase.
 """
 
 # -----------------------------------------------------------------------------
@@ -116,3 +113,25 @@ DOMAIN_DIMENSIONS = {
     'CiteSeer': 3703
 }
 
+
+# -----------------------------------------------------------------------------
+# Pretraining - Training Hyperparameters & Tracking (shared, not per-run)
+# -----------------------------------------------------------------------------
+
+# Training schedule
+PRETRAIN_EPOCHS = 100
+PRETRAIN_BATCH_SIZE_PER_DOMAIN = 8
+PRETRAIN_EVAL_EVERY_EPOCHS = 1
+
+# Optimizer settings
+PRETRAIN_LR_MODEL = 1e-3
+PRETRAIN_LR_UNCERTAINTY = 5e-3
+PRETRAIN_WEIGHT_DECAY = 0.0
+
+# Reproducibility across multiple runs
+PRETRAIN_NUM_SEEDS = 3
+PRETRAIN_SEED_BASE = RANDOM_SEED
+
+# Tracking & IO
+WANDB_PROJECT = 'gnn-pretraining'
+PRETRAIN_OUTPUT_DIR = 'checkpoints/pretrain'

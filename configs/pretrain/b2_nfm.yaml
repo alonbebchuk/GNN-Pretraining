@@ -1,0 +1,4 @@
+exp_name: "b2_nfm"
+pretrain_domains: ["MUTAG", "PROTEINS", "NCI1", "ENZYMES"]
+active_tasks: ["node_feat_mask"]
+
