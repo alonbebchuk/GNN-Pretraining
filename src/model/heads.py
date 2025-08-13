@@ -12,7 +12,7 @@ class MLPHead(nn.Module):
     This is used as the standard prediction head throughout the system.
     """
 
-    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM):
+    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM, apply_dropout: bool = True):
         """
         Initialize the MLP head.
 
@@ -21,12 +21,14 @@ class MLPHead(nn.Module):
         """
         super(MLPHead, self).__init__()
 
-        self.mlp = nn.Sequential(
+        layers = [
             nn.Linear(GNN_HIDDEN_DIM, dim_hidden),
             nn.ReLU(),
-            nn.Dropout(p=DROPOUT_RATE),
-            nn.Linear(dim_hidden, dim_out)
-        )
+        ]
+        if apply_dropout:
+            layers.append(nn.Dropout(p=DROPOUT_RATE))
+        layers.append(nn.Linear(dim_hidden, dim_out))
+        self.mlp = nn.Sequential(*layers)
 
     def forward(self, x):
         """

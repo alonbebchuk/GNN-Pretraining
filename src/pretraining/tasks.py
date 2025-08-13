@@ -1,53 +1,42 @@
 from abc import ABC, abstractmethod
-from typing import List, Sequence, Tuple
+from typing import Dict, List
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from torch_geometric.data import Data
-from torch_geometric.utils import negative_sampling
+from torch_geometric.data import Data, Batch
+from torch_geometric.nn import global_mean_pool
+from torch_geometric.utils import batched_negative_sampling
 
 from src.common import (
     NODE_CONTRASTIVE_TEMPERATURE,
     CONTRASTIVE_SYMMETRY_COEF,
-    NEGATIVE_SAMPLING_RATIO,
+    NUM_NEGATIVE_SAMPLES,
 )
 from src.pretraining.augmentations import GraphAugmentor
- 
 
 
 class BasePretrainTask(ABC):
     """
     Abstract base class for all pre-training tasks.
 
-    Each task computes a scalar loss tensor given a batch of graphs.
+    Each task computes a scalar loss tensor given a batches of graphs by domain.
 
-    Expected batch format: Sequence[Tuple[Data, str]] (graph, domain_name)
+    Expected batch format: Dict[str, Batch] (domain_name -> Batch)
     """
 
     def __init__(self, model: nn.Module):
         self.model = model
 
     @abstractmethod
-    def compute_loss(self, batch: Sequence) -> Tensor:
+    def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs) -> Tensor:
         """Compute and return a single scalar loss tensor for the batch."""
         raise NotImplementedError
 
     # ----------------------------
     # Helper utilities for tasks
     # ----------------------------
-    @staticmethod
-    def _unpack_batch(batch: Sequence) -> Tuple[List[Data], List[str]]:
-        graphs: List[Data] = []
-        domains: List[str] = []
-
-        for item in batch:
-            g, d = item
-            graphs.append(g)
-            domains.append(d)
-        return graphs, domains
-
     @staticmethod
     def _mean_pool_node_embeddings(node_embeddings: Tensor) -> Tensor:
         """Mean-pool node embeddings to a single graph embedding [GNN_HIDDEN_DIM]."""
@@ -60,27 +49,20 @@ class NodeFeatureMaskingTask(BasePretrainTask):
     Loss: MSE between reconstructed h0 and target h0 for masked nodes, averaged over batch.
     """
 
-    def compute_loss(self, batch: Sequence) -> Tensor:
-        graphs, domains = self._unpack_batch(batch)
+    def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs) -> Tensor:
+        # Domain-specific reconstruction head
+        per_domain_losses: List[Tensor] = []
 
-        mse_losses: List[Tensor] = []
-        head = self.model.get_head('node_feat_mask')
+        for domain_name, batch in batches_by_domain.items():
+            device = self.model.device
+            masked_h0, mask_indices, target_h0 = self.model.apply_node_masking(batch, domain_name)
 
-        for graph, domain_name in zip(graphs, domains):
-            masked_graph, mask_indices, target_h0 = self.model.apply_node_masking(graph, domain_name)
+            # Forward from masked h_0
+            h_final = self.model.forward_with_h0(masked_h0.to(device), batch.edge_index.to(device))
+            reconstructed_h0 = self.model.get_head('node_feat_mask', domain_name)(h_final[mask_indices])
+            per_domain_losses.append(F.mse_loss(reconstructed_h0, target_h0))
 
-            # Forward pass on masked graph to get final embeddings
-            h_final = self.model(masked_graph, domain_name)
-
-            # Select masked node embeddings and reconstruct original h0
-            predicted_h_final = h_final[mask_indices]
-            reconstructed_h0 = head(predicted_h_final)
-
-            # MSE loss for this graph
-            mse_loss = F.mse_loss(reconstructed_h0, target_h0)
-            mse_losses.append(mse_loss)
-
-        return torch.stack(mse_losses).mean()
+        return torch.stack(per_domain_losses).mean()
 
 
 class LinkPredictionTask(BasePretrainTask):
@@ -90,39 +72,40 @@ class LinkPredictionTask(BasePretrainTask):
     Loss: BCE averaged over batch.
     """
 
-    def compute_loss(self, batch: Sequence) -> Tensor:
-        graphs, domains = self._unpack_batch(batch)
-
-        bce_losses: List[Tensor] = []
+    def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs) -> Tensor:
         decoder = self.model.get_head('link_pred')
+        per_domain_losses: List[Tensor] = []
 
-        for graph, domain_name in zip(graphs, domains):
-            # Positive edges
-            pos_edge_index: Tensor = graph.edge_index.to(self.model.device)
+        for domain_name, batch in batches_by_domain.items():
+            device = self.model.device
+            pos_edges = batch.edge_index.to(device)
 
-            # Negative edges: ratio w.r.t. positives
-            num_pos = pos_edge_index.size(1)
-            neg_edge_index = negative_sampling(
-                edge_index=pos_edge_index,
-                num_nodes=graph.x.size(0),
-                num_neg_samples=int(num_pos * NEGATIVE_SAMPLING_RATIO),
-            ).to(self.model.device)
+            # Compute embeddings
+            h_final = self.model(batch, domain_name)
 
-            # Combine edges and labels
-            combined_edge_index = torch.cat([pos_edge_index, neg_edge_index], dim=1)
+            # Sample negative edges
+            neg_edges = batched_negative_sampling(
+                edge_index=pos_edges,
+                batch=batch.batch.to(device), # Provides node-to-graph mapping
+                num_neg_samples=NUM_NEGATIVE_SAMPLES,
+            ).to(device)
+
+            # Combine positive and negative edges
+            combined_edges = torch.cat([pos_edges, neg_edges], dim=1)
+            
+            # Create corresponding labels
             labels = torch.cat([
-                torch.ones(num_pos, device=self.model.device),
-                torch.zeros(neg_edge_index.size(1), device=self.model.device),
+                torch.ones(pos_edges.size(1), device=device),
+                torch.zeros(neg_edges.size(1), device=device),
             ], dim=0)
 
-            # Node embeddings from graph
-            h_final = self.model(graph, domain_name)
+            # Get probabilities and compute the loss
+            probs = decoder(h_final, combined_edges)
+            loss = F.binary_cross_entropy(probs, labels)
+            per_domain_losses.append(loss)
 
-            probs = decoder(h_final, combined_edge_index)
-            bce_loss = F.binary_cross_entropy(probs, labels)
-            bce_losses.append(bce_loss)
-
-        return torch.stack(bce_losses).mean()
+        # Average the loss across all domains
+        return torch.stack(per_domain_losses).mean()
 
 
 class NodeContrastiveTask(BasePretrainTask):
@@ -161,37 +144,73 @@ class NodeContrastiveTask(BasePretrainTask):
         loss_21 = F.cross_entropy(logits_21, targets)
         return CONTRASTIVE_SYMMETRY_COEF * (loss_12 + loss_21)
 
-    def compute_loss(self, batch: Sequence) -> Tensor:
-        graphs, domains = self._unpack_batch(batch)
+    def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs) -> Tensor:
+        # Domain-specific projection head
+        z1_cat_all: List[Tensor] = []
+        z2_cat_all: List[Tensor] = []
 
-        head = self.model.get_head('node_contrast')
+        for domain_name, batch in batches_by_domain.items():
+            data_list = batch.to_data_list()
+            if not data_list:
+                continue
 
-        # Collect projected embeddings across the whole batch
-        proj_view1_list: List[Tensor] = []
-        proj_view2_list: List[Tensor] = []
+            # Create two augmented views per-graph in Python, then batch once
+            view1_list: List[Data] = []
+            view2_list: List[Data] = []
+            pairs_idx1: List[Tensor] = []
+            pairs_idx2: List[Tensor] = []
+            for g in data_list:
+                v1, v2 = self.augmentor.create_augmented_pair(g)
+                i1, i2 = GraphAugmentor.get_contrastive_pairs(v1, v2)
+                view1_list.append(v1)
+                view2_list.append(v2)
+                pairs_idx1.append(i1)
+                pairs_idx2.append(i2)
 
-        for graph, domain_name in zip(graphs, domains):
-            # Create two augmented views
-            view1, view2 = self.augmentor.create_augmented_pair(graph)
+            batch_v1: Batch = Batch.from_data_list(view1_list)
+            batch_v2: Batch = Batch.from_data_list(view2_list)
 
-            # Encode both views
-            h1 = self.model(view1, domain_name)
-            h2 = self.model(view2, domain_name)
+            h1 = self.model(batch_v1, domain_name)
+            h2 = self.model(batch_v2, domain_name)
 
-            # Determine positive pairs via overlapping nodes
-            idx1, idx2 = GraphAugmentor.get_contrastive_pairs(view1, view2)
+            # Compute per-graph start offsets once, then vectorize index building
+            ptr1: Tensor = batch_v1.ptr  # [G+1]
+            ptr2: Tensor = batch_v2.ptr  # [G+1]
+            if ptr1.numel() <= 1:
+                continue
 
-            # Select and project embeddings
-            z1 = head(h1[idx1])
-            z2 = head(h2[idx2])
+            # Filter out empty pairs and collect lengths
+            valid = [(i1, i2, g_idx) for g_idx, (i1, i2) in enumerate(zip(pairs_idx1, pairs_idx2)) if i1.numel() > 0 and i2.numel() > 0]
+            if not valid:
+                continue
 
-            proj_view1_list.append(z1)
-            proj_view2_list.append(z2)
+            i1_list, i2_list, g_idx_list = zip(*valid)
+            i1_cat = torch.cat(i1_list, dim=0)
+            i2_cat = torch.cat(i2_list, dim=0)
+            g_idx_tensor = torch.tensor(g_idx_list, device=h1.device, dtype=torch.long)
 
-        z1_all = torch.cat(proj_view1_list, dim=0)
-        z2_all = torch.cat(proj_view2_list, dim=0)
+            # Build offsets for each element using repeat_interleave
+            len_i1 = torch.tensor([t.numel() for t in i1_list], device=h1.device, dtype=torch.long)
+            len_i2 = torch.tensor([t.numel() for t in i2_list], device=h2.device, dtype=torch.long)
+            off1 = ptr1[g_idx_tensor].repeat_interleave(len_i1)
+            off2 = ptr2[g_idx_tensor].repeat_interleave(len_i2)
 
-        return self._nt_xent(z1_all, z2_all)
+            global_i1 = off1 + i1_cat
+            global_i2 = off2 + i2_cat
+
+            proj_head = self.model.get_head('node_contrast', domain_name)
+            z1 = proj_head(h1[global_i1])
+            z2 = proj_head(h2[global_i2])
+
+            z1_cat_all.append(z1)
+            z2_cat_all.append(z2)
+
+        if not z1_cat_all:
+            return torch.tensor(0.0, device=self.model.device, requires_grad=True)
+
+        z1_cat = torch.cat(z1_cat_all, dim=0)
+        z2_cat = torch.cat(z2_cat_all, dim=0)
+        return self._nt_xent(z1_cat, z2_cat)
 
 
 class GraphContrastiveTask(BasePretrainTask):
@@ -201,54 +220,47 @@ class GraphContrastiveTask(BasePretrainTask):
     Loss: BCE.
     """
 
-    def compute_loss(self, batch: Sequence) -> Tensor:
-        graphs, domains = self._unpack_batch(batch)
+    def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs) -> Tensor:
+        # Domain-specific discriminator
+        per_domain_losses: List[Tensor] = []
 
-        discriminator = self.model.get_head('graph_contrast')
+        for domain_name, batch in batches_by_domain.items():
+            device = self.model.device
+            # Node embeddings and per-graph summaries
+            h = self.model(batch, domain_name)  # [N_total, D]
+            s = global_mean_pool(h, batch.batch)  # [G, D]
 
-        all_nodes: List[Tensor] = []
-        graph_summaries: List[Tensor] = []
-        # (start, end) per graph in all_nodes
-        graph_node_slices: List[Tuple[int, int]] = []
+            # Build losses per graph using vectorized indexing where practical
+            per_graph_losses: List[Tensor] = []
+            ptr: Tensor = batch.ptr
+            num_graphs = ptr.numel() - 1
+            for g in range(num_graphs):
+                start = int(ptr[g].item())
+                end = int(ptr[g+1].item())
+                if end <= start:
+                    continue
+                pos_nodes = h[start:end]
+                pos_s = s[g].unsqueeze(0).expand(pos_nodes.size(0), -1)
+                pos_labels = torch.ones(pos_nodes.size(0), device=device)
 
-        # Encode each graph, record node embeddings and summary
-        start = 0
-        for graph, domain_name in zip(graphs, domains):
-            h = self.model(graph, domain_name)  # [N_g, D]
-            s = self._mean_pool_node_embeddings(h)  # [D]
+                # Negatives: nodes from all other graphs
+                neg_left = h[:start]
+                neg_right = h[end:]
+                neg_nodes = torch.cat([t for t in [neg_left, neg_right] if t.numel() > 0], dim=0)
+                neg_s = s[g].unsqueeze(0).expand(neg_nodes.size(0), -1)
+                neg_labels = torch.zeros(neg_nodes.size(0), device=device)
 
-            end = start + h.size(0)
-            graph_node_slices.append((start, end))
-            start = end
+                x_pairs = torch.cat([pos_nodes, neg_nodes], dim=0)
+                y_pairs = torch.cat([pos_s, neg_s], dim=0)
+                labels = torch.cat([pos_labels, neg_labels], dim=0)
 
-            all_nodes.append(h)
-            graph_summaries.append(s)
+                scores = self.model.get_head('graph_contrast', domain_name)(x_pairs, y_pairs)
+                per_graph_losses.append(F.binary_cross_entropy(scores, labels))
 
-        H_all = torch.cat(all_nodes, dim=0)  # [M, D]
+            if per_graph_losses:
+                per_domain_losses.append(torch.stack(per_graph_losses).mean())
 
-        per_graph_losses: List[Tensor] = []
-        for (start, end), s in zip(graph_node_slices, graph_summaries):
-            # Positive pairs: nodes from this graph with its summary
-            pos_nodes = H_all[start:end]  # [N_g, D]
-            pos_s = s.unsqueeze(0).expand(pos_nodes.size(0), -1)  # [N_g, D]
-            pos_labels = torch.ones(pos_nodes.size(0), device=self.model.device)
-
-            # Negative pairs: nodes from other graphs with this summary
-            neg_left = H_all[:start]
-            neg_right = H_all[end:]
-
-            neg_nodes = torch.cat([t for t in [neg_left, neg_right] if t.numel() > 0], dim=0)
-            neg_s = s.unsqueeze(0).expand(neg_nodes.size(0), -1)
-            neg_labels = torch.zeros(neg_nodes.size(0), device=self.model.device)
-
-            x_pairs = torch.cat([pos_nodes, neg_nodes], dim=0)
-            y_pairs = torch.cat([pos_s, neg_s], dim=0)
-            labels = torch.cat([pos_labels, neg_labels], dim=0)
-
-            scores = discriminator(x_pairs, y_pairs)
-            per_graph_losses.append(F.binary_cross_entropy(scores, labels))
-
-        return torch.stack(per_graph_losses).mean()
+        return torch.stack(per_domain_losses).mean() if per_domain_losses else torch.tensor(0.0, device=self.model.device)
 
 
 class GraphPropertyPredictionTask(BasePretrainTask):
@@ -261,29 +273,18 @@ class GraphPropertyPredictionTask(BasePretrainTask):
     def __init__(self, model: nn.Module):
         super().__init__(model)
 
-    def compute_loss(self, batch: Sequence, **kwargs) -> Tensor:
-        graphs, domains = self._unpack_batch(batch)
+    def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs) -> Tensor:
+        # Domain-specific graph property head
 
-        head = self.model.get_head('graph_prop')
+        per_domain_losses: List[Tensor] = []
+        for domain_name, batch in batches_by_domain.items():
+            h = self.model(batch, domain_name)
+            graph_emb = global_mean_pool(h, batch.batch)
+            preds = self.model.get_head('graph_prop', domain_name)(graph_emb)
+            target_mat = batch.graph_properties.to(self.model.device).to(torch.float32)
+            per_domain_losses.append(F.mse_loss(preds, target_mat))
 
-        preds: List[Tensor] = []
-        targets: List[Tensor] = []
-
-        for graph, domain_name in zip(graphs, domains):
-            h = self.model(graph, domain_name)
-            s = self._mean_pool_node_embeddings(h).unsqueeze(0)  # [1, D]
-            pred = head(s).squeeze(0)  # [GRAPH_PROPERTY_DIM]
-
-            # Precomputed standardized properties
-            target_props = graph.graph_properties.to(self.model.device).to(torch.float32)
-
-            preds.append(pred)
-            targets.append(target_props)
-
-        pred_mat = torch.stack(preds, dim=0)
-        target_mat = torch.stack(targets, dim=0)
-
-        return F.mse_loss(pred_mat, target_mat)
+        return torch.stack(per_domain_losses).mean() if per_domain_losses else torch.tensor(0.0, device=self.model.device)
 
 
 class DomainAdversarialTask(BasePretrainTask):
@@ -298,25 +299,22 @@ class DomainAdversarialTask(BasePretrainTask):
         super().__init__(model)
         self.domain_to_idx = {name: i for i, name in enumerate(self.model.input_encoders.keys())}
 
-    def compute_loss(self, batch: Sequence, lambda_val: float = 0.0) -> Tensor:
-        graphs, domains = self._unpack_batch(batch)
+    def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs) -> Tensor:
+        lambda_val = kwargs.get('lambda_val', 0.0)
 
-        # Map domain_name -> index based on model's encoder order
-        domain_labels = torch.tensor([self.domain_to_idx[d] for d in domains], device=self.model.device, dtype=torch.long)
-
-        # Encode each graph and compute graph embeddings
         graph_emb_list: List[Tensor] = []
-        for graph, domain_name in zip(graphs, domains):
-            h = self.model(graph, domain_name)
-            s = self._mean_pool_node_embeddings(h)
+        label_list: List[Tensor] = []
+
+        for domain_name, batch in batches_by_domain.items():
+            h = self.model(batch, domain_name)
+            s = global_mean_pool(h, batch.batch)
             graph_emb_list.append(s)
+            domain_idx = self.domain_to_idx[domain_name]
+            label_list.append(torch.full((s.size(0),), domain_idx, device=self.model.device, dtype=torch.long))
 
-        graph_emb = torch.stack(graph_emb_list, dim=0)  # [B, D]
+        graph_emb = torch.cat(graph_emb_list, dim=0)
+        domain_labels = torch.cat(label_list, dim=0)
 
-        # Apply GRL
         grl_out = self.model.apply_gradient_reversal(graph_emb, lambda_val)
-
-        # Domain head
-        logits = self.model.get_head('domain_adv')(grl_out)  # [B, num_domains]
-
+        logits = self.model.get_head('domain_adv')(grl_out)
         return F.cross_entropy(logits, domain_labels)

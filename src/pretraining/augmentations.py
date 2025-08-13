@@ -4,11 +4,11 @@ Graph augmentations for contrastive learning tasks.
 This module implements the augmentations required for node-level contrastive learning.
 Each augmentation is applied with p=0.5 probability as part of a sequential composition:
 
-- Attribute masking (% of feature dimensions)
-- Edge dropping (% of edges) 
-- Subgraph sampling (via random walks of length k)
+- Node dropping (% of nodes)
+- Edge dropping (% of edges)
+- Feature masking (% of feature dimensions)
 
-The implementation follows the GraphCL-style contrastive learning approach where
+The implementation follows a GraphCL-style contrastive learning approach where
 two different augmented versions (G', G'') are created for each graph to form
 positive pairs for contrastive learning.
 """
@@ -25,42 +25,41 @@ from src.common import (
     AUGMENTATION_ATTR_MASK_RATE,
     AUGMENTATION_EDGE_DROP_PROB,
     AUGMENTATION_EDGE_DROP_RATE,
-    AUGMENTATION_SUBGRAPH_PROB,
-    AUGMENTATION_WALK_LENGTH,
-    AUGMENTATION_MIN_NODES_RATIO,
+    AUGMENTATION_NODE_DROP_PROB,
+    AUGMENTATION_NODE_DROP_RATE,
     AUGMENTATION_MIN_ATTR_MASK_DIM,
-    AUGMENTATION_MIN_START_NODES,
+    AUGMENTATION_MIN_EDGE_NUM_KEEP,
+    AUGMENTATION_MIN_NODE_NUM_KEEP,
 )
 
 
-class AttributeMasking(BaseTransform):
+class NodeDropping(BaseTransform):
     """
-    Randomly mask a percentage of node feature dimensions.
+    Randomly drop a percentage of nodes from the graph and relabel nodes.
 
-    This augmentation sets selected feature dimensions to zero,
-    forcing the model to be robust to missing features.
+    This augmentation induces a node-induced subgraph by keeping a subset of nodes.
     """
 
     def __call__(self, data: Data) -> Data:
         """
-        Apply attribute masking to the data.
+        Apply node dropping to the data.
 
         Args:
             data: PyTorch Geometric Data object
 
         Returns:
-            Data object with masked node features
+            Data object with a node-induced subgraph
         """
         data = data.clone()
-        num_features = data.x.shape[1]
+        num_nodes = data.x.shape[0]
+        num_keep = max(AUGMENTATION_MIN_NODE_NUM_KEEP, int(num_nodes * (1.0 - AUGMENTATION_NODE_DROP_RATE)))
 
-        # Ensure at least a minimum number of features are masked
-        num_mask = max(AUGMENTATION_MIN_ATTR_MASK_DIM, int(num_features * AUGMENTATION_ATTR_MASK_RATE))
-
-        # Randomly select feature dimensions to mask
-        mask_dims = torch.randperm(num_features)[:num_mask]
-        # Set selected dimensions to zero for all nodes
-        data.x[:, mask_dims] = 0.0
+        # Randomly select nodes to keep
+        keep_nodes = torch.randperm(num_nodes)[:num_keep]
+        edge_index, _ = subgraph(keep_nodes, data.edge_index)
+        data.x = data.x[keep_nodes]
+        data.node_indices = data.node_indices[keep_nodes]
+        data.edge_index = edge_index
 
         return data
 
@@ -85,7 +84,7 @@ class EdgeDropping(BaseTransform):
         """
         data = data.clone()
         num_edges = data.edge_index.shape[1]
-        num_keep = int(num_edges * (1 - AUGMENTATION_EDGE_DROP_RATE))
+        num_keep = max(AUGMENTATION_MIN_EDGE_NUM_KEEP, int(num_edges * (1.0 - AUGMENTATION_EDGE_DROP_RATE)))
 
         # Randomly select edges to keep
         keep_indices = torch.randperm(num_edges)[:num_keep]
@@ -94,83 +93,33 @@ class EdgeDropping(BaseTransform):
         return data
 
 
-class SubgraphSampling(BaseTransform):
+class AttributeMasking(BaseTransform):
     """
-    Sample a subgraph using random walks.
+    Randomly mask a percentage of node feature dimensions.
 
-    This augmentation creates a subgraph by performing random walks
-    from randomly selected starting nodes.
+    This augmentation sets selected feature dimensions to zero,
+    forcing the model to be robust to missing features.
     """
-
-    def _random_walk(self, adj_list: List[List[int]], start_node: int) -> List[int]:
-        """
-        Perform a single random walk starting from a given node.
-
-        Args:
-            adj_list: Precomputed adjacency list mapping node -> list of neighbors
-            start_node: Starting node for the walk
-
-        Returns:
-            List of nodes visited during the walk
-        """
-        walk = [start_node]
-        current_node = start_node
-
-        for _ in range(AUGMENTATION_WALK_LENGTH - 1):
-            neighbors = adj_list[current_node]
-            if len(neighbors) == 0:
-                break
-
-            next_node = random.choice(neighbors)
-            walk.append(next_node)
-            current_node = next_node
-
-        return walk
 
     def __call__(self, data: Data) -> Data:
         """
-        Apply subgraph sampling to the data.
+        Apply attribute masking to the data.
 
         Args:
             data: PyTorch Geometric Data object
 
         Returns:
-            Data object representing the sampled subgraph
+            Data object with masked node features
         """
-        num_nodes = data.x.shape[0]
+        data = data.clone()
+        num_features = data.x.shape[1]
+        num_mask = max(AUGMENTATION_MIN_ATTR_MASK_DIM, int(num_features * AUGMENTATION_ATTR_MASK_RATE))
 
-        # Collect nodes from random walks
-        sampled_nodes = set()
+        # Randomly select feature dimensions to mask
+        mask_dims = torch.randperm(num_features)[:num_mask]
+        data.x[:, mask_dims] = 0.0
 
-        # Start random walks from random nodes
-        num_start_nodes = max(AUGMENTATION_MIN_START_NODES, int(num_nodes * AUGMENTATION_MIN_NODES_RATIO))
-        start_nodes = torch.randperm(num_nodes)[:num_start_nodes]
-
-        # Precompute adjacency list once for efficient neighbor lookup
-        adj_list: List[List[int]] = [[] for _ in range(num_nodes)]
-        edge_index = data.edge_index
-        for i in range(edge_index.shape[1]):
-            src = int(edge_index[0, i])
-            dst = int(edge_index[1, i])
-            adj_list[src].append(dst)
-
-        for start_node in start_nodes:
-            walk = self._random_walk(adj_list, int(start_node.item()))
-            sampled_nodes.update(walk)
-
-        sampled_nodes = torch.tensor(list(sampled_nodes), dtype=torch.long)
-
-        # Extract subgraph with node relabeling for proper indexing
-        edge_index, _ = subgraph(sampled_nodes, data.edge_index)
-
-        # Create new data object with subgraph
-        new_data = Data(x=data.x[sampled_nodes], edge_index=edge_index)
-
-        # Store original node indices for contrastive learning
-        # This maps the new node indices to original indices
-        new_data.node_indices = sampled_nodes
-
-        return new_data
+        return data
 
 
 class GraphAugmentor:
@@ -192,9 +141,9 @@ class GraphAugmentor:
         Initialize the graph augmentor.
         """
         self.transforms = [
-            (AttributeMasking(), AUGMENTATION_ATTR_MASK_PROB),
+            (NodeDropping(), AUGMENTATION_NODE_DROP_PROB),
             (EdgeDropping(), AUGMENTATION_EDGE_DROP_PROB),
-            (SubgraphSampling(), AUGMENTATION_SUBGRAPH_PROB)
+            (AttributeMasking(), AUGMENTATION_ATTR_MASK_PROB),
         ]
 
     def __call__(self, data: Data) -> Data:

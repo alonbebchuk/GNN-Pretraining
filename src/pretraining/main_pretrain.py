@@ -10,8 +10,9 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
-from torch.optim import Adam
+from torch.optim import AdamW
 from torch.utils.data import Dataset, RandomSampler
+from torch_geometric.data import Batch
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from src.common import (
@@ -19,14 +20,23 @@ from src.common import (
     PRETRAIN_BATCH_SIZE_PER_DOMAIN,
     PRETRAIN_LR_MODEL,
     PRETRAIN_LR_UNCERTAINTY,
-    PRETRAIN_WEIGHT_DECAY,
+    PRETRAIN_MODEL_WEIGHT_DECAY,
     PRETRAIN_EVAL_EVERY_EPOCHS,
+    PRETRAIN_LOG_EVERY_STEPS,
+    PRETRAIN_NUM_WORKERS,
     PRETRAIN_OUTPUT_DIR,
     WANDB_PROJECT,
+    PRETRAIN_PIN_MEMORY,
+    PRETRAIN_DROP_LAST,
+    PRETRAIN_LR_WARMUP_FRACTION,
+    PRETRAIN_LR_MIN_FACTOR,
+    PRETRAIN_ADAM_BETAS,
+    PRETRAIN_ADAM_EPS,
+    PRETRAIN_UNCERTAINTY_WEIGHT_DECAY,
 )
 from src.model.pretrain_model import PretrainableGNN
 from src.pretraining.losses import UncertaintyWeighter
-from src.pretraining.schedulers import GRLLambdaScheduler
+from src.pretraining.schedulers import GRLLambdaScheduler, CosineWithWarmup
 from src.pretraining.tasks import (
     DomainAdversarialTask,
     GraphContrastiveTask,
@@ -36,6 +46,8 @@ from src.pretraining.tasks import (
     NodeFeatureMaskingTask,
 )
 from src.data.data_setup import PROCESSED_DIR
+from src.common import OVERLAP_TUDATASETS
+from src.common import OVERLAP_TUDATASETS
 
 
 # -----------------------------
@@ -53,16 +65,21 @@ class TrainConfig:
     # Training
     epochs: int = PRETRAIN_EPOCHS
     batch_size_per_domain: int = PRETRAIN_BATCH_SIZE_PER_DOMAIN
-    lr_model: float = PRETRAIN_LR_MODEL
-    lr_uncertainty: float = PRETRAIN_LR_UNCERTAINTY
-    weight_decay: float = PRETRAIN_WEIGHT_DECAY
-    num_workers: int = 0
+    num_workers: int = PRETRAIN_NUM_WORKERS
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    log_every_steps: int = 10
+    log_every_steps: int = PRETRAIN_LOG_EVERY_STEPS
     eval_every_epochs: int = PRETRAIN_EVAL_EVERY_EPOCHS
 
     # Checkpointing
     output_dir: str = PRETRAIN_OUTPUT_DIR
+
+    # Optimizer settings
+    lr_model: float = PRETRAIN_LR_MODEL
+    lr_uncertainty: float = PRETRAIN_LR_UNCERTAINTY
+    adam_betas: Tuple[float, float] = PRETRAIN_ADAM_BETAS
+    adam_eps: float = PRETRAIN_ADAM_EPS
+    model_weight_decay: float = PRETRAIN_MODEL_WEIGHT_DECAY
+    uncertainty_weight_decay: float = PRETRAIN_UNCERTAINTY_WEIGHT_DECAY
 
 
 def build_config(args: argparse.Namespace) -> TrainConfig:
@@ -86,7 +103,6 @@ def build_config(args: argparse.Namespace) -> TrainConfig:
 class DomainSplitDataset(Dataset):
     def __init__(self, graphs: List, indices: Sequence[int]):
         self.graphs: List = graphs
-        # Ensure list of ints (may come as tensor)
         self.indices: List[int] = [int(i) for i in indices]
 
     def __len__(self) -> int:
@@ -102,6 +118,7 @@ def make_domain_loader(
     batch_size: int,
     num_workers: int,
     num_steps: Optional[int] = None,
+    generator: Optional[torch.Generator] = None,
 ) -> Tuple[PyGDataLoader, int]:
     """
     Load processed graphs for a domain and return a DataLoader that yields
@@ -112,21 +129,11 @@ def make_domain_loader(
     data_path = dom_dir / "data.pt"
     splits_path = dom_dir / "splits.pt"
 
-    if not data_path.exists() or not splits_path.exists():
-        raise FileNotFoundError(
-            f"Processed data for domain '{domain_name}' not found under {dom_dir}. "
-            "Please run src/data/data_setup.py first."
-        )
-
     graphs: List = torch.load(data_path)
     splits: Dict[str, torch.Tensor] = torch.load(splits_path)
     split_idx = splits[split]
 
     ds = DomainSplitDataset(graphs, split_idx)
-
-    def collate_fn(batch_graphs: List) -> List[Tuple[object, str]]:
-        # Keep as a simple list of (graph, domain_name) without PyG Batch collation
-        return [(g, domain_name) for g in batch_graphs]
 
     if split == "train" and num_steps is not None:
         # Balanced with-replacement sampling for a fixed number of steps
@@ -136,9 +143,10 @@ def make_domain_loader(
             batch_size=batch_size,
             sampler=sampler,
             num_workers=num_workers,
-            pin_memory=True,
-            collate_fn=collate_fn,
-            drop_last=False,
+            pin_memory=PRETRAIN_PIN_MEMORY,
+            drop_last=PRETRAIN_DROP_LAST,
+            worker_init_fn=_seed_worker,
+            generator=generator,
         )
         length = num_steps
     else:
@@ -147,9 +155,10 @@ def make_domain_loader(
             batch_size=batch_size,
             shuffle=(split == "train"),
             num_workers=num_workers,
-            pin_memory=True,
-            collate_fn=collate_fn,
-            drop_last=False,
+            pin_memory=PRETRAIN_PIN_MEMORY,
+            drop_last=PRETRAIN_DROP_LAST,
+            worker_init_fn=_seed_worker,
+            generator=generator,
         )
         # Compute length in batches (ceil)
         length = (len(ds) + batch_size - 1) // batch_size
@@ -161,11 +170,14 @@ def build_multi_domain_loaders(
     domains: List[str],
     batch_size_per_domain: int,
     num_workers: int,
+    seed: int,
 ) -> Tuple[Dict[str, PyGDataLoader], Dict[str, PyGDataLoader], int]:
     # First pass to compute naive lengths per domain (without replacement)
     provisional_lengths: Dict[str, int] = {}
+    proto_gen = torch.Generator()
+    proto_gen.manual_seed(seed)
     for d in domains:
-        _, tr_len = make_domain_loader(d, "train", batch_size_per_domain, num_workers)
+        _, tr_len = make_domain_loader(d, "train", batch_size_per_domain, num_workers, generator=proto_gen)
         provisional_lengths[d] = tr_len
 
     # Balanced epoch length: minimum steps across domains
@@ -174,13 +186,28 @@ def build_multi_domain_loaders(
     # Build loaders with with-replacement samplers to enforce equal steps per epoch
     train_loaders: Dict[str, PyGDataLoader] = {}
     val_loaders: Dict[str, PyGDataLoader] = {}
+    train_gen = torch.Generator(); train_gen.manual_seed(seed)
+    val_gen = torch.Generator(); val_gen.manual_seed(seed + 1)
     for d in domains:
-        tr_loader, _ = make_domain_loader(d, "train", batch_size_per_domain, num_workers, num_steps=steps_per_epoch)
-        va_loader, _ = make_domain_loader(d, "val", batch_size_per_domain, num_workers)
+        tr_loader, _ = make_domain_loader(
+            d, "train", batch_size_per_domain, num_workers,
+            num_steps=steps_per_epoch, generator=train_gen
+        )
+        # Build validation loaders for all domains (including overlaps) to monitor
+        va_loader, _ = make_domain_loader(
+            d, "val", batch_size_per_domain, num_workers, generator=val_gen
+        )
         train_loaders[d] = tr_loader
         val_loaders[d] = va_loader
 
     return train_loaders, val_loaders, steps_per_epoch
+
+
+def _seed_worker(worker_id: int) -> None:
+    # Ensures numpy/python RNG in workers are seeded deterministically from torch
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 
 # -----------------------------
@@ -219,16 +246,15 @@ def set_global_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def combine_next_batches(iters: Dict[str, Iterable]) -> List[Tuple[object, str]]:
-    batch: List[Tuple[object, str]] = []
+def combine_next_batches(iters: Dict[str, Iterable]) -> Dict[str, Batch]:
+    batches: Dict[str, Batch] = {}
     for domain_name, it_ in iters.items():
         try:
-            part = next(it_)
+            part_batch = next(it_)
         except StopIteration:
-            return []
-        # part is a list[(Data, domain)] from our collate_fn
-        batch.extend(part)
-    return batch
+            return {}
+        batches[domain_name] = part_batch
+    return batches
 
 
 @torch.no_grad()
@@ -253,20 +279,24 @@ def run_validation(
     while True:
         if steps_cap is not None and steps_done >= steps_cap:
             break
-        batch = combine_next_batches(iters)
-        if not batch:
+        batches_by_domain = combine_next_batches(iters)
+        if not batches_by_domain:
             break
 
         # Compute raw losses per task
         raw_losses: Dict[str, torch.Tensor] = {}
         for name, task in tasks.items():
             if name == "domain_adv":
-                raw_losses[name] = task.compute_loss(batch, lambda_val=scheduler())
+                # Compute for optional diagnostics, but exclude from validation totals/selection
+                raw_losses[name] = task.compute_loss(batches_by_domain, lambda_val=scheduler())
             else:
-                raw_losses[name] = task.compute_loss(batch)
+                raw_losses[name] = task.compute_loss(batches_by_domain)
 
-        # Weighted total for monitoring (uses current sigmas and lambda)
-        total_loss, weighted = weighter(raw_losses, lambda_val=scheduler())
+        # Exclude domain-adversarial from validation scoring
+        raw_losses_no_adv: Dict[str, torch.Tensor] = {k: v for k, v in raw_losses.items() if k != "domain_adv"}
+
+        # Weighted total for monitoring/selection (no domain_adv)
+        total_loss, weighted = weighter(raw_losses_no_adv, lambda_val=scheduler())
         total_losses.append(float(total_loss.detach().cpu()))
 
         for k, v in raw_losses.items():
@@ -281,20 +311,22 @@ def run_validation(
     raw_means = {k: float(np.mean(v)) for k, v in agg_raw.items()}
     weighted_means = {k: float(np.mean(v)) for k, v in agg_weighted.items()}
 
-    # Compute domain-balanced validation: per-domain totals averaged equally
+    # Compute domain-balanced validation: per-domain totals averaged equally (excluding domain_adv)
     per_domain_total: Dict[str, float] = {}
     for domain_name, loader in val_loaders.items():
         per_batch_totals: List[float] = []
         for batch in loader:
             # Ensure the batch is for a single domain
-            # Our collate_fn yields [(g, domain_name)] with consistent domain
+            batches_by_domain_single = {domain_name: batch}
             raw_losses: Dict[str, torch.Tensor] = {}
             for name, task in tasks.items():
                 if name == "domain_adv":
-                    raw_losses[name] = task.compute_loss(batch, lambda_val=scheduler())
+                    # Optional diagnostic only; excluded from totals
+                    raw_losses[name] = task.compute_loss(batches_by_domain_single, lambda_val=scheduler())
                 else:
-                    raw_losses[name] = task.compute_loss(batch)
-            dom_total, _ = weighter(raw_losses, lambda_val=scheduler())
+                    raw_losses[name] = task.compute_loss(batches_by_domain_single)
+            raw_losses_no_adv: Dict[str, torch.Tensor] = {k: v for k, v in raw_losses.items() if k != "domain_adv"}
+            dom_total, _ = weighter(raw_losses_no_adv, lambda_val=scheduler())
             per_batch_totals.append(float(dom_total.detach().cpu()))
         per_domain_total[domain_name] = float(np.mean(per_batch_totals)) if per_batch_totals else 0.0
 
@@ -313,6 +345,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
         domains=cfg.pretrain_domains,
         batch_size_per_domain=cfg.batch_size_per_domain,
         num_workers=cfg.num_workers,
+        seed=seed,
     )
 
     if steps_per_epoch == 0:
@@ -326,11 +359,29 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
 
     # Loss weighter and optimizers
     weighter = UncertaintyWeighter(task_names=cfg.active_tasks).to(device)
-    opt_model = Adam(model.parameters(), lr=cfg.lr_model, weight_decay=cfg.weight_decay)
-    opt_uncertainty = Adam(weighter.parameters(), lr=cfg.lr_uncertainty, weight_decay=0.0)
+    opt_model = AdamW(
+        model.parameters(),
+        lr=cfg.lr_model,
+        betas=cfg.adam_betas,
+        eps=cfg.adam_eps,
+        weight_decay=cfg.model_weight_decay,
+    )
+    opt_uncertainty = AdamW(
+        weighter.parameters(),
+        lr=cfg.lr_uncertainty,
+        betas=cfg.adam_betas,
+        eps=cfg.adam_eps,
+        weight_decay=cfg.uncertainty_weight_decay,
+    )
 
     # GRL lambda scheduler
     grl_sched = GRLLambdaScheduler(total_steps=total_steps)
+    # Cosine LR schedulers with linear warmup (standard)
+    lr_multiplier = CosineWithWarmup(
+        total_steps=total_steps,
+        warmup_fraction=PRETRAIN_LR_WARMUP_FRACTION,
+        lr_min_factor=PRETRAIN_LR_MIN_FACTOR,
+    )
 
     # W&B
     # Compose informative tags for easy filtering in W&B UI
@@ -372,17 +423,17 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
         iterators = {d: iter(l) for d, l in train_loaders.items()}
 
         for step_in_epoch in range(steps_per_epoch):
-            batch = combine_next_batches(iterators)
-            if not batch:
+            batches_by_domain = combine_next_batches(iterators)
+            if not batches_by_domain:
                 break
 
             # Raw task losses
             raw_losses: Dict[str, torch.Tensor] = {}
             for name, task in tasks.items():
                 if name == "domain_adv":
-                    raw_losses[name] = task.compute_loss(batch, lambda_val=grl_sched())
+                    raw_losses[name] = task.compute_loss(batches_by_domain, lambda_val=grl_sched())
                 else:
-                    raw_losses[name] = task.compute_loss(batch)
+                    raw_losses[name] = task.compute_loss(batches_by_domain)
 
             # Weighted total
             total_loss, weighted_components = weighter(raw_losses, lambda_val=grl_sched())
@@ -392,9 +443,16 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
             total_loss.backward()
             opt_model.step()
             opt_uncertainty.step()
+            # Update LR per step
+            scale = lr_multiplier()
+            for pg in opt_model.param_groups:
+                pg["lr"] = cfg.lr_model * scale
+            for pg in opt_uncertainty.param_groups:
+                pg["lr"] = cfg.lr_uncertainty * scale
 
-            # Scheduler step
+            # Scheduler steps
             grl_sched.step(1)
+            lr_multiplier.step(1)
 
             # Logging
             if global_step % cfg.log_every_steps == 0:
@@ -412,6 +470,10 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 # Learned sigmas
                 for t, sigma in weighter.get_task_sigmas().items():
                     log_dict[f"train/sigma/{t}"] = float(sigma)
+                # Learning rate
+                log_dict["train/lr_scale"] = float(scale)
+                log_dict["train/lr_model"] = float(cfg.lr_model * scale)
+                log_dict["train/lr_uncertainty"] = float(cfg.lr_uncertainty * scale)
 
                 wandb.log(log_dict, step=global_step)
 
@@ -443,11 +505,20 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
             for d, v in val_domain_totals.items():
                 log_dict[f"val/domain_total/{d}"] = v
 
+            # Compute selection metric using only non-overlap (OOD) domains
+            ood_domains = [d for d in val_domain_totals.keys() if d not in OVERLAP_TUDATASETS]
+            if len(ood_domains) > 0:
+                selection_total = float(np.mean([val_domain_totals[d] for d in ood_domains]))
+            else:
+                # Fallback if no OOD domains are present
+                selection_total = float(val_balanced)
+
+            log_dict["val/selection_total"] = selection_total
             wandb.log(log_dict, step=global_step)
 
-            # Checkpoint best
-            if val_total < best_val_total:
-                best_val_total = val_total
+            # Checkpoint best based on OOD-only selection metric
+            if epoch == 1 or selection_total < best_val_total:
+                best_val_total = selection_total
                 best_epoch = epoch
                 torch.save(
                     {

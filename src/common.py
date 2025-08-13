@@ -29,6 +29,7 @@ MASK_TOKEN_INIT_STD = 0.02
 CV_N_SPLITS = 1
 PRETRAIN_VAL_TEST_FRACTION = 0.2            # for TU pretrain: 80/20 → val/test split next
 VAL_TEST_SPLIT_RATIO = 0.5                  # splits the 20% equally into val/test
+PRETRAIN_MONITOR_FRACTION = 0.1             # for overlap datasets: fraction of canonical train used as pretrain-only validation
 
 # Numerical stability and normalization
 NORMALIZATION_EPS = 1e-8
@@ -45,13 +46,13 @@ AUGMENTATION_ATTR_MASK_PROB = 0.5
 AUGMENTATION_ATTR_MASK_RATE = 0.15
 AUGMENTATION_EDGE_DROP_PROB = 0.5
 AUGMENTATION_EDGE_DROP_RATE = 0.15
-AUGMENTATION_SUBGRAPH_PROB = 0.5
-AUGMENTATION_WALK_LENGTH = 10
-AUGMENTATION_MIN_NODES_RATIO = 0.3          # fraction of start nodes for random walks
+AUGMENTATION_NODE_DROP_PROB = 0.5
+AUGMENTATION_NODE_DROP_RATE = 0.15
 
 # Minimums for discrete sampling operations
-AUGMENTATION_MIN_ATTR_MASK_DIM = 1          # at least one feature dim masked
-AUGMENTATION_MIN_START_NODES = 1            # at least one starting node for random walks
+AUGMENTATION_MIN_ATTR_MASK_DIM = 1
+AUGMENTATION_MIN_EDGE_NUM_KEEP = 1
+AUGMENTATION_MIN_NODE_NUM_KEEP = 1
 
 # -----------------------------------------------------------------------------
 # Pretraining Tasks
@@ -65,7 +66,7 @@ NODE_CONTRASTIVE_TEMPERATURE = float(0.1)
 CONTRASTIVE_SYMMETRY_COEF = 0.5             # 0.5*(L12+L21)
 
 # Link prediction
-NEGATIVE_SAMPLING_RATIO = 1.0               # negatives per positive edge
+NUM_NEGATIVE_SAMPLES = 1               # negatives per positive edge
 
 # Graph property prediction
 GRAPH_PROPERTY_DIM = 15
@@ -87,6 +88,7 @@ GRL_LAMBDA_MAX = 1.0
 # -----------------------------------------------------------------------------
 PRETRAIN_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
 DOWNSTREAM_TUDATASETS = ['ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
+OVERLAP_TUDATASETS = sorted(list(set(PRETRAIN_TUDATASETS).intersection(set(DOWNSTREAM_TUDATASETS))))
 ALL_TUDATASETS = sorted(list(set(PRETRAIN_TUDATASETS + DOWNSTREAM_TUDATASETS)))
 ALL_PLANETOID_DATASETS = ['Cora', 'CiteSeer']
 
@@ -122,11 +124,18 @@ DOMAIN_DIMENSIONS = {
 PRETRAIN_EPOCHS = 100
 PRETRAIN_BATCH_SIZE_PER_DOMAIN = 8
 PRETRAIN_EVAL_EVERY_EPOCHS = 1
+PRETRAIN_LOG_EVERY_STEPS = 10
+PRETRAIN_NUM_WORKERS = 0
+PRETRAIN_LR_WARMUP_FRACTION = 0.1
+PRETRAIN_LR_MIN_FACTOR = 0.0
 
 # Optimizer settings
-PRETRAIN_LR_MODEL = 1e-3
+PRETRAIN_LR_MODEL = 3e-4
 PRETRAIN_LR_UNCERTAINTY = 5e-3
-PRETRAIN_WEIGHT_DECAY = 0.0
+PRETRAIN_ADAM_BETAS = (0.9, 0.999)
+PRETRAIN_ADAM_EPS = 1e-8
+PRETRAIN_MODEL_WEIGHT_DECAY = 0.01
+PRETRAIN_UNCERTAINTY_WEIGHT_DECAY = 0.0
 
 # Reproducibility across multiple runs
 PRETRAIN_NUM_SEEDS = 3
@@ -135,3 +144,7 @@ PRETRAIN_SEED_BASE = RANDOM_SEED
 # Tracking & IO
 WANDB_PROJECT = 'gnn-pretraining'
 PRETRAIN_OUTPUT_DIR = 'checkpoints/pretrain'
+
+# DataLoader behavior
+PRETRAIN_PIN_MEMORY = True
+PRETRAIN_DROP_LAST = False

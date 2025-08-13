@@ -12,12 +12,14 @@ from src.common import (
     RANDOM_SEED,
     PRETRAIN_TUDATASETS,
     DOWNSTREAM_TUDATASETS,
+    OVERLAP_TUDATASETS,
     ALL_TUDATASETS,
     ALL_PLANETOID_DATASETS,
     FEATURE_TYPES,
     CV_N_SPLITS,
     PRETRAIN_VAL_TEST_FRACTION,
     VAL_TEST_SPLIT_RATIO,
+    PRETRAIN_MONITOR_FRACTION,
     NORMALIZATION_EPS,
     NORMALIZATION_STD_FALLBACK,
     BOW_ROW_SUM_FALLBACK,
@@ -116,34 +118,12 @@ def process_tudatasets():
         dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=TUDATASET_USE_NODE_ATTR)
         logging.info(f"Downloaded {name}: {len(dataset)} graphs")
 
-        # Pre-training splits (80/20)
-        if name in PRETRAIN_TUDATASETS:
-            pretrain_dataset = copy.deepcopy(dataset)
-            num_graphs = len(pretrain_dataset)
-            ss_train_val = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_VAL_TEST_FRACTION, random_state=RANDOM_SEED)
-            train_idx, val_test_idx = next(ss_train_val.split(np.arange(num_graphs)))
-            ss_val_test = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
-            val_idx_rel, test_idx_rel = next(ss_val_test.split(np.arange(len(val_test_idx))))
-            val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
-
-            # Apply preprocessing
-            apply_preprocessing(pretrain_dataset, train_idx, name)
-
-            # Attach standardized graph properties
-            attach_standardized_graph_properties(pretrain_dataset, train_idx, name)
-
-            pretrain_splits = {
-                'train': torch.tensor(train_idx, dtype=torch.long),
-                'val': torch.tensor(val_idx, dtype=torch.long),
-                'test': torch.tensor(test_idx, dtype=torch.long)
-            }
-            save_processed_data(f"{name}_pretrain", list(pretrain_dataset), pretrain_splits)
-
-        # Downstream splits (80/10/10)
-        if name in DOWNSTREAM_TUDATASETS:
-            downstream_dataset = copy.deepcopy(dataset)
-            num_graphs = len(downstream_dataset)
-            labels = downstream_dataset.y.numpy()
+        # Overlap datasets: create a single canonical 80/10/10 split used by downstream,
+        # then derive a pretraining-only val from within the canonical train
+        if name in OVERLAP_TUDATASETS:
+            canonical_ds = copy.deepcopy(dataset)
+            num_graphs = len(canonical_ds)
+            labels = canonical_ds.y.numpy()
             sss_train_val = StratifiedShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_VAL_TEST_FRACTION, random_state=RANDOM_SEED)
             train_idx, val_test_idx = next(sss_train_val.split(np.arange(num_graphs), labels))
             val_test_labels = labels[val_test_idx]
@@ -151,15 +131,76 @@ def process_tudatasets():
             val_idx_rel, test_idx_rel = next(sss_val_test.split(np.arange(len(val_test_idx)), val_test_labels))
             val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
 
-            # Apply preprocessing
-            apply_preprocessing(downstream_dataset, train_idx, name)
+            # Apply preprocessing once using canonical train indices
+            apply_preprocessing(canonical_ds, train_idx, name)
 
+            # Downstream: save normalized graphs and canonical splits
             downstream_splits = {
                 'train': torch.tensor(train_idx, dtype=torch.long),
                 'val': torch.tensor(val_idx, dtype=torch.long),
                 'test': torch.tensor(test_idx, dtype=torch.long)
             }
-            save_processed_data(f"{name}_downstream", list(downstream_dataset), downstream_splits)
+            save_processed_data(f"{name}_downstream", list(canonical_ds), downstream_splits)
+
+            # Build pretraining dataset as a subset of canonical train only
+            canonical_train_graphs = [copy.deepcopy(canonical_ds[int(i)]) for i in train_idx]
+            ss_ptrain = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_MONITOR_FRACTION, random_state=RANDOM_SEED)
+            tr_rel, va_rel = next(ss_ptrain.split(np.arange(len(canonical_train_graphs))))
+
+            # Attach standardized graph properties using relative train indices
+            attach_standardized_graph_properties(canonical_train_graphs, torch.tensor(tr_rel, dtype=torch.long), name)
+
+            pretrain_splits = {
+                'train': torch.tensor(tr_rel, dtype=torch.long),
+                'val': torch.tensor(va_rel, dtype=torch.long),
+            }
+            save_processed_data(f"{name}_pretrain", list(canonical_train_graphs), pretrain_splits)
+
+        else:
+            # Pre-training splits (80/20) for pure pretrain-only datasets
+            if name in PRETRAIN_TUDATASETS:
+                pretrain_dataset = copy.deepcopy(dataset)
+                num_graphs = len(pretrain_dataset)
+                ss_train_val = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_VAL_TEST_FRACTION, random_state=RANDOM_SEED)
+                train_idx, val_test_idx = next(ss_train_val.split(np.arange(num_graphs)))
+                ss_val_test = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
+                val_idx_rel, test_idx_rel = next(ss_val_test.split(np.arange(len(val_test_idx))))
+                val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
+
+                # Apply preprocessing
+                apply_preprocessing(pretrain_dataset, train_idx, name)
+
+                # Attach standardized graph properties
+                attach_standardized_graph_properties(pretrain_dataset, train_idx, name)
+
+                pretrain_splits = {
+                    'train': torch.tensor(train_idx, dtype=torch.long),
+                    'val': torch.tensor(val_idx, dtype=torch.long),
+                    'test': torch.tensor(test_idx, dtype=torch.long)
+                }
+                save_processed_data(f"{name}_pretrain", list(pretrain_dataset), pretrain_splits)
+
+            # Downstream splits (80/10/10) for pure downstream-only datasets
+            if name in DOWNSTREAM_TUDATASETS:
+                downstream_dataset = copy.deepcopy(dataset)
+                num_graphs = len(downstream_dataset)
+                labels = downstream_dataset.y.numpy()
+                sss_train_val = StratifiedShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_VAL_TEST_FRACTION, random_state=RANDOM_SEED)
+                train_idx, val_test_idx = next(sss_train_val.split(np.arange(num_graphs), labels))
+                val_test_labels = labels[val_test_idx]
+                sss_val_test = StratifiedShuffleSplit(n_splits=CV_N_SPLITS, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
+                val_idx_rel, test_idx_rel = next(sss_val_test.split(np.arange(len(val_test_idx)), val_test_labels))
+                val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
+
+                # Apply preprocessing
+                apply_preprocessing(downstream_dataset, train_idx, name)
+
+                downstream_splits = {
+                    'train': torch.tensor(train_idx, dtype=torch.long),
+                    'val': torch.tensor(val_idx, dtype=torch.long),
+                    'test': torch.tensor(test_idx, dtype=torch.long)
+                }
+                save_processed_data(f"{name}_downstream", list(downstream_dataset), downstream_splits)
 
 
 def process_planetoid_datasets():

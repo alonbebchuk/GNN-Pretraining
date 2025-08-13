@@ -122,4 +122,3 @@ class GraphPropertyCalculator:
         ]
 
         return torch.tensor(props, dtype=torch.float32)
-
