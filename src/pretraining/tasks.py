@@ -289,6 +289,5 @@ class DomainAdversarialTask(BasePretrainTask):
         graph_emb = torch.cat(graph_emb_list, dim=0)
         domain_labels = torch.cat(label_list, dim=0)
 
-        grl_out = self.model.apply_gradient_reversal(graph_emb, lambda_val)
-        logits = self.model.get_head('domain_adv')(grl_out)
+        logits = self.model.get_head('domain_adv')(graph_emb, lambda_val)
         return F.cross_entropy(logits, domain_labels)

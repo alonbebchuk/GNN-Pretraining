@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from src.common import DOMAIN_ADV_HEAD_HIDDEN_DIM, DOMAIN_ADV_HEAD_OUT_DIM, DROPOUT_RATE, GNN_HIDDEN_DIM
+from src.model.layers import GradientReversalLayer
 
 
 class MLPHead(nn.Module):
@@ -114,38 +115,44 @@ class BilinearDiscriminator(nn.Module):
 
 class DomainClassifierHead(nn.Module):
     """
-    Specialized MLP head for domain adversarial training.
+    Specialized MLP head for domain adversarial training with integrated gradient reversal.
 
-    This head does NOT use dropout to ensure it is as strong as possible,
+    This head applies gradient reversal before classification to encourage domain-invariant
+    features. It does NOT use dropout to ensure it is as strong as possible,
     providing the sharpest training signal for the GNN backbone.
 
-    Architecture: Linear -> ReLU -> Linear
+    Architecture: GradientReversalLayer -> Linear -> ReLU -> Linear
     """
 
     def __init__(self) -> None:
         """
-        Initialize the domain classifier head.
-
-        Args:
-            dim_hidden: Hidden dimension
-            dim_out: Output dimension (number of pretrain domains)
+        Initialize the domain classifier head with integrated gradient reversal.
         """
         super(DomainClassifierHead, self).__init__()
 
+        # Gradient reversal layer for domain-adversarial training
+        self.grl = GradientReversalLayer()
+
+        # Domain classifier
         self.classifier = nn.Sequential(
             nn.Linear(GNN_HIDDEN_DIM, DOMAIN_ADV_HEAD_HIDDEN_DIM),
             nn.ReLU(),
             nn.Linear(DOMAIN_ADV_HEAD_HIDDEN_DIM, DOMAIN_ADV_HEAD_OUT_DIM)
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, lambda_val: float) -> torch.Tensor:
         """
-        Forward pass through the domain classifier.
+        Forward pass through the domain classifier with gradient reversal.
 
         Args:
             x: Input tensor of shape (batch_size, GNN_HIDDEN_DIM)
+            lambda_val: Scaling factor for gradient reversal (from GRL scheduler)
 
         Returns:
             Domain logits of shape (batch_size, num_pretrain_domains)
         """
-        return self.classifier(x)
+        # Apply gradient reversal
+        x_reversed = self.grl(x, lambda_val)
+
+        # Apply domain classification
+        return self.classifier(x_reversed)

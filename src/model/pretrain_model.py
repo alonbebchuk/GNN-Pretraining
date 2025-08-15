@@ -13,7 +13,6 @@ from src.common import (
     CONTRASTIVE_PROJ_DIM,
     GRAPH_PROP_HEAD_HIDDEN_DIM,
 )
-from src.model.layers import GradientReversalLayer
 from src.model.gnn import InputEncoder, GIN_Backbone
 from src.model.heads import MLPHead, DotProductDecoder, BilinearDiscriminator, DomainClassifierHead
 
@@ -42,7 +41,6 @@ class PretrainableGNN(nn.Module):
         super(PretrainableGNN, self).__init__()
 
         self.device = device
-        self.num_domains = len(domain_names)
 
         # --- Domain-specific Input Encoders ---
         self.input_encoders = nn.ModuleDict()
@@ -90,9 +88,6 @@ class PretrainableGNN(nn.Module):
             elif task_name == 'domain_adv':
                 # Shared domain adversarial classifier across all domains (predicts domain)
                 self.heads[task_name] = DomainClassifierHead()
-
-        # --- Gradient Reversal Layer ---
-        self.grl = GradientReversalLayer()
 
         # Move to device
         self.to(self.device)
@@ -215,16 +210,3 @@ class PretrainableGNN(nn.Module):
         if domain_name is not None:
             return head[domain_name]
         return head
-
-    def apply_gradient_reversal(self, embeddings: torch.Tensor, lambda_val: float) -> torch.Tensor:
-        """
-        Apply gradient reversal to embeddings for domain-adversarial training.
-
-        Args:
-            embeddings: Input embeddings tensor of shape [batch_size, embedding_dim]
-            lambda_val: Scaling factor for gradient reversal (float from GRL scheduler)
-
-        Returns:
-            Embeddings with gradient reversal applied, same shape as input
-        """
-        return self.grl(embeddings, lambda_val)
