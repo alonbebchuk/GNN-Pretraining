@@ -14,11 +14,10 @@ positive pairs for contrastive learning.
 """
 
 import torch
-from torch_geometric.data import Data
+from torch_geometric.data import Batch
 from torch_geometric.utils import subgraph
 from torch_geometric.transforms import BaseTransform
 import random
-from typing import List, Tuple
 
 from src.common import (
     AUGMENTATION_ATTR_MASK_PROB,
@@ -27,221 +26,152 @@ from src.common import (
     AUGMENTATION_EDGE_DROP_RATE,
     AUGMENTATION_NODE_DROP_PROB,
     AUGMENTATION_NODE_DROP_RATE,
-    AUGMENTATION_MIN_ATTR_MASK_DIM,
-    AUGMENTATION_MIN_EDGE_NUM_KEEP,
-    AUGMENTATION_MIN_NODE_NUM_KEEP,
 )
 
 
 class NodeDropping(BaseTransform):
-    """
-    Randomly drop a percentage of nodes from the graph and relabel nodes.
+    """Randomly drop a percentage of nodes from the graph and relabel nodes."""
 
-    This augmentation induces a node-induced subgraph by keeping a subset of nodes.
-    """
-
-    def __call__(self, data: Data) -> Data:
+    def __call__(self, batch: Batch) -> Batch:
         """
-        Apply node dropping to the data.
+        Apply node dropping to the batch.
 
         Args:
-            data: PyTorch Geometric Data object
+            batch: PyTorch Geometric Batch object
 
         Returns:
-            Data object with a node-induced subgraph
+            Batch object with a node-induced subgraph
         """
-        data = data.clone()
-        num_nodes = data.x.shape[0]
-        num_keep = max(AUGMENTATION_MIN_NODE_NUM_KEEP, int(num_nodes * (1.0 - AUGMENTATION_NODE_DROP_RATE)))
+        batch = batch.clone()
+        device = batch.x.device
+        
+        # Batched processing with per-graph safeguards
+        keep_prob = 1.0 - AUGMENTATION_NODE_DROP_RATE
+        keep_mask = (torch.rand(batch.x.size(0), device=device) < keep_prob)
+        
+        # Ensure at least one node kept per graph
+        num_graphs = int(batch.batch.max().item()) + 1
+        keep_counts = torch.bincount(batch.batch, weights=keep_mask.to(torch.long), minlength=num_graphs)
+        zero_graphs_mask = (keep_counts == 0)
+        if zero_graphs_mask.any():
+            node_counts = torch.bincount(batch.batch, minlength=num_graphs)
+            ptr = torch.zeros(num_graphs + 1, device=device, dtype=torch.long)
+            ptr[1:] = torch.cumsum(node_counts, dim=0)
+            starts = ptr[:-1][zero_graphs_mask]
+            keep_mask[starts] = True
+        
+        keep_nodes = keep_mask.nonzero(as_tuple=True)[0]
+        edge_index, _ = subgraph(keep_nodes, batch.edge_index)
 
-        # Randomly select nodes to keep
-        keep_nodes = torch.randperm(num_nodes)[:num_keep]
-        edge_index, _ = subgraph(keep_nodes, data.edge_index)
-        data.x = data.x[keep_nodes]
-        data.node_indices = data.node_indices[keep_nodes]
-        data.edge_index = edge_index
-
-        return data
+        batch.x = batch.x[keep_nodes]
+        batch.node_indices = batch.node_indices[keep_nodes]
+        batch.batch = batch.batch[keep_nodes]
+        batch.edge_index = edge_index
+        return batch
 
 
 class EdgeDropping(BaseTransform):
-    """
-    Randomly drop a percentage of edges from the graph.
+    """Randomly drop a percentage of edges from the graph."""
 
-    This augmentation removes edges to create structural variations
-    while preserving the overall connectivity.
-    """
-
-    def __call__(self, data: Data) -> Data:
+    def __call__(self, batch: Batch) -> Batch:
         """
-        Apply edge dropping to the data.
+        Apply edge dropping to the batch with per-graph safeguards.
 
         Args:
-            data: PyTorch Geometric Data object
+            batch: PyTorch Geometric Batch object
 
         Returns:
-            Data object with dropped edges
+            Batch object with dropped edges (ensuring each graph retains at least one edge if it had any)
         """
-        data = data.clone()
-        num_edges = data.edge_index.shape[1]
-        num_keep = max(AUGMENTATION_MIN_EDGE_NUM_KEEP, int(num_edges * (1.0 - AUGMENTATION_EDGE_DROP_RATE)))
+        batch = batch.clone()
+        
+        if batch.edge_index.numel() > 0:
+            device = batch.edge_index.device
+            num_edges = batch.edge_index.shape[1]
+            
+            # Handle batched data with per-graph safeguards
+            if hasattr(batch, 'batch') and batch.batch is not None:
+                # Batched processing with per-graph safeguards
+                keep_prob = 1.0 - AUGMENTATION_EDGE_DROP_RATE
+                keep_mask = (torch.rand(num_edges, device=device) < keep_prob)
+                
+                # Map each edge to its source graph
+                edge_to_graph = batch.batch[batch.edge_index[0]]  # Use source node's graph ID
+                num_graphs = int(batch.batch.max().item()) + 1
+                
+                # Count kept edges per graph
+                keep_counts = torch.bincount(edge_to_graph, weights=keep_mask.to(torch.long), minlength=num_graphs)
+                edge_counts = torch.bincount(edge_to_graph, minlength=num_graphs)
+                
+                # Find graphs that would lose ALL edges (but originally had edges)
+                zero_edge_graphs = (keep_counts == 0) & (edge_counts > 0)
+                
+                if zero_edge_graphs.any():
+                    # For each graph losing all edges, keep its first edge
+                    for graph_id in zero_edge_graphs.nonzero(as_tuple=True)[0]:
+                        # Find first edge belonging to this graph
+                        first_edge_mask = (edge_to_graph == graph_id)
+                        first_edge_idx = first_edge_mask.nonzero(as_tuple=True)[0][0]
+                        keep_mask[first_edge_idx] = True
+                
+                keep_indices = keep_mask.nonzero(as_tuple=True)[0]
+            else:
+                # Single graph processing
+                num_keep = max(1, int(num_edges * (1.0 - AUGMENTATION_EDGE_DROP_RATE)))
+                keep_indices = torch.randperm(num_edges, device=device)[:num_keep]
+            
+            if keep_indices.numel() > 0:
+                batch.edge_index = batch.edge_index[:, keep_indices]
 
-        # Randomly select edges to keep
-        keep_indices = torch.randperm(num_edges)[:num_keep]
-        data.edge_index = data.edge_index[:, keep_indices]
-
-        return data
+        return batch
 
 
 class AttributeMasking(BaseTransform):
-    """
-    Randomly mask a percentage of node feature dimensions.
+    """Randomly mask a percentage of node feature dimensions."""
 
-    This augmentation sets selected feature dimensions to zero,
-    forcing the model to be robust to missing features.
-    """
-
-    def __call__(self, data: Data) -> Data:
+    def __call__(self, batch: Batch) -> Batch:
         """
-        Apply attribute masking to the data.
+        Apply attribute masking to the batch.
 
         Args:
-            data: PyTorch Geometric Data object
+            batch: PyTorch Geometric Batch object
 
         Returns:
-            Data object with masked node features
+            Batch object with masked node features
         """
-        data = data.clone()
-        num_features = data.x.shape[1]
-        num_mask = max(AUGMENTATION_MIN_ATTR_MASK_DIM, int(num_features * AUGMENTATION_ATTR_MASK_RATE))
+        batch = batch.clone()
+        
+        if batch.x.numel() > 0:
+            device = batch.x.device
+            num_features = batch.x.shape[1]
+            num_mask = max(1, int(num_features * AUGMENTATION_ATTR_MASK_RATE))
 
-        # Randomly select feature dimensions to mask
-        mask_dims = torch.randperm(num_features)[:num_mask]
-        data.x[:, mask_dims] = 0.0
+            # Randomly select feature dimensions to mask
+            mask_dims = torch.randperm(num_features, device=device)[:num_mask]
+            batch.x[:, mask_dims] = 0.0
 
-        return data
+        return batch
 
 
 class GraphAugmentor:
-    """
-    Composite augmentor that applies multiple transformations with specified probabilities.
+    """Composite augmentor that applies multiple transformations with specified probabilities."""
 
-    This class orchestrates the application of different augmentations and handles
-    node index tracking for contrastive learning. It implements the sequential composition 
-    where each transformation is applied with p=0.5 probability as required for 
-    GraphCL-style node-level contrastive learning.
-
-    The augmentor automatically initializes node_indices to track the mapping between
-    augmented graph nodes and their original indices. Only transformations that change
-    the node set need to update this mapping.
-    """
-
-    def __init__(self):
-        """
-        Initialize the graph augmentor.
-        """
+    def __init__(self) -> None:
         self.transforms = [
             (NodeDropping(), AUGMENTATION_NODE_DROP_PROB),
             (EdgeDropping(), AUGMENTATION_EDGE_DROP_PROB),
             (AttributeMasking(), AUGMENTATION_ATTR_MASK_PROB),
         ]
 
-    def __call__(self, data: Data) -> Data:
-        """
-        Apply augmentations to the data.
-
-        Each transformation is applied with its specified probability.
-        The transformations are applied sequentially.
-
-        Args:
-            data: PyTorch Geometric Data object
-
-        Returns:
-            Augmented data object
-        """
-        augmented_data = data.clone()
-
-        # Initialize node indices for contrastive learning
-        # This maps each node in the augmented graph to its original index
-        augmented_data.node_indices = torch.arange(augmented_data.x.shape[0], dtype=torch.long)
-
+    def __call__(self, batch: Batch) -> Batch:
+        """Apply the sequential augmentations to an entire batch using individual transform classes."""
+        # Initialize node_indices for tracking original node mappings
+        device = batch.x.device
+        batch.node_indices = torch.arange(batch.x.size(0), device=device, dtype=torch.long)
+        
+        # Apply each transformation with its specified probability
         for transform, prob in self.transforms:
             if random.random() < prob:
-                augmented_data = transform(augmented_data)
-
-        return augmented_data
-
-    def create_augmented_pair(self, data: Data) -> Tuple[Data, Data]:
-        """
-        Create two different augmented versions of the same graph.
-
-        This is used for contrastive learning where we need two
-        different views of the same graph.
-
-        Args:
-            data: Original PyTorch Geometric Data object
-
-        Returns:
-            Tuple of two augmented data objects (G', G'')
-        """
-        aug1 = self(data)
-        aug2 = self(data)
-        return aug1, aug2
-
-    @staticmethod
-    def get_overlapping_nodes(view1_data: Data, view2_data: Data) -> torch.Tensor:
-        """
-        Get nodes that appear in both augmented views for contrastive learning.
-
-        This implements the intersection-based approach from GraphCL, where only
-        nodes that appear in both views are used for computing contrastive loss.
-        Non-overlapping nodes still contribute to representation learning through
-        message passing but don't directly participate in the contrastive objective.
-
-        Args:
-            view1_data: First augmented view
-            view2_data: Second augmented view
-
-        Returns:
-            torch.Tensor: Node indices that appear in both views
-        """
-        # Get node indices from both views
-        view1_nodes = view1_data.node_indices
-        view2_nodes = view2_data.node_indices
-
-        # Find intersection of node sets
-        view1_set = set(view1_nodes.tolist())
-        view2_set = set(view2_nodes.tolist())
-        overlap = view1_set & view2_set
-
-        return torch.tensor(list(overlap), dtype=torch.long)
-
-    @staticmethod
-    def get_contrastive_pairs(view1_data: Data, view2_data: Data) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Get positive pairs for contrastive learning from two augmented views.
-
-        Args:
-            view1_data: First augmented view
-            view2_data: Second augmented view
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor]: (view1_indices, view2_indices)
-                where view1_indices[i] and view2_indices[i] form a positive pair
-        """
-        overlapping_nodes = GraphAugmentor.get_overlapping_nodes(view1_data, view2_data)
-
-        # Get node indices from both views (these map local indices to original indices)
-        view1_nodes = view1_data.node_indices
-        view2_nodes = view2_data.node_indices
-
-        # Find positions of overlapping nodes in each view using broadcasting
-        # view1_mask[i,j] = True if overlapping_nodes[i] == view1_nodes[j]
-        view1_mask = view1_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(1)  # [len(overlap), len(view1)]
-        view2_mask = view2_nodes.unsqueeze(0) == overlapping_nodes.unsqueeze(1)  # [len(overlap), len(view2)]
-
-        # Get the local indices (positions) in each view for overlapping nodes
-        view1_indices = view1_mask.nonzero(as_tuple=True)[1]  # Local positions in view1
-        view2_indices = view2_mask.nonzero(as_tuple=True)[1]  # Local positions in view2
-
-        return view1_indices, view2_indices
+                batch = transform(batch)
+        
+        return batch

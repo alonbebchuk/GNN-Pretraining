@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from src.common import UNCERTAINTY_LOSS_COEF, LOGSIGMA_TO_SIGMA_SCALE
 
 
@@ -15,7 +15,7 @@ class UncertaintyWeighter(nn.Module):
         L_total = sum_i L_i^weighted - lambda * L_domain
     """
 
-    def __init__(self, task_names: list[str]):
+    def __init__(self, task_names: List[str]) -> None:
         super().__init__()
         # Exclude domain adversarial from uncertainty weighting
         self.weighted_task_names = [t for t in task_names if t != 'domain_adv']

@@ -6,7 +6,8 @@ import wandb
 import yaml
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Any, Union
+from numpy.typing import NDArray
 
 import numpy as np
 import torch
@@ -101,14 +102,14 @@ def build_config(args: argparse.Namespace) -> TrainConfig:
 
 
 class DomainSplitDataset(Dataset):
-    def __init__(self, graphs: List, indices: Sequence[int]):
-        self.graphs: List = graphs
+    def __init__(self, graphs: List[Any], indices: NDArray[np.int_]) -> None:
+        self.graphs: List[Any] = graphs
         self.indices: List[int] = [int(i) for i in indices]
 
     def __len__(self) -> int:
         return len(self.indices)
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx: int) -> Any:
         return self.graphs[self.indices[idx]]
 
 
@@ -122,7 +123,7 @@ def make_domain_loader(
 ) -> Tuple[PyGDataLoader, int]:
     """
     Load processed graphs for a domain and return a DataLoader that yields
-    batches as Sequence[(Data, domain_name)] to match task expectations.
+    batches as List[(Data, domain_name)] to match task expectations.
     Returns the number of batches per epoch (len(loader)).
     """
     dom_dir = PROCESSED_DIR / f"{domain_name}_pretrain"
@@ -215,7 +216,7 @@ def _seed_worker(worker_id: int) -> None:
 # -----------------------------
 
 
-def instantiate_tasks(model: PretrainableGNN, active_tasks: List[str]):
+def instantiate_tasks(model: PretrainableGNN, active_tasks: List[str]) -> Dict[str, Any]:
     mapping = {
         "node_feat_mask": NodeFeatureMaskingTask(model),
         "link_pred": LinkPredictionTask(model),
@@ -224,7 +225,7 @@ def instantiate_tasks(model: PretrainableGNN, active_tasks: List[str]):
         "graph_prop": GraphPropertyPredictionTask(model),
         "domain_adv": DomainAdversarialTask(model),
     }
-    tasks: Dict[str, object] = {}
+    tasks: Dict[str, Any] = {}
     for name in active_tasks:
         if name not in mapping:
             raise ValueError(f"Unknown task '{name}'.")
@@ -564,7 +565,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
     run.finish()
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Multi-domain GNN pretraining")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config defining the scheme (exp_name, pretrain_domains, active_tasks)")
     parser.add_argument("--seed", type=int, required=True, help="Random seed for this single run")

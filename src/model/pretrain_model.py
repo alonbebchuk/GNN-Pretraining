@@ -1,6 +1,7 @@
 from typing import Optional
 import torch
 import torch.nn as nn
+from torch_geometric.data import Batch
 
 from src.common import (
     DOMAIN_DIMENSIONS,
@@ -96,12 +97,12 @@ class PretrainableGNN(nn.Module):
         # Move to device
         self.to(self.device)
 
-    def apply_node_masking(self, data, domain_name: str):
+    def apply_node_masking(self, batch: Batch, domain_name: str):
         """
         Apply node masking in hidden space for the Node Feature Masking task.
 
         Args:
-            data: PyTorch Geometric Data object
+            batch: PyTorch Geometric Batch object
             domain_name: Name of the domain
 
         Returns:
@@ -110,59 +111,92 @@ class PretrainableGNN(nn.Module):
                 - mask_indices: Indices of masked nodes
                 - target_h0: Original h_0 embeddings for masked nodes
         """
-        # Move data to the correct device
-        data = data.to(self.device)
+        # Move batch to the correct device
+        batch = batch.to(self.device)
 
         # Compute original h_0 embeddings
         encoder = self.input_encoders[domain_name]
         with torch.no_grad():
-            original_h0 = encoder(data.x)
+            original_h0 = encoder(batch.x)
 
-        num_nodes = data.x.shape[0]
+        num_nodes = batch.x.shape[0]
 
-        # Ensure at least a minimum number of nodes are masked
-        num_mask = max(1, int(num_nodes * NODE_FEATURE_MASKING_MASK_RATE))
-
-        # Randomly select nodes to mask
-        mask_indices = torch.randperm(num_nodes, device=self.device)[:num_mask]
+        # Handle batched data with per-graph safeguards
+        if hasattr(batch, 'batch') and batch.batch is not None:
+            # Batched processing with per-graph safeguards
+            mask_prob = NODE_FEATURE_MASKING_MASK_RATE
+            mask_candidates = (torch.rand(num_nodes, device=self.device) < mask_prob)
+            
+            # Ensure at least one node is NOT masked per graph (to prevent empty graphs)
+            num_graphs = int(batch.batch.max().item()) + 1 if batch.batch.numel() > 0 else 0
+            if num_graphs > 0:
+                mask_counts = torch.bincount(batch.batch, weights=mask_candidates.to(torch.long), minlength=num_graphs)
+                node_counts = torch.bincount(batch.batch, minlength=num_graphs)
+                
+                # Find graphs where ALL nodes would be masked (dangerous!)
+                all_masked_graphs = (mask_counts == node_counts) & (node_counts > 0)
+                
+                if all_masked_graphs.any():
+                    # For each fully-masked graph, unmask its first node
+                    ptr = torch.zeros(num_graphs + 1, device=self.device, dtype=torch.long)
+                    ptr[1:] = torch.cumsum(node_counts, dim=0)
+                    starts = ptr[:-1][all_masked_graphs]  # First node of each fully-masked graph
+                    mask_candidates[starts] = False  # Unmask at least one node per graph
+            
+            mask_indices = mask_candidates.nonzero(as_tuple=True)[0]
+        else:
+            # Single graph processing
+            num_mask = max(1, min(num_nodes - 1, int(num_nodes * NODE_FEATURE_MASKING_MASK_RATE)))
+            mask_indices = torch.randperm(num_nodes, device=self.device)[:num_mask]
 
         # Store original h_0 embeddings for reconstruction targets
-        target_h0 = original_h0[mask_indices].clone()
+        target_h0 = original_h0[mask_indices].clone() if mask_indices.numel() > 0 else torch.empty(0, original_h0.size(1), device=self.device)
 
         # Create masked h_0 by replacing selected node embeddings with the shared [MASK] token
         masked_h0 = original_h0.clone()
-        masked_h0[mask_indices] = self.mask_token.unsqueeze(0).expand(num_mask, -1)
+        if mask_indices.numel() > 0:
+            num_mask = mask_indices.size(0)
+            masked_h0[mask_indices] = self.mask_token.unsqueeze(0).expand(num_mask, -1)
 
         return masked_h0, mask_indices, target_h0
 
-    def forward(self, data, domain_name: str):
+    def forward(self, batch: Batch, domain_name: str):
         """
         Forward pass through the model.
 
         Args:
-            data: PyTorch Geometric Data object
+            batch: PyTorch Geometric Batch object
             domain_name: Name of the domain
 
         Returns:
             Final node embeddings (num_nodes, hidden_dim)
         """
-        # Move data to the correct device
-        data = data.to(self.device)
+        # Move batch to the correct device
+        batch = batch.to(self.device)
 
         # 1. Select domain-specific encoder
         encoder = self.input_encoders[domain_name]
 
         # 2. Encode domain-specific features to shared representation
-        h_0 = encoder(data.x)
+        h_0 = encoder(batch.x)
 
         # 3. Process with shared GNN backbone
-        final_node_embeddings = self.gnn_backbone(h_0, data.edge_index)
+        final_node_embeddings = self.gnn_backbone(h_0, batch.edge_index)
 
         return final_node_embeddings
 
-    def forward_with_h0(self, h_0: torch.Tensor, edge_index: torch.Tensor):
+    def forward_with_h0(self, h_0: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """
         Forward pass starting from precomputed h_0 embeddings (used by masking task).
+        
+        Args:
+            h_0: Initial node embeddings tensor of shape [total_nodes_in_batch, hidden_dim]
+                 Contains concatenated embeddings from all nodes across all graphs in the batch
+            edge_index: Edge indices tensor of shape [2, total_edges_in_batch]
+                       Contains concatenated edges from all graphs in the batch
+        
+        Returns:
+            Final node embeddings tensor of shape [total_nodes_in_batch, hidden_dim]
         """
         return self.gnn_backbone(h_0, edge_index)
 
@@ -182,15 +216,15 @@ class PretrainableGNN(nn.Module):
             return head[domain_name]
         return head
 
-    def apply_gradient_reversal(self, embeddings, lambda_val):
+    def apply_gradient_reversal(self, embeddings: torch.Tensor, lambda_val: float) -> torch.Tensor:
         """
         Apply gradient reversal to embeddings for domain-adversarial training.
 
         Args:
-            embeddings: Input embeddings tensor
-            lambda_val: Scaling factor for gradient reversal
+            embeddings: Input embeddings tensor of shape [batch_size, embedding_dim]
+            lambda_val: Scaling factor for gradient reversal (float from GRL scheduler)
 
         Returns:
-            Embeddings with gradient reversal applied
+            Embeddings with gradient reversal applied, same shape as input
         """
         return self.grl(embeddings, lambda_val)
