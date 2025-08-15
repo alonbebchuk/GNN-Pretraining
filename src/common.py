@@ -55,10 +55,9 @@ NODE_FEATURE_MASKING_MASK_RATE = 0.15
 
 # Node-level contrastive learning
 NODE_CONTRASTIVE_TEMPERATURE = float(0.1)
-CONTRASTIVE_SYMMETRY_COEF = 0.5             # 0.5*(L12+L21)
 
 # Link prediction
-NUM_NEGATIVE_SAMPLES = 1               # negatives per positive edge
+NUM_NEGATIVE_SAMPLES = 1
 
 # Graph property prediction
 GRAPH_PROPERTY_DIM = 15
@@ -128,10 +127,6 @@ PRETRAIN_ADAM_BETAS = (0.9, 0.999)
 PRETRAIN_ADAM_EPS = 1e-8
 PRETRAIN_MODEL_WEIGHT_DECAY = 0.01
 PRETRAIN_UNCERTAINTY_WEIGHT_DECAY = 0.0
-
-# Reproducibility across multiple runs
-PRETRAIN_NUM_SEEDS = 3
-PRETRAIN_SEED_BASE = RANDOM_SEED
 
 # Tracking & IO
 WANDB_PROJECT = 'gnn-pretraining'

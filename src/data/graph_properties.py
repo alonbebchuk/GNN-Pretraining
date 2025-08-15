@@ -1,5 +1,6 @@
 import math
-from typing import List, Iterable, Sequence
+from typing import List, Iterable
+from numpy.typing import NDArray
 
 import networkx as nx
 import numpy as np
@@ -149,7 +150,7 @@ class GraphPropertyCalculator:
     def compute_and_standardize_for_dataset(
         self,
         dataset: Iterable[Data],
-        train_idx: Sequence[int],
+        train_idx: NDArray[np.int_],
     ) -> Tensor:
         """
         Compute graph properties for all graphs and standardize using statistics from

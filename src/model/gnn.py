@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from torch_geometric.nn import GINConv
 
@@ -12,7 +13,7 @@ class InputEncoder(nn.Module):
     This creates a standardized representation from domain-specific features.
     """
 
-    def __init__(self, dim_in: int):
+    def __init__(self, dim_in: int) -> None:
         """
         Initialize the input encoder.
 
@@ -28,7 +29,7 @@ class InputEncoder(nn.Module):
             nn.Dropout(p=DROPOUT_RATE)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode domain-specific features to shared representation.
 
@@ -51,7 +52,7 @@ class GINLayer(nn.Module):
     3. Post-activation: LayerNorm -> ReLU -> Dropout
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize a single GIN layer.
         """
@@ -72,7 +73,7 @@ class GINLayer(nn.Module):
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=DROPOUT_RATE)
 
-    def forward(self, h, edge_index):
+    def forward(self, h: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through the GIN layer.
 
@@ -104,7 +105,7 @@ class GIN_Backbone(nn.Module):
     This is the shared component that processes all domains after input encoding.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the GIN backbone.
         """
@@ -116,7 +117,7 @@ class GIN_Backbone(nn.Module):
             for _ in range(GNN_NUM_LAYERS)
         ])
 
-    def forward(self, h, edge_index):
+    def forward(self, h: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through all GIN layers.
 

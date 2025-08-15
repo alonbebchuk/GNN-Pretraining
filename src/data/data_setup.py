@@ -23,7 +23,8 @@ from src.common import (
     VAL_FRACTION,
     TUDATASET_USE_NODE_ATTR,
 )
-from typing import Sequence, List, Dict
+from typing import List, Dict
+from numpy.typing import NDArray
 from sklearn.preprocessing import StandardScaler
 
 # --- Configuration (centralized in src.common) -------------------------------
@@ -37,15 +38,13 @@ PROCESSED_DIR = DATA_DIR / 'processed'
 # --- Helper Functions --------------------------------------------------------
 
 
-def apply_feature_preprocessing(dataset: Sequence[Data], train_idx: Sequence[int], dataset_name: str) -> None:
+def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_], dataset_name: str) -> None:
     """Apply appropriate preprocessing based on feature type."""
     feature_type = FEATURE_TYPES.get(dataset_name)
 
     if feature_type == 'continuous':
         # Z-score standardization for continuous features
-        train_indices = list(train_idx) if not hasattr(train_idx, 'tolist') else train_idx.tolist()
-
-        train_X_list = [dataset[i].x.detach().cpu() for i in train_indices]
+        train_X_list = [dataset[i].x.detach().cpu() for i in train_idx]
         train_X = torch.cat(train_X_list, dim=0).numpy()
 
         scaler = StandardScaler(with_mean=True, with_std=True)
@@ -70,7 +69,7 @@ def apply_feature_preprocessing(dataset: Sequence[Data], train_idx: Sequence[int
         logging.warning(f"Unknown feature type '{feature_type}' for dataset {dataset_name}")
 
 
-def attach_standardized_graph_properties(dataset: Sequence[Data], train_idx: Sequence[int], calculator: GraphPropertyCalculator) -> None:
+def attach_standardized_graph_properties(dataset: List[Data], train_idx: NDArray[np.int_], calculator: GraphPropertyCalculator) -> None:
     """Compute standardized graph properties and attach per-graph tensor at `graph_properties`."""
     props = calculator.compute_and_standardize_for_dataset(dataset, train_idx)
     for i, g in enumerate(dataset):

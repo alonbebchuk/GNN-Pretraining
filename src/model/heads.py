@@ -12,7 +12,7 @@ class MLPHead(nn.Module):
     This is used as the standard prediction head throughout the system.
     """
 
-    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM):
+    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM) -> None:
         """
         Initialize the MLP head.
 
@@ -29,7 +29,7 @@ class MLPHead(nn.Module):
             nn.Linear(dim_hidden, dim_out)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through the MLP.
 
@@ -53,11 +53,11 @@ class DotProductDecoder(nn.Module):
     is responsible for negative sampling and creating the edge_index tensor.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the dot product decoder."""
         super(DotProductDecoder, self).__init__()
 
-    def forward(self, h, edge_index):
+    def forward(self, h: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """
         Compute edge probabilities for given node pairs.
 
@@ -86,7 +86,7 @@ class BilinearDiscriminator(nn.Module):
     D(x, y) = sigmoid(x^T * W * y)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the bilinear discriminator.
         """
@@ -95,7 +95,7 @@ class BilinearDiscriminator(nn.Module):
         # Bilinear transformation matrix (no bias)
         self.W = nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, bias=False)
 
-    def forward(self, x, y):
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
         Compute discriminator scores for input pairs.
 
@@ -122,7 +122,7 @@ class DomainClassifierHead(nn.Module):
     Architecture: Linear -> ReLU -> Linear
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the domain classifier head.
 
@@ -138,7 +138,7 @@ class DomainClassifierHead(nn.Module):
             nn.Linear(DOMAIN_ADV_HEAD_HIDDEN_DIM, DOMAIN_ADV_HEAD_OUT_DIM)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through the domain classifier.
 

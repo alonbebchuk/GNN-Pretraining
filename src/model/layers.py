@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from typing import Any, Tuple
 
 
 class GradientReversalFn(torch.autograd.Function):
@@ -11,7 +12,7 @@ class GradientReversalFn(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, x, lambda_val):
+    def forward(ctx: Any, x: torch.Tensor, lambda_val: float) -> torch.Tensor:
         """
         Forward pass: identity function.
 
@@ -27,7 +28,7 @@ class GradientReversalFn(torch.autograd.Function):
         return x
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx: Any, grad_output: torch.Tensor) -> Tuple[torch.Tensor, None]:
         """
         Backward pass: reverse and scale the gradient.
 
@@ -51,11 +52,11 @@ class GradientReversalLayer(nn.Module):
     training to encourage domain-invariant features.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the Gradient Reversal Layer."""
         super(GradientReversalLayer, self).__init__()
 
-    def forward(self, x, lambda_val):
+    def forward(self, x: torch.Tensor, lambda_val: float) -> torch.Tensor:
         """
         Forward pass through the gradient reversal layer.
 
