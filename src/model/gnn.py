@@ -84,13 +84,13 @@ class GINLayer(nn.Module):
         Returns:
             Updated node embeddings of shape (num_nodes, hidden_dim)
         """
-        # 1. GIN convolution (aggregation + MLP transformation)
+        # GIN convolution (aggregation + MLP transformation)
         h_conv = self.gin_conv(h, edge_index)
 
-        # 2. Residual connection
+        # Residual connection
         h_res = h_conv + h
 
-        # 3. Post-activation layers
+        # Post-activation layers
         h_out = self.layer_norm(h_res)
         h_out = self.relu(h_out)
         h_out = self.dropout(h_out)

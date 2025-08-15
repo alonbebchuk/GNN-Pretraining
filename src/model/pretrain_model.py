@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 from torch_geometric.data import Batch
@@ -30,7 +30,7 @@ class PretrainableGNN(nn.Module):
     - Graph augmentation capabilities for contrastive learning
     """
 
-    def __init__(self, device: torch.device, domain_names: list[str], task_names: list[str]):
+    def __init__(self, device: torch.device, domain_names: list[str], task_names: list[str]) -> None:
         """
         Initialize the pretrainable GNN model.
 
@@ -92,7 +92,7 @@ class PretrainableGNN(nn.Module):
         # Move to device
         self.to(self.device)
 
-    def apply_node_masking(self, batch: Batch, domain_name: str):
+    def apply_node_masking(self, batch: Batch, domain_name: str) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Apply node masking in hidden space for the Node Feature Masking task.
 
@@ -116,46 +116,29 @@ class PretrainableGNN(nn.Module):
 
         num_nodes = batch.x.shape[0]
 
-        # Handle batched data with per-graph safeguards
-        if hasattr(batch, 'batch') and batch.batch is not None:
-            # Batched processing with per-graph safeguards
-            mask_prob = NODE_FEATURE_MASKING_MASK_RATE
-            mask_candidates = (torch.rand(num_nodes, device=self.device) < mask_prob)
-            
-            # Ensure at least one node is NOT masked per graph (to prevent empty graphs)
-            num_graphs = int(batch.batch.max().item()) + 1 if batch.batch.numel() > 0 else 0
-            if num_graphs > 0:
-                mask_counts = torch.bincount(batch.batch, weights=mask_candidates.to(torch.long), minlength=num_graphs)
-                node_counts = torch.bincount(batch.batch, minlength=num_graphs)
-                
-                # Find graphs where ALL nodes would be masked (dangerous!)
-                all_masked_graphs = (mask_counts == node_counts) & (node_counts > 0)
-                
-                if all_masked_graphs.any():
-                    # For each fully-masked graph, unmask its first node
-                    ptr = torch.zeros(num_graphs + 1, device=self.device, dtype=torch.long)
-                    ptr[1:] = torch.cumsum(node_counts, dim=0)
-                    starts = ptr[:-1][all_masked_graphs]  # First node of each fully-masked graph
-                    mask_candidates[starts] = False  # Unmask at least one node per graph
-            
-            mask_indices = mask_candidates.nonzero(as_tuple=True)[0]
-        else:
-            # Single graph processing
-            num_mask = max(1, min(num_nodes - 1, int(num_nodes * NODE_FEATURE_MASKING_MASK_RATE)))
-            mask_indices = torch.randperm(num_nodes, device=self.device)[:num_mask]
+        mask_candidates = (torch.rand(num_nodes, device=self.device) < NODE_FEATURE_MASKING_MASK_RATE)
+        
+        # Ensure at least one node is NOT masked per graph (to prevent empty graphs)
+        num_graphs = int(batch.batch.max().item()) + 1
+        mask_counts = torch.bincount(batch.batch, weights=mask_candidates.to(torch.long), minlength=num_graphs)
+        node_counts = torch.bincount(batch.batch, minlength=num_graphs)
+        all_masked_graphs = (mask_counts == node_counts) & (node_counts > 0)        
+        if all_masked_graphs.any():
+            ptr = torch.zeros(num_graphs + 1, device=self.device, dtype=torch.long)
+            ptr[1:] = torch.cumsum(node_counts, dim=0)
+            starts = ptr[:-1][all_masked_graphs]
+            mask_candidates[starts] = False
+        
+        mask_indices = mask_candidates.nonzero(as_tuple=True)[0]
 
-        # Store original h_0 embeddings for reconstruction targets
-        target_h0 = original_h0[mask_indices].clone() if mask_indices.numel() > 0 else torch.empty(0, original_h0.size(1), device=self.device)
+        target_h0 = original_h0[mask_indices].clone()
 
-        # Create masked h_0 by replacing selected node embeddings with the shared [MASK] token
         masked_h0 = original_h0.clone()
-        if mask_indices.numel() > 0:
-            num_mask = mask_indices.size(0)
-            masked_h0[mask_indices] = self.mask_token.unsqueeze(0).expand(num_mask, -1)
+        masked_h0[mask_indices] = self.mask_token.unsqueeze(0).expand(mask_indices.size(0), -1)
 
         return masked_h0, mask_indices, target_h0
 
-    def forward(self, batch: Batch, domain_name: str):
+    def forward(self, batch: Batch, domain_name: str) -> torch.Tensor:
         """
         Forward pass through the model.
 
@@ -169,13 +152,13 @@ class PretrainableGNN(nn.Module):
         # Move batch to the correct device
         batch = batch.to(self.device)
 
-        # 1. Select domain-specific encoder
+        # Select domain-specific encoder
         encoder = self.input_encoders[domain_name]
 
-        # 2. Encode domain-specific features to shared representation
+        # Encode domain-specific features to shared representation
         h_0 = encoder(batch.x)
 
-        # 3. Process with shared GNN backbone
+        # Process with shared GNN backbone
         final_node_embeddings = self.gnn_backbone(h_0, batch.edge_index)
 
         return final_node_embeddings
@@ -195,7 +178,7 @@ class PretrainableGNN(nn.Module):
         """
         return self.gnn_backbone(h_0, edge_index)
 
-    def get_head(self, head_name: str, domain_name: Optional[str] = None):
+    def get_head(self, head_name: str, domain_name: Optional[str] = None) -> nn.Module:
         """
         Get a specific prediction head.
 
