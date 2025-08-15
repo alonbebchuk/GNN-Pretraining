@@ -14,10 +14,10 @@ DROPOUT_RATE = 0.2
 GNN_HIDDEN_DIM = 256
 GNN_NUM_LAYERS = 5
 
-# Head dimensions (relative to backbone hidden dim)
-CONTRASTIVE_PROJ_DIM_FACTOR = 0.5
-GRAPH_PROP_HEAD_HIDDEN_FACTOR = 2.0
-DOMAIN_ADV_HEAD_HIDDEN_FACTOR = 0.5
+CONTRASTIVE_PROJ_DIM = 128
+GRAPH_PROP_HEAD_HIDDEN_DIM = 512
+DOMAIN_ADV_HEAD_HIDDEN_DIM = 128
+DOMAIN_ADV_HEAD_OUT_DIM = 4
 
 # Mask token initialization for node feature masking (BERT-style)
 MASK_TOKEN_INIT_MEAN = 0.0
@@ -47,17 +47,11 @@ AUGMENTATION_EDGE_DROP_RATE = 0.15
 AUGMENTATION_NODE_DROP_PROB = 0.5
 AUGMENTATION_NODE_DROP_RATE = 0.15
 
-# Minimums for discrete sampling operations
-AUGMENTATION_MIN_ATTR_MASK_DIM = 1
-AUGMENTATION_MIN_EDGE_NUM_KEEP = 1
-AUGMENTATION_MIN_NODE_NUM_KEEP = 1
-
 # -----------------------------------------------------------------------------
 # Pretraining Tasks
 # -----------------------------------------------------------------------------
 # Node feature masking
 NODE_FEATURE_MASKING_MASK_RATE = 0.15
-NODE_FEATURE_MASKING_MIN_NODES = 1
 
 # Node-level contrastive learning
 NODE_CONTRASTIVE_TEMPERATURE = float(0.1)

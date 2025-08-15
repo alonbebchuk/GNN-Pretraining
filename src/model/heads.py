@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from src.common import DROPOUT_RATE, GNN_HIDDEN_DIM
+from src.common import DOMAIN_ADV_HEAD_HIDDEN_DIM, DOMAIN_ADV_HEAD_OUT_DIM, DROPOUT_RATE, GNN_HIDDEN_DIM
 
 
 class MLPHead(nn.Module):
@@ -12,23 +12,22 @@ class MLPHead(nn.Module):
     This is used as the standard prediction head throughout the system.
     """
 
-    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM, apply_dropout: bool = True):
+    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM):
         """
         Initialize the MLP head.
 
         Args:
-            dim_out: Output dimension
+            dim_hidden: Hidden dimension (defaults to GNN_HIDDEN_DIM)
+            dim_out: Output dimension (defaults to GNN_HIDDEN_DIM)
         """
         super(MLPHead, self).__init__()
 
-        layers = [
+        self.mlp = nn.Sequential(
             nn.Linear(GNN_HIDDEN_DIM, dim_hidden),
             nn.ReLU(),
-        ]
-        if apply_dropout:
-            layers.append(nn.Dropout(p=DROPOUT_RATE))
-        layers.append(nn.Linear(dim_hidden, dim_out))
-        self.mlp = nn.Sequential(*layers)
+            nn.Dropout(p=DROPOUT_RATE),
+            nn.Linear(dim_hidden, dim_out)
+        )
 
     def forward(self, x):
         """
@@ -111,3 +110,42 @@ class BilinearDiscriminator(nn.Module):
         scores = torch.sigmoid((self.W(x) * y).sum(dim=-1))
 
         return scores
+
+
+class DomainClassifierHead(nn.Module):
+    """
+    Specialized MLP head for domain adversarial training.
+
+    This head does NOT use dropout to ensure it is as strong as possible,
+    providing the sharpest training signal for the GNN backbone.
+
+    Architecture: Linear -> ReLU -> Linear
+    """
+
+    def __init__(self):
+        """
+        Initialize the domain classifier head.
+
+        Args:
+            dim_hidden: Hidden dimension
+            dim_out: Output dimension (number of pretrain domains)
+        """
+        super(DomainClassifierHead, self).__init__()
+
+        self.classifier = nn.Sequential(
+            nn.Linear(GNN_HIDDEN_DIM, DOMAIN_ADV_HEAD_HIDDEN_DIM),
+            nn.ReLU(),
+            nn.Linear(DOMAIN_ADV_HEAD_HIDDEN_DIM, DOMAIN_ADV_HEAD_OUT_DIM)
+        )
+
+    def forward(self, x):
+        """
+        Forward pass through the domain classifier.
+
+        Args:
+            x: Input tensor of shape (batch_size, GNN_HIDDEN_DIM)
+
+        Returns:
+            Domain logits of shape (batch_size, num_pretrain_domains)
+        """
+        return self.classifier(x)
