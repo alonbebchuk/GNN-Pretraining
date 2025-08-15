@@ -1,11 +1,13 @@
 import math
-from typing import List
+from typing import List, Iterable, Sequence
 
 import networkx as nx
 import numpy as np
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
+from torch_geometric.utils import to_networkx, to_undirected, remove_self_loops
+from src.common import NORMALIZATION_EPS, NORMALIZATION_STD_FALLBACK
 
 
 class GraphPropertyCalculator:
@@ -31,36 +33,38 @@ class GraphPropertyCalculator:
     """
 
     def __call__(self, graph: Data) -> Tensor:
-        num_nodes = int(graph.x.size(0))
+        num_nodes = graph.x.shape[0]
         edge_index = graph.edge_index
 
-        # Build undirected simple graph in networkx (deduplicate, remove self-loops)
-        G = nx.Graph()
-        G.add_nodes_from(range(num_nodes))
-        ei = edge_index.detach().cpu().numpy()
-        for u, v in ei.T:
-            if u == v:
-                continue
-            G.add_edge(int(u), int(v))
+        # Build undirected simple graph using PyG utilities
+        edge_index, _ = remove_self_loops(edge_index)
+        edge_index = to_undirected(edge_index, num_nodes=num_nodes)
+        pyg_simple = Data(edge_index=edge_index, num_nodes=num_nodes)
+        G = to_networkx(pyg_simple, to_undirected=True)
 
         N = G.number_of_nodes()
         E = G.number_of_edges()
 
         # Degrees
-        degrees = np.array([d for _, d in G.degree()], dtype=float)
+        degree_dict = dict(G.degree())
+        degrees = np.array(list(degree_dict.values()), dtype=float)
         deg_mean = float(degrees.mean())
         deg_var = float(degrees.var())
         deg_max = float(degrees.max())
 
-        # Density (nx handles N<=1)
+        # Density
         density = float(nx.density(G))
 
         # Clustering metrics
         clustering_global = float(nx.average_clustering(G))
-        transitivity = float(nx.transitivity(G))
+        transitivity = float(nx.transitivity(G)) if N > 2 else 0.0
 
-        tri_dict = nx.triangles(G)
-        triangles = float(sum(tri_dict.values()) / 3.0)
+        # Triangle count
+        if N > 2:
+            tri_dict = nx.triangles(G)
+            triangles = float(sum(tri_dict.values()) / 3.0)
+        else:
+            triangles = 0.0
 
         # Connectivity
         num_components = float(nx.number_connected_components(G))
@@ -68,10 +72,8 @@ class GraphPropertyCalculator:
         # Diameter on largest component
         diameter = 0.0
         components = [G.subgraph(c).copy() for c in nx.connected_components(G)]
-        if len(components) > 0:
-            H = max(components, key=lambda g: g.number_of_nodes())
-            if H.number_of_nodes() > 1:
-                diameter = float(nx.diameter(H))
+        H = max(components, key=lambda g: g.number_of_nodes())
+        diameter = float(nx.diameter(H))
 
         # Assortativity
         if float(degrees.std()) == 0.0:
@@ -90,16 +92,18 @@ class GraphPropertyCalculator:
             degree_centralization = 0.0
 
         # Closeness centralization: sum(max_c - c_i) / (N-1)
-        closeness = np.array(list(nx.closeness_centrality(G).values()), dtype=float)
-        c_max = float(closeness.max())
-        closeness_centralization = float(((c_max - closeness).sum()) / (N - 1))
+        closeness_dict = nx.closeness_centrality(G)
+        closeness = np.array(list(closeness_dict.values()), dtype=float)
+        c_max = closeness.max()
+        closeness_centralization = float((c_max - closeness).sum() / (N - 1))
 
         # Betweenness centralization: sum(max_b - b_i) / ((N-1)*(N-2)/2)
         if N > 2:
-            betw = np.array(list(nx.betweenness_centrality(G, normalized=True).values()), dtype=float)
-            b_max = float(betw.max()) if betw.size > 0 else 0.0
+            betw_dict = nx.betweenness_centrality(G, normalized=True)
+            betw = np.array(list(betw_dict.values()), dtype=float)
+            b_max = betw.max()
             denom = float((N - 1) * (N - 2) / 2.0)
-            betweenness_centralization = float(((b_max - betw).sum()) / denom)
+            betweenness_centralization = float((b_max - betw).sum() / denom)
         else:
             betweenness_centralization = 0.0
 
@@ -122,3 +126,48 @@ class GraphPropertyCalculator:
         ]
 
         return torch.tensor(props, dtype=torch.float32)
+
+    def compute_for_dataset(self, dataset: Iterable[Data]) -> Tensor:
+        """
+        Compute graph property vectors for an entire dataset and return a stacked tensor.
+
+        Args:
+            dataset: Iterable of PyG Data graphs.
+
+        Returns:
+            Tensor of shape [num_graphs, 15]
+        """
+        # Pre-allocate tensor for better memory efficiency
+        dataset_list = list(dataset) if not isinstance(dataset, list) else dataset
+        props_tensor = torch.zeros((len(dataset_list), 15), dtype=torch.float32)
+
+        for i, g in enumerate(dataset_list):
+            props_tensor[i] = self(g)
+
+        return props_tensor
+
+    def compute_and_standardize_for_dataset(
+        self,
+        dataset: Iterable[Data],
+        train_idx: Sequence[int],
+    ) -> Tensor:
+        """
+        Compute graph properties for all graphs and standardize using statistics from
+        the subset indexed by train_idx.
+
+        Args:
+            dataset: Iterable of PyG Data graphs.
+            train_idx: Indices of graphs to use for computing mean and std.
+
+        Returns:
+            Tensor of shape [num_graphs, 15] standardized via z-score using train stats.
+        """
+        all_props = self.compute_for_dataset(dataset)  # [N, 15]
+
+        train_props = all_props[train_idx]
+        mean = train_props.mean(dim=0)
+        std = train_props.std(dim=0, unbiased=True)
+        std[std < NORMALIZATION_EPS] = NORMALIZATION_STD_FALLBACK
+
+        all_props = (all_props - mean) / std
+        return all_props

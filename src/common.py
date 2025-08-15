@@ -15,9 +15,9 @@ GNN_HIDDEN_DIM = 256
 GNN_NUM_LAYERS = 5
 
 # Head dimensions (relative to backbone hidden dim)
-CONTRASTIVE_PROJ_DIM_FACTOR = 0.5          # output dim for node contrastive projection head
-GRAPH_PROP_HEAD_HIDDEN_FACTOR = 2.0         # hidden dim for graph property head
-DOMAIN_ADV_HEAD_HIDDEN_FACTOR = 0.5         # hidden dim for domain adversarial head
+CONTRASTIVE_PROJ_DIM_FACTOR = 0.5
+GRAPH_PROP_HEAD_HIDDEN_FACTOR = 2.0
+DOMAIN_ADV_HEAD_HIDDEN_FACTOR = 0.5
 
 # Mask token initialization for node feature masking (BERT-style)
 MASK_TOKEN_INIT_MEAN = 0.0
@@ -26,15 +26,13 @@ MASK_TOKEN_INIT_STD = 0.02
 # -----------------------------------------------------------------------------
 # Data Processing & Splits
 # -----------------------------------------------------------------------------
-CV_N_SPLITS = 1
-PRETRAIN_VAL_TEST_FRACTION = 0.2            # for TU pretrain: 80/20 → val/test split next
-VAL_TEST_SPLIT_RATIO = 0.5                  # splits the 20% equally into val/test
-PRETRAIN_MONITOR_FRACTION = 0.1             # for overlap datasets: fraction of canonical train used as pretrain-only validation
+VAL_FRACTION = 0.1
+VAL_TEST_FRACTION = 0.2
+VAL_TEST_SPLIT_RATIO = 0.5
 
 # Numerical stability and normalization
 NORMALIZATION_EPS = 1e-8
 NORMALIZATION_STD_FALLBACK = 1.0
-BOW_ROW_SUM_FALLBACK = 1.0
 
 # TU dataset download options
 TUDATASET_USE_NODE_ATTR = True

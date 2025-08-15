@@ -6,6 +6,8 @@ import numpy as np
 from pathlib import Path
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 from torch_geometric.datasets import Planetoid, TUDataset
+from torch_geometric.transforms import NormalizeFeatures
+from torch_geometric.data import Data
 from tqdm import tqdm
 from src.data.graph_properties import GraphPropertyCalculator
 from src.common import (
@@ -16,15 +18,13 @@ from src.common import (
     ALL_TUDATASETS,
     ALL_PLANETOID_DATASETS,
     FEATURE_TYPES,
-    CV_N_SPLITS,
-    PRETRAIN_VAL_TEST_FRACTION,
+    VAL_TEST_FRACTION,
     VAL_TEST_SPLIT_RATIO,
-    PRETRAIN_MONITOR_FRACTION,
-    NORMALIZATION_EPS,
-    NORMALIZATION_STD_FALLBACK,
-    BOW_ROW_SUM_FALLBACK,
+    VAL_FRACTION,
     TUDATASET_USE_NODE_ATTR,
 )
+from typing import Sequence, List, Dict
+from sklearn.preprocessing import StandardScaler
 
 # --- Configuration (centralized in src.common) -------------------------------
 
@@ -37,65 +37,47 @@ PROCESSED_DIR = DATA_DIR / 'processed'
 # --- Helper Functions --------------------------------------------------------
 
 
-def apply_preprocessing(dataset, train_idx, dataset_name):
-    """Apply preprocessing based on feature type."""
-    feature_type = FEATURE_TYPES[dataset_name]
+def apply_feature_preprocessing(dataset: Sequence[Data], train_idx: Sequence[int], dataset_name: str) -> None:
+    """Apply appropriate preprocessing based on feature type."""
+    feature_type = FEATURE_TYPES.get(dataset_name)
 
     if feature_type == 'continuous':
-        # Z-score normalization for continuous features
-        if isinstance(train_idx, torch.Tensor):
-            train_idx = train_idx.tolist()
-        train_graphs = [dataset[i] for i in train_idx]
-        all_train_x = torch.cat([g.x for g in train_graphs if g.x is not None], dim=0)
+        # Z-score standardization for continuous features
+        train_indices = list(train_idx) if not hasattr(train_idx, 'tolist') else train_idx.tolist()
 
-        # Compute statistics only from training set
-        mean = all_train_x.mean(dim=0)
-        std = all_train_x.std(dim=0, unbiased=True)
-        std[std < NORMALIZATION_EPS] = NORMALIZATION_STD_FALLBACK
+        train_X_list = [dataset[i].x.detach().cpu() for i in train_indices]
+        train_X = torch.cat(train_X_list, dim=0).numpy()
 
-        # Apply normalization to all graphs using training statistics
+        scaler = StandardScaler(with_mean=True, with_std=True)
+        scaler.fit(train_X)
+
         for g in dataset:
-            g.x = (g.x - mean) / std
+            X = g.x.detach().cpu().numpy()
+            X_scaled = scaler.transform(X)
+            g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
 
-        logging.info(f"Applied z-score normalization to {dataset_name}")
+        logging.info(f"Applied z-score standardization to {dataset_name}")
+
+    elif feature_type == 'categorical':
+        # Categorical features are already one-hot encoded by PyG datasets
+        logging.info(f"Categorical features for {dataset_name} are already one-hot encoded by PyG")
 
     elif feature_type == 'bow':
-        # Row-normalize Bag-of-Words features
-        for g in dataset:
-            row_sum = g.x.sum(dim=1, keepdim=True)
-            row_sum[row_sum == 0] = BOW_ROW_SUM_FALLBACK
-            g.x = g.x / row_sum
+        # BoW features are handled by NormalizeFeatures transform in Planetoid loading
+        logging.info(f"BoW features for {dataset_name} handled by NormalizeFeatures transform")
 
-        logging.info(f"Applied row normalization to {dataset_name}")
+    else:
+        logging.warning(f"Unknown feature type '{feature_type}' for dataset {dataset_name}")
 
 
-def attach_standardized_graph_properties(dataset, train_idx, dataset_name):
-    """Compute and attach standardized 15-D graph property vectors for pretraining datasets only."""
-    if isinstance(train_idx, torch.Tensor):
-        train_idx = train_idx.tolist()
-
-    calculator = GraphPropertyCalculator()
-
-    # Collect properties for training graphs
-    train_props_list = []
-    for idx in train_idx:
-        props = calculator(dataset[idx]).to(torch.float32)
-        train_props_list.append(props)
-
-    train_props = torch.stack(train_props_list, dim=0)  # [N_train, 15]
-    prop_mean = train_props.mean(dim=0)
-    prop_std = train_props.std(dim=0, unbiased=True)
-    prop_std[prop_std < NORMALIZATION_EPS] = NORMALIZATION_STD_FALLBACK
-
-    # Attach standardized properties to all graphs using train stats
-    for g in dataset:
-        props = calculator(g).to(torch.float32)
-        g.graph_properties = (props - prop_mean) / prop_std
-
-    logging.info(f"Computed and standardized graph properties for {dataset_name}")
+def attach_standardized_graph_properties(dataset: Sequence[Data], train_idx: Sequence[int], calculator: GraphPropertyCalculator) -> None:
+    """Compute standardized graph properties and attach per-graph tensor at `graph_properties`."""
+    props = calculator.compute_and_standardize_for_dataset(dataset, train_idx)
+    for i, g in enumerate(dataset):
+        g.graph_properties = props[i]
 
 
-def save_processed_data(dataset_name, data, splits):
+def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, torch.Tensor]) -> None:
     """Save processed data and splits to disk."""
     save_dir = PROCESSED_DIR / dataset_name
     os.makedirs(save_dir, exist_ok=True)
@@ -108,9 +90,11 @@ def save_processed_data(dataset_name, data, splits):
 
 # --- Core Processing Functions -----------------------------------------------
 
-def process_tudatasets():
+def process_tudatasets() -> None:
     """Download, process, and split TU datasets."""
     logging.info("Processing TU datasets...")
+
+    calculator = GraphPropertyCalculator()
 
     for name in tqdm(ALL_TUDATASETS, desc="Processing TU datasets"):
         # Download dataset
@@ -124,15 +108,15 @@ def process_tudatasets():
             canonical_ds = copy.deepcopy(dataset)
             num_graphs = len(canonical_ds)
             labels = canonical_ds.y.numpy()
-            sss_train_val = StratifiedShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_VAL_TEST_FRACTION, random_state=RANDOM_SEED)
+            sss_train_val = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_FRACTION, random_state=RANDOM_SEED)
             train_idx, val_test_idx = next(sss_train_val.split(np.arange(num_graphs), labels))
             val_test_labels = labels[val_test_idx]
-            sss_val_test = StratifiedShuffleSplit(n_splits=CV_N_SPLITS, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
+            sss_val_test = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
             val_idx_rel, test_idx_rel = next(sss_val_test.split(np.arange(len(val_test_idx)), val_test_labels))
             val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
 
-            # Apply preprocessing once using canonical train indices
-            apply_preprocessing(canonical_ds, train_idx, name)
+            # Apply feature preprocessing
+            apply_feature_preprocessing(canonical_ds, train_idx, name)
 
             # Downstream: save normalized graphs and canonical splits
             downstream_splits = {
@@ -143,12 +127,15 @@ def process_tudatasets():
             save_processed_data(f"{name}_downstream", list(canonical_ds), downstream_splits)
 
             # Build pretraining dataset as a subset of canonical train only
-            canonical_train_graphs = [copy.deepcopy(canonical_ds[int(i)]) for i in train_idx]
-            ss_ptrain = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_MONITOR_FRACTION, random_state=RANDOM_SEED)
+            canonical_train_graphs = [copy.deepcopy(dataset[int(i)]) for i in train_idx]
+            ss_ptrain = ShuffleSplit(n_splits=1, test_size=VAL_FRACTION, random_state=RANDOM_SEED)
             tr_rel, va_rel = next(ss_ptrain.split(np.arange(len(canonical_train_graphs))))
 
-            # Attach standardized graph properties using relative train indices
-            attach_standardized_graph_properties(canonical_train_graphs, torch.tensor(tr_rel, dtype=torch.long), name)
+            # Apply feature preprocessing
+            apply_feature_preprocessing(canonical_train_graphs, tr_rel, name)
+
+            # Attach standardized graph properties per-graph
+            attach_standardized_graph_properties(canonical_train_graphs, tr_rel, calculator)
 
             pretrain_splits = {
                 'train': torch.tensor(tr_rel, dtype=torch.long),
@@ -157,26 +144,22 @@ def process_tudatasets():
             save_processed_data(f"{name}_pretrain", list(canonical_train_graphs), pretrain_splits)
 
         else:
-            # Pre-training splits (80/20) for pure pretrain-only datasets
+            # Pre-training splits (90/10) for pure pretrain-only datasets
             if name in PRETRAIN_TUDATASETS:
                 pretrain_dataset = copy.deepcopy(dataset)
                 num_graphs = len(pretrain_dataset)
-                ss_train_val = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_VAL_TEST_FRACTION, random_state=RANDOM_SEED)
-                train_idx, val_test_idx = next(ss_train_val.split(np.arange(num_graphs)))
-                ss_val_test = ShuffleSplit(n_splits=CV_N_SPLITS, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
-                val_idx_rel, test_idx_rel = next(ss_val_test.split(np.arange(len(val_test_idx))))
-                val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
+                ss_train_val = ShuffleSplit(n_splits=1, test_size=VAL_FRACTION, random_state=RANDOM_SEED)
+                train_idx, val_idx = next(ss_train_val.split(np.arange(num_graphs)))
 
-                # Apply preprocessing
-                apply_preprocessing(pretrain_dataset, train_idx, name)
+                # Apply feature preprocessing
+                apply_feature_preprocessing(pretrain_dataset, train_idx, name)
 
-                # Attach standardized graph properties
-                attach_standardized_graph_properties(pretrain_dataset, train_idx, name)
+                # Attach standardized graph properties per-graph
+                attach_standardized_graph_properties(pretrain_dataset, train_idx, calculator)
 
                 pretrain_splits = {
                     'train': torch.tensor(train_idx, dtype=torch.long),
                     'val': torch.tensor(val_idx, dtype=torch.long),
-                    'test': torch.tensor(test_idx, dtype=torch.long)
                 }
                 save_processed_data(f"{name}_pretrain", list(pretrain_dataset), pretrain_splits)
 
@@ -185,15 +168,15 @@ def process_tudatasets():
                 downstream_dataset = copy.deepcopy(dataset)
                 num_graphs = len(downstream_dataset)
                 labels = downstream_dataset.y.numpy()
-                sss_train_val = StratifiedShuffleSplit(n_splits=CV_N_SPLITS, test_size=PRETRAIN_VAL_TEST_FRACTION, random_state=RANDOM_SEED)
+                sss_train_val = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_FRACTION, random_state=RANDOM_SEED)
                 train_idx, val_test_idx = next(sss_train_val.split(np.arange(num_graphs), labels))
                 val_test_labels = labels[val_test_idx]
-                sss_val_test = StratifiedShuffleSplit(n_splits=CV_N_SPLITS, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
+                sss_val_test = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
                 val_idx_rel, test_idx_rel = next(sss_val_test.split(np.arange(len(val_test_idx)), val_test_labels))
                 val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
 
-                # Apply preprocessing
-                apply_preprocessing(downstream_dataset, train_idx, name)
+                # Apply feature preprocessing
+                apply_feature_preprocessing(downstream_dataset, train_idx, name)
 
                 downstream_splits = {
                     'train': torch.tensor(train_idx, dtype=torch.long),
@@ -203,21 +186,16 @@ def process_tudatasets():
                 save_processed_data(f"{name}_downstream", list(downstream_dataset), downstream_splits)
 
 
-def process_planetoid_datasets():
-    """Process Planetoid datasets with row-normalization for BoW features."""
+def process_planetoid_datasets() -> None:
+    """Process Planetoid datasets with row-normalization for BoW features (via NormalizeFeatures)."""
     logging.info("Processing Planetoid datasets...")
 
     for name in tqdm(ALL_PLANETOID_DATASETS, desc="Processing Planetoid datasets"):
-        # Download dataset
+        # Download dataset with NormalizeFeatures applied at load time
         logging.info(f"Downloading {name}...")
-        dataset = Planetoid(root=RAW_DIR, name=name)
+        dataset = Planetoid(root=RAW_DIR, name=name, transform=NormalizeFeatures())
         data = dataset[0]
         logging.info(f"Downloaded {name}: {data.num_nodes} nodes, {data.num_edges} edges")
-
-        train_idx = torch.where(data.train_mask)[0]
-
-        # Apply preprocessing
-        apply_preprocessing([data], train_idx, name)
 
         splits = {
             'train': torch.where(data.train_mask)[0],
@@ -229,7 +207,7 @@ def process_planetoid_datasets():
 # --- Main Execution ----------------------------------------------------------
 
 
-def main():
+def main() -> None:
     """Main function to run data setup process."""
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
