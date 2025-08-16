@@ -59,37 +59,30 @@ class PretrainableGNN(nn.Module):
         self.heads = nn.ModuleDict()
         for task_name in task_names:
             if task_name == 'node_feat_mask':
-                # Domain-specific reconstruction heads
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
                     dom_heads[domain_name] = MLPHead()
                 self.heads[task_name] = dom_heads
             elif task_name == 'link_pred':
-                # Link prediction head (non-parametric, shared)
                 self.heads[task_name] = DotProductDecoder()
             elif task_name == 'node_contrast':
-                # Domain-specific projection heads
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
                     dom_heads[domain_name] = MLPHead(dim_out=CONTRASTIVE_PROJ_DIM)
                 self.heads[task_name] = dom_heads
             elif task_name == 'graph_contrast':
-                # Domain-specific discriminators
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
                     dom_heads[domain_name] = BilinearDiscriminator()
                 self.heads[task_name] = dom_heads
             elif task_name == 'graph_prop':
-                # Domain-specific graph property heads
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
                     dom_heads[domain_name] = MLPHead(dim_hidden=GRAPH_PROP_HEAD_HIDDEN_DIM, dim_out=GRAPH_PROPERTY_DIM)
                 self.heads[task_name] = dom_heads
             elif task_name == 'domain_adv':
-                # Shared domain adversarial classifier across all domains (predicts domain)
                 self.heads[task_name] = DomainClassifierHead()
 
-        # Move to device
         self.to(self.device)
 
     def apply_node_masking(self, batch: Batch, domain_name: str) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -106,10 +99,8 @@ class PretrainableGNN(nn.Module):
                 - mask_indices: Indices of masked nodes
                 - target_h0: Original h_0 embeddings for masked nodes
         """
-        # Move batch to the correct device
         batch = batch.to(self.device)
 
-        # Compute original h_0 embeddings
         encoder = self.input_encoders[domain_name]
         with torch.no_grad():
             original_h0 = encoder(batch.x)
@@ -118,7 +109,6 @@ class PretrainableGNN(nn.Module):
 
         mask_candidates = (torch.rand(num_nodes, device=self.device) < NODE_FEATURE_MASKING_MASK_RATE)
         
-        # Ensure at least one node is NOT masked per graph (to prevent empty graphs)
         num_graphs = int(batch.batch.max().item()) + 1
         mask_counts = torch.bincount(batch.batch, weights=mask_candidates.to(torch.long), minlength=num_graphs)
         node_counts = torch.bincount(batch.batch, minlength=num_graphs)
@@ -149,16 +139,12 @@ class PretrainableGNN(nn.Module):
         Returns:
             Final node embeddings (num_nodes, hidden_dim)
         """
-        # Move batch to the correct device
         batch = batch.to(self.device)
 
-        # Select domain-specific encoder
         encoder = self.input_encoders[domain_name]
 
-        # Encode domain-specific features to shared representation
         h_0 = encoder(batch.x)
 
-        # Process with shared GNN backbone
         final_node_embeddings = self.gnn_backbone(h_0, batch.edge_index)
 
         return final_node_embeddings

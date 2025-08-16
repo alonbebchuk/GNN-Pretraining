@@ -58,17 +58,14 @@ class GINLayer(nn.Module):
         """
         super(GINLayer, self).__init__()
 
-        # GIN MLP: Linear -> ReLU -> Linear
         gin_mlp = nn.Sequential(
             nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM),
             nn.ReLU(),
             nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM)
         )
 
-        # GIN convolution with learnable epsilon
         self.gin_conv = GINConv(gin_mlp, train_eps=True)
 
-        # Post-activation layers
         self.layer_norm = nn.LayerNorm(GNN_HIDDEN_DIM)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=DROPOUT_RATE)
@@ -84,13 +81,10 @@ class GINLayer(nn.Module):
         Returns:
             Updated node embeddings of shape (num_nodes, hidden_dim)
         """
-        # GIN convolution (aggregation + MLP transformation)
         h_conv = self.gin_conv(h, edge_index)
 
-        # Residual connection
         h_res = h_conv + h
 
-        # Post-activation layers
         h_out = self.layer_norm(h_res)
         h_out = self.relu(h_out)
         h_out = self.dropout(h_out)
@@ -111,7 +105,6 @@ class GIN_Backbone(nn.Module):
         """
         super(GIN_Backbone, self).__init__()
 
-        # Stack of GIN layers
         self.layers = nn.ModuleList([
             GINLayer()
             for _ in range(GNN_NUM_LAYERS)
@@ -128,7 +121,6 @@ class GIN_Backbone(nn.Module):
         Returns:
             Final node embeddings of shape (num_nodes, hidden_dim)
         """
-        # Pass through each layer sequentially
         for layer in self.layers:
             h = layer(h, edge_index)
 

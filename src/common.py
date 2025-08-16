@@ -19,7 +19,6 @@ GRAPH_PROP_HEAD_HIDDEN_DIM = 512
 DOMAIN_ADV_HEAD_HIDDEN_DIM = 128
 DOMAIN_ADV_HEAD_OUT_DIM = 4
 
-# Mask token initialization for node feature masking (BERT-style)
 MASK_TOKEN_INIT_MEAN = 0.0
 MASK_TOKEN_INIT_STD = 0.02
 
@@ -30,12 +29,8 @@ VAL_FRACTION = 0.1
 VAL_TEST_FRACTION = 0.2
 VAL_TEST_SPLIT_RATIO = 0.5
 
-# Numerical stability and normalization
 NORMALIZATION_EPS = 1e-8
 NORMALIZATION_STD_FALLBACK = 1.0
-
-# TU dataset download options
-TUDATASET_USE_NODE_ATTR = True
 
 # -----------------------------------------------------------------------------
 # Graph Augmentations (GraphCL-style)
@@ -50,26 +45,20 @@ AUGMENTATION_NODE_DROP_RATE = 0.15
 # -----------------------------------------------------------------------------
 # Pretraining Tasks
 # -----------------------------------------------------------------------------
-# Node feature masking
 NODE_FEATURE_MASKING_MASK_RATE = 0.15
 
-# Node-level contrastive learning
 NODE_CONTRASTIVE_TEMPERATURE = float(0.1)
 
-# Link prediction
 NUM_NEGATIVE_SAMPLES = 1
 
-# Graph property prediction
 GRAPH_PROPERTY_DIM = 15
 
 # -----------------------------------------------------------------------------
 # Loss Weighting & Schedulers
 # -----------------------------------------------------------------------------
-# Uncertainty weighting (Kendall & Gal-style multi-task weighting)
 UNCERTAINTY_LOSS_COEF = 0.5
-LOGSIGMA_TO_SIGMA_SCALE = 0.5               # sigma = exp(0.5 * log_sigma_sq)
+LOGSIGMA_TO_SIGMA_SCALE = 0.5
 
-# GRL Lambda schedule (DANN)
 GRL_GAMMA = 10.0
 GRL_LAMBDA_MIN = 0.0
 GRL_LAMBDA_MAX = 1.0
@@ -94,7 +83,6 @@ FEATURE_TYPES = {
     'CiteSeer': 'bow'
 }
 
-# Domain-specific input feature dimensions (PyG datasets)
 DOMAIN_DIMENSIONS = {
     'MUTAG': 7,
     'PROTEINS': 4,
@@ -106,12 +94,10 @@ DOMAIN_DIMENSIONS = {
     'CiteSeer': 3703
 }
 
-
 # -----------------------------------------------------------------------------
 # Pretraining - Training Hyperparameters & Tracking (shared, not per-run)
 # -----------------------------------------------------------------------------
 
-# Training schedule
 PRETRAIN_EPOCHS = 100
 PRETRAIN_BATCH_SIZE_PER_DOMAIN = 8
 PRETRAIN_EVAL_EVERY_EPOCHS = 1
@@ -120,7 +106,6 @@ PRETRAIN_NUM_WORKERS = 0
 PRETRAIN_LR_WARMUP_FRACTION = 0.1
 PRETRAIN_LR_MIN_FACTOR = 0.0
 
-# Optimizer settings
 PRETRAIN_LR_MODEL = 3e-4
 PRETRAIN_LR_UNCERTAINTY = 5e-3
 PRETRAIN_ADAM_BETAS = (0.9, 0.999)
@@ -128,10 +113,8 @@ PRETRAIN_ADAM_EPS = 1e-8
 PRETRAIN_MODEL_WEIGHT_DECAY = 0.01
 PRETRAIN_UNCERTAINTY_WEIGHT_DECAY = 0.0
 
-# Tracking & IO
 WANDB_PROJECT = 'gnn-pretraining'
 PRETRAIN_OUTPUT_DIR = 'checkpoints/pretrain'
 
-# DataLoader behavior
 PRETRAIN_PIN_MEMORY = True
 PRETRAIN_DROP_LAST = False

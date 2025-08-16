@@ -37,7 +37,6 @@ class GraphPropertyCalculator:
         num_nodes = graph.x.shape[0]
         edge_index = graph.edge_index
 
-        # Build undirected simple graph using PyG utilities
         edge_index, _ = remove_self_loops(edge_index)
         edge_index = to_undirected(edge_index, num_nodes=num_nodes)
         pyg_simple = Data(edge_index=edge_index, num_nodes=num_nodes)
@@ -46,37 +45,30 @@ class GraphPropertyCalculator:
         N = G.number_of_nodes()
         E = G.number_of_edges()
 
-        # Degrees
         degree_dict = dict(G.degree())
         degrees = np.array(list(degree_dict.values()), dtype=float)
         deg_mean = float(degrees.mean())
         deg_var = float(degrees.var())
         deg_max = float(degrees.max())
 
-        # Density
         density = float(nx.density(G))
 
-        # Clustering metrics
         clustering_global = float(nx.average_clustering(G))
         transitivity = float(nx.transitivity(G)) if N > 2 else 0.0
 
-        # Triangle count
         if N > 2:
             tri_dict = nx.triangles(G)
             triangles = float(sum(tri_dict.values()) / 3.0)
         else:
             triangles = 0.0
 
-        # Connectivity
         num_components = float(nx.number_connected_components(G))
 
-        # Diameter on largest component
         diameter = 0.0
         components = [G.subgraph(c).copy() for c in nx.connected_components(G)]
         H = max(components, key=lambda g: g.number_of_nodes())
         diameter = float(nx.diameter(H))
 
-        # Assortativity
         if float(degrees.std()) == 0.0:
             assortativity = 0.0
         else:
@@ -84,7 +76,6 @@ class GraphPropertyCalculator:
             if math.isnan(assortativity) or math.isinf(assortativity):
                 assortativity = 0.0
 
-        # Degree centralization (Freeman): sum(max_deg - deg_i) / ((N-1)*(N-2))
         if N > 2:
             numerator = float((degrees.max() - degrees).sum())
             denominator = float((N - 1) * (N - 2))
@@ -92,13 +83,11 @@ class GraphPropertyCalculator:
         else:
             degree_centralization = 0.0
 
-        # Closeness centralization: sum(max_c - c_i) / (N-1)
         closeness_dict = nx.closeness_centrality(G)
         closeness = np.array(list(closeness_dict.values()), dtype=float)
         c_max = closeness.max()
         closeness_centralization = float((c_max - closeness).sum() / (N - 1))
 
-        # Betweenness centralization: sum(max_b - b_i) / ((N-1)*(N-2)/2)
         if N > 2:
             betw_dict = nx.betweenness_centrality(G, normalized=True)
             betw = np.array(list(betw_dict.values()), dtype=float)
@@ -138,7 +127,6 @@ class GraphPropertyCalculator:
         Returns:
             Tensor of shape [num_graphs, 15]
         """
-        # Pre-allocate tensor for better memory efficiency
         dataset_list = list(dataset) if not isinstance(dataset, list) else dataset
         props_tensor = torch.zeros((len(dataset_list), 15), dtype=torch.float32)
 
@@ -163,7 +151,7 @@ class GraphPropertyCalculator:
         Returns:
             Tensor of shape [num_graphs, 15] standardized via z-score using train stats.
         """
-        all_props = self.compute_for_dataset(dataset)  # [N, 15]
+        all_props = self.compute_for_dataset(dataset)
 
         train_props = all_props[train_idx]
         mean = train_props.mean(dim=0)

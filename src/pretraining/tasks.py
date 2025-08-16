@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from torch_geometric.data import Data, Batch
+from torch_geometric.data import Batch
 from torch_geometric.nn import global_mean_pool
 from torch_geometric.utils import batched_negative_sampling
 
@@ -49,10 +49,10 @@ class NodeFeatureMaskingTask(BasePretrainTask):
     """
 
     def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs: Any) -> Tensor:
+        device = self.model.device
         per_domain_losses: List[Tensor] = []
 
         for domain_name, batch in batches_by_domain.items():
-            device = self.model.device
             masked_h0, mask_indices, target_h0 = self.model.apply_node_masking(batch, domain_name)
 
             h_final = self.model.forward_with_h0(masked_h0.to(device), batch.edge_index.to(device))
@@ -71,11 +71,11 @@ class LinkPredictionTask(BasePretrainTask):
     """
 
     def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs: Any) -> Tensor:
+        device = self.model.device
         decoder = self.model.get_head('link_pred')
         per_domain_losses: List[Tensor] = []
 
         for domain_name, batch in batches_by_domain.items():
-            device = self.model.device
             pos_edges = batch.edge_index.to(device)
             neg_edges = batched_negative_sampling(
                 edge_index=pos_edges,
@@ -106,10 +106,6 @@ class NodeContrastiveTask(BasePretrainTask):
     compute a single large similarity matrix for maximum negative sampling.
     """
 
-    def __init__(self, model: nn.Module) -> None:
-        super().__init__(model)
-        self.augmentor = GraphAugmentor()
-
     def _simclr_nt_xent(self, z1: Tensor, z2: Tensor) -> Tensor:
         """
         Compute canonical SimCLR NT-Xent loss with in-view + cross-view negatives.
@@ -126,35 +122,24 @@ class NodeContrastiveTask(BasePretrainTask):
         Returns:
             Scalar loss tensor
         """
-        if z1.size(0) == 0:
-            return torch.tensor(0.0, device=z1.device, requires_grad=True)
-        
         N = z1.size(0)
         device = z1.device
         
-        # Normalize embeddings
         z1 = F.normalize(z1, dim=1)
         z2 = F.normalize(z2, dim=1)
         
-        # Concatenate both views: [2N, D]
         z = torch.cat([z1, z2], dim=0)
         
-        # Compute similarity matrix: [2N, 2N]
         sim_matrix = (z @ z.T) / NODE_CONTRASTIVE_TEMPERATURE
         
-        # Create masks to exclude self-similarities (diagonal)
         mask = torch.eye(2 * N, device=device, dtype=torch.bool)
         sim_matrix = sim_matrix.masked_fill(mask, float('-inf'))
         
-        # Create positive pair indices
-        # For i in [0, N): positive is i+N
-        # For i in [N, 2N): positive is i-N
         pos_indices = torch.cat([
-            torch.arange(N, 2 * N, device=device),  # For first N anchors
-            torch.arange(0, N, device=device)       # For second N anchors
+            torch.arange(N, 2 * N, device=device),
+            torch.arange(0, N, device=device)
         ])
         
-        # Compute NT-Xent loss for all 2N anchors
         labels = pos_indices
         loss = F.cross_entropy(sim_matrix, labels)
         
@@ -165,34 +150,14 @@ class NodeContrastiveTask(BasePretrainTask):
         per_domain_z2: List[Tensor] = []
 
         for domain_name, batch in batches_by_domain.items():
-            # Fully batched augmentations
-            batch_v1: Batch = self.augmentor(batch)
-            batch_v2: Batch = self.augmentor(batch)
+            batch_v1, batch_v2 = GraphAugmentor.create_two_views(batch)
 
             h1 = self.model(batch_v1, domain_name)
             h2 = self.model(batch_v2, domain_name)
 
-            # Build matching pairs across the whole batch using global original indices
-            v1_orig = batch_v1.node_indices.to(h1.device)
-            v2_orig = batch_v2.node_indices.to(h2.device)
-            if v1_orig.numel() == 0 or v2_orig.numel() == 0:
-                continue
-
-            # searchsorted-based intersection on original ids
-            sort2, idx2 = torch.sort(v2_orig)
-            pos = torch.searchsorted(sort2, v1_orig)
-            valid = (pos < sort2.numel()) & (sort2[pos] == v1_orig)
-            if not valid.any():
-                continue
-            idx1_keep = valid.nonzero(as_tuple=True)[0]
-            idx2_keep = idx2[pos[valid]]
-
             proj_head = self.model.get_head('node_contrast', domain_name)
-            per_domain_z1.append(proj_head(h1[idx1_keep]))
-            per_domain_z2.append(proj_head(h2[idx2_keep]))
-
-        if not per_domain_z1:
-            return torch.tensor(0.0, device=self.model.device, requires_grad=True)
+            per_domain_z1.append(proj_head(h1))
+            per_domain_z2.append(proj_head(h2))
 
         z1_cat = torch.cat(per_domain_z1, dim=0)
         z2_cat = torch.cat(per_domain_z2, dim=0)
@@ -212,24 +177,17 @@ class GraphContrastiveTask(BasePretrainTask):
 
         for domain_name, batch in batches_by_domain.items():
             device = self.model.device
-            # Node embeddings and per-graph summaries
-            h = self.model(batch, domain_name)  # [N, D]
-            if h.numel() == 0:
-                continue
+            h = self.model(batch, domain_name)
             batch_vec = batch.batch.to(device)
-            s = global_mean_pool(h, batch_vec)  # [G, D]
+            s = global_mean_pool(h, batch_vec)
             G = s.size(0)
             N = h.size(0)
-            if G == 0 or N == 0:
-                continue
 
-            # Compute all pair logits via bilinear in one matmul: logits_ij = (W h_i) dot s_j
             disc = self.model.get_head('graph_contrast', domain_name)
-            Hw = disc.W(h)  # [N, D]
-            logits = Hw @ s.T  # [N, G]
+            Hw = disc.W(h)
+            logits = Hw @ s.T
             probs = torch.sigmoid(logits)
 
-            # One-hot labels: node i is positive only for its own graph
             labels = torch.zeros_like(probs)
             labels[torch.arange(N, device=device), batch_vec] = 1.0
 

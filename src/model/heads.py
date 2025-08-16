@@ -69,11 +69,9 @@ class DotProductDecoder(nn.Module):
         Returns:
             Edge probabilities of shape (num_edges,)
         """
-        # Get embeddings for source and target nodes
-        h_src = h[edge_index[0]]  # Shape: (num_edges, embedding_dim)
-        h_dst = h[edge_index[1]]  # Shape: (num_edges, embedding_dim)
+        h_src = h[edge_index[0]]
+        h_dst = h[edge_index[1]]
 
-        # Compute dot product and apply sigmoid
         edge_scores = torch.sigmoid((h_src * h_dst).sum(dim=-1))
 
         return edge_scores
@@ -93,7 +91,6 @@ class BilinearDiscriminator(nn.Module):
         """
         super(BilinearDiscriminator, self).__init__()
 
-        # Bilinear transformation matrix (no bias)
         self.W = nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, bias=False)
 
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -107,7 +104,6 @@ class BilinearDiscriminator(nn.Module):
         Returns:
             Scores of shape (N,)
         """
-        # Apply bilinear transformation: x^T * W * y
         scores = torch.sigmoid((self.W(x) * y).sum(dim=-1))
 
         return scores
@@ -130,10 +126,8 @@ class DomainClassifierHead(nn.Module):
         """
         super(DomainClassifierHead, self).__init__()
 
-        # Gradient reversal layer for domain-adversarial training
         self.grl = GradientReversalLayer()
 
-        # Domain classifier
         self.classifier = nn.Sequential(
             nn.Linear(GNN_HIDDEN_DIM, DOMAIN_ADV_HEAD_HIDDEN_DIM),
             nn.ReLU(),
@@ -151,8 +145,6 @@ class DomainClassifierHead(nn.Module):
         Returns:
             Domain logits of shape (batch_size, num_pretrain_domains)
         """
-        # Apply gradient reversal
         x_reversed = self.grl(x, lambda_val)
 
-        # Apply domain classification
         return self.classifier(x_reversed)

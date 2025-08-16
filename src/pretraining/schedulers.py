@@ -1,7 +1,12 @@
 import math
 from dataclasses import dataclass
-from src.common import GRL_GAMMA, GRL_LAMBDA_MIN, GRL_LAMBDA_MAX
-import math
+from src.common import (
+    GRL_GAMMA, 
+    GRL_LAMBDA_MIN, 
+    GRL_LAMBDA_MAX,
+    PRETRAIN_LR_WARMUP_FRACTION,
+    PRETRAIN_LR_MIN_FACTOR
+)
 
 
 @dataclass
@@ -27,20 +32,13 @@ class GRLLambdaScheduler:
 
     def __call__(self) -> float:
         p = max(0.0, min(1.0, self._current_step / float(self.total_steps)))
-        core = 2.0 / (1.0 + math.exp(-self.gamma * p)) - 1.0  # in [0, 1]
+        core = 2.0 / (1.0 + math.exp(-self.gamma * p)) - 1.0
         return float(self.lambda_min + (self.lambda_max - self.lambda_min) * core)
 
     def step(self, n: int = 1) -> None:
-        """Advance the scheduler by n steps (e.g., after each optimizer step)."""
         self._current_step = min(self.total_steps, self._current_step + n)
 
     def update(self, progress: float) -> None:
-        """
-        Set progress directly.
-
-        Args:
-            progress: Value in [0, 1] indicating training progress.
-        """
         self._current_step = int(round(progress * self.total_steps))
 
     def reset(self) -> None:
@@ -56,8 +54,8 @@ class CosineWithWarmup:
     """
 
     total_steps: int
-    warmup_fraction: float = 0.1
-    lr_min_factor: float = 0.0
+    warmup_fraction: float = PRETRAIN_LR_WARMUP_FRACTION
+    lr_min_factor: float = PRETRAIN_LR_MIN_FACTOR
 
     def __post_init__(self) -> None:
         self._current_step: int = 0
@@ -66,9 +64,7 @@ class CosineWithWarmup:
     def __call__(self) -> float:
         s = min(self._current_step, self.total_steps)
         if s < self._warmup_steps:
-            # Linear warmup from near-zero to 1.0
             return float((s + 1) / float(self._warmup_steps))
-        # Cosine decay to lr_min_factor
         progress = (s - self._warmup_steps) / max(1.0, float(self.total_steps - self._warmup_steps))
         cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
         return float(self.lr_min_factor + (1.0 - self.lr_min_factor) * cosine)

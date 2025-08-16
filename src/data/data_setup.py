@@ -21,15 +21,12 @@ from src.common import (
     VAL_TEST_FRACTION,
     VAL_TEST_SPLIT_RATIO,
     VAL_FRACTION,
-    TUDATASET_USE_NODE_ATTR,
 )
 from typing import List, Dict
 from numpy.typing import NDArray
 from sklearn.preprocessing import StandardScaler
 
-# --- Configuration (centralized in src.common) -------------------------------
 
-# Define paths
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = ROOT_DIR / 'data'
 RAW_DIR = DATA_DIR / 'raw'
@@ -43,7 +40,6 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_]
     feature_type = FEATURE_TYPES.get(dataset_name)
 
     if feature_type == 'continuous':
-        # Z-score standardization for continuous features
         train_X_list = [dataset[i].x.detach().cpu() for i in train_idx]
         train_X = torch.cat(train_X_list, dim=0).numpy()
 
@@ -58,11 +54,9 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_]
         logging.info(f"Applied z-score standardization to {dataset_name}")
 
     elif feature_type == 'categorical':
-        # Categorical features are already one-hot encoded by PyG datasets
         logging.info(f"Categorical features for {dataset_name} are already one-hot encoded by PyG")
 
     elif feature_type == 'bow':
-        # BoW features are handled by NormalizeFeatures transform in Planetoid loading
         logging.info(f"BoW features for {dataset_name} handled by NormalizeFeatures transform")
 
     else:
@@ -96,13 +90,10 @@ def process_tudatasets() -> None:
     calculator = GraphPropertyCalculator()
 
     for name in tqdm(ALL_TUDATASETS, desc="Processing TU datasets"):
-        # Download dataset
         logging.info(f"Downloading {name}...")
-        dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=TUDATASET_USE_NODE_ATTR)
+        dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=True)
         logging.info(f"Downloaded {name}: {len(dataset)} graphs")
 
-        # Overlap datasets: create a single canonical 80/10/10 split used by downstream,
-        # then derive a pretraining-only val from within the canonical train
         if name in OVERLAP_TUDATASETS:
             canonical_ds = copy.deepcopy(dataset)
             num_graphs = len(canonical_ds)
@@ -114,10 +105,8 @@ def process_tudatasets() -> None:
             val_idx_rel, test_idx_rel = next(sss_val_test.split(np.arange(len(val_test_idx)), val_test_labels))
             val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
 
-            # Apply feature preprocessing
             apply_feature_preprocessing(canonical_ds, train_idx, name)
 
-            # Downstream: save normalized graphs and canonical splits
             downstream_splits = {
                 'train': torch.tensor(train_idx, dtype=torch.long),
                 'val': torch.tensor(val_idx, dtype=torch.long),
@@ -125,15 +114,12 @@ def process_tudatasets() -> None:
             }
             save_processed_data(f"{name}_downstream", list(canonical_ds), downstream_splits)
 
-            # Build pretraining dataset as a subset of canonical train only
             canonical_train_graphs = [copy.deepcopy(dataset[int(i)]) for i in train_idx]
             ss_ptrain = ShuffleSplit(n_splits=1, test_size=VAL_FRACTION, random_state=RANDOM_SEED)
             tr_rel, va_rel = next(ss_ptrain.split(np.arange(len(canonical_train_graphs))))
 
-            # Apply feature preprocessing
             apply_feature_preprocessing(canonical_train_graphs, tr_rel, name)
 
-            # Attach standardized graph properties per-graph
             attach_standardized_graph_properties(canonical_train_graphs, tr_rel, calculator)
 
             pretrain_splits = {
@@ -143,17 +129,14 @@ def process_tudatasets() -> None:
             save_processed_data(f"{name}_pretrain", list(canonical_train_graphs), pretrain_splits)
 
         else:
-            # Pre-training splits (90/10) for pure pretrain-only datasets
             if name in PRETRAIN_TUDATASETS:
                 pretrain_dataset = copy.deepcopy(dataset)
                 num_graphs = len(pretrain_dataset)
                 ss_train_val = ShuffleSplit(n_splits=1, test_size=VAL_FRACTION, random_state=RANDOM_SEED)
                 train_idx, val_idx = next(ss_train_val.split(np.arange(num_graphs)))
 
-                # Apply feature preprocessing
                 apply_feature_preprocessing(pretrain_dataset, train_idx, name)
 
-                # Attach standardized graph properties per-graph
                 attach_standardized_graph_properties(pretrain_dataset, train_idx, calculator)
 
                 pretrain_splits = {
@@ -162,7 +145,6 @@ def process_tudatasets() -> None:
                 }
                 save_processed_data(f"{name}_pretrain", list(pretrain_dataset), pretrain_splits)
 
-            # Downstream splits (80/10/10) for pure downstream-only datasets
             if name in DOWNSTREAM_TUDATASETS:
                 downstream_dataset = copy.deepcopy(dataset)
                 num_graphs = len(downstream_dataset)
@@ -174,7 +156,6 @@ def process_tudatasets() -> None:
                 val_idx_rel, test_idx_rel = next(sss_val_test.split(np.arange(len(val_test_idx)), val_test_labels))
                 val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
 
-                # Apply feature preprocessing
                 apply_feature_preprocessing(downstream_dataset, train_idx, name)
 
                 downstream_splits = {
@@ -190,7 +171,6 @@ def process_planetoid_datasets() -> None:
     logging.info("Processing Planetoid datasets...")
 
     for name in tqdm(ALL_PLANETOID_DATASETS, desc="Processing Planetoid datasets"):
-        # Download dataset with NormalizeFeatures applied at load time
         logging.info(f"Downloading {name}...")
         dataset = Planetoid(root=RAW_DIR, name=name, transform=NormalizeFeatures())
         data = dataset[0]
@@ -210,14 +190,12 @@ def main() -> None:
     """Main function to run data setup process."""
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    # Create directories
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(RAW_DIR, exist_ok=True)
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     logging.info(f"Raw data: {RAW_DIR}")
     logging.info(f"Processed data: {PROCESSED_DIR}")
 
-    # Process datasets
     process_tudatasets()
     process_planetoid_datasets()
     logging.info("Data processing completed!")
