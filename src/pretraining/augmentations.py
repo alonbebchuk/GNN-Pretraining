@@ -102,7 +102,6 @@ class EdgeDropping:
         keep_edges = keep_mask.nonzero(as_tuple=True)[0]
 
         batch.edge_index = batch.edge_index[:, keep_edges]
-
         return batch
 
 
@@ -129,7 +128,6 @@ class AttributeMasking:
         mask_dims = torch.randperm(num_features, device=device)[:num_mask]
 
         batch.x[:, mask_dims] = 0.0
-
         return batch
 
 
