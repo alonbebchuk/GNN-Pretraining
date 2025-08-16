@@ -63,7 +63,6 @@ class NodeDropping:
         edge_index, _ = subgraph(keep_nodes, batch.edge_index)
 
         batch.x = batch.x[keep_nodes]
-        batch.node_indices = batch.node_indices[keep_nodes]
         batch.batch = batch.batch[keep_nodes]
         batch.edge_index = edge_index
         return batch
@@ -86,10 +85,10 @@ class EdgeDropping:
         batch = batch.clone()
         device = batch.edge_index.device
         num_edges = batch.edge_index.shape[1]
+        edge_to_graph = batch.batch[batch.edge_index[0]]
         
         keep_mask = (torch.rand(num_edges, device=device) < (1.0 - AUGMENTATION_EDGE_DROP_RATE))
         
-        edge_to_graph = batch.batch[batch.edge_index[0]]
         num_graphs = int(batch.batch.max().item()) + 1
         keep_counts = torch.bincount(edge_to_graph, weights=keep_mask.to(torch.long), minlength=num_graphs)
         zero_edge_graphs = (keep_counts == 0)
@@ -100,9 +99,9 @@ class EdgeDropping:
             starts = ptr[:-1][zero_edge_graphs]
             keep_mask[starts] = True
         
-        keep_indices = keep_mask.nonzero(as_tuple=True)[0]
+        keep_edges = keep_mask.nonzero(as_tuple=True)[0]
 
-        batch.edge_index = batch.edge_index[:, keep_indices]
+        batch.edge_index = batch.edge_index[:, keep_edges]
 
         return batch
 
