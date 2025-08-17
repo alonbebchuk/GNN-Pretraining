@@ -33,7 +33,7 @@ class UncertaintyWeighter(nn.Module):
         """
         device = next(iter(raw_losses.values())).device
         total = torch.tensor(0.0, device=device)
-        components: Dict[str, torch.Tensor] = {}
+        components = {}
 
         for t in self.weighted_task_names:
             ls = raw_losses[t]
@@ -50,7 +50,7 @@ class UncertaintyWeighter(nn.Module):
 
     def get_task_sigmas(self) -> Dict[str, float]:
         """Return current sigma values per weighted task as Python floats."""
-        sigmas: Dict[str, float] = {}
+        sigmas = {}
         for t, p in self.log_sigma_sq.items():
             sigmas[t] = float(torch.exp(LOGSIGMA_TO_SIGMA_SCALE * p).detach().cpu())
         return sigmas

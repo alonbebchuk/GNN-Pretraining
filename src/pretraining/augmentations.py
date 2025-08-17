@@ -50,10 +50,10 @@ class NodeDropping:
         keep_mask = (torch.rand(batch.x.size(0), device=device) < (1.0 - AUGMENTATION_NODE_DROP_RATE))
 
         num_graphs = int(batch.batch.max().item()) + 1
-        keep_counts = torch.bincount(batch.batch, weights=keep_mask.to(torch.long), minlength=num_graphs)
+        keep_counts = torch.bincount(batch.batch.to(device), weights=keep_mask.to(torch.long), minlength=num_graphs)
         zero_node_graphs = (keep_counts == 0)
         if zero_node_graphs.any():
-            node_counts = torch.bincount(batch.batch, minlength=num_graphs)
+            node_counts = torch.bincount(batch.batch.to(device), minlength=num_graphs)
             ptr = torch.zeros(num_graphs + 1, device=device, dtype=torch.long)
             ptr[1:] = torch.cumsum(node_counts, dim=0)
             starts = ptr[:-1][zero_node_graphs]
@@ -85,20 +85,20 @@ class EdgeDropping:
         batch = batch.clone()
         device = batch.edge_index.device
         num_edges = batch.edge_index.shape[1]
-        edge_to_graph = batch.batch[batch.edge_index[0]]
-        
+        edge_to_graph = batch.batch.to(device)[batch.edge_index[0]]
+
         keep_mask = (torch.rand(num_edges, device=device) < (1.0 - AUGMENTATION_EDGE_DROP_RATE))
-        
+
         num_graphs = int(batch.batch.max().item()) + 1
-        keep_counts = torch.bincount(edge_to_graph, weights=keep_mask.to(torch.long), minlength=num_graphs)
+        keep_counts = torch.bincount(edge_to_graph.to(device), weights=keep_mask.to(torch.long), minlength=num_graphs)
         zero_edge_graphs = (keep_counts == 0)
         if zero_edge_graphs.any():
-            edge_counts = torch.bincount(edge_to_graph, minlength=num_graphs)
+            edge_counts = torch.bincount(edge_to_graph.to(device), minlength=num_graphs)
             ptr = torch.zeros(num_graphs + 1, device=device, dtype=torch.long)
             ptr[1:] = torch.cumsum(edge_counts, dim=0)
             starts = ptr[:-1][zero_edge_graphs]
             keep_mask[starts] = True
-        
+
         keep_edges = keep_mask.nonzero(as_tuple=True)[0]
 
         batch.edge_index = batch.edge_index[:, keep_edges]
@@ -138,30 +138,30 @@ class GraphAugmentor:
     def create_two_views(batch: Batch) -> Tuple[Batch, Batch]:
         """
         Create two augmented views with shared node dropping but independent edge/attribute augmentations.
-        
+
         This is more efficient and conceptually correct for contrastive learning than independent
         augmentations followed by intersection computation.
-        
+
         Args:
             batch: Original batch
-            
+
         Returns:
             Tuple of (view1, view2) with same nodes but different edge/attribute augmentations
         """
         batch_v1 = batch.clone()
         if random.random() < AUGMENTATION_NODE_DROP_PROB:
             batch_v1 = NodeDropping.apply(batch_v1)
-        
+
         batch_v2 = batch_v1.clone()
-        
+
         if random.random() < AUGMENTATION_EDGE_DROP_PROB:
             batch_v1 = EdgeDropping.apply(batch_v1)
         if random.random() < AUGMENTATION_EDGE_DROP_PROB:
             batch_v2 = EdgeDropping.apply(batch_v2)
-            
+
         if random.random() < AUGMENTATION_ATTR_MASK_PROB:
             batch_v1 = AttributeMasking.apply(batch_v1)
         if random.random() < AUGMENTATION_ATTR_MASK_PROB:
             batch_v2 = AttributeMasking.apply(batch_v2)
-        
+
         return batch_v1, batch_v2

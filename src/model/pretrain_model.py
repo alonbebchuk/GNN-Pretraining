@@ -108,17 +108,17 @@ class PretrainableGNN(nn.Module):
         num_nodes = batch.x.shape[0]
 
         mask_candidates = (torch.rand(num_nodes, device=self.device) < NODE_FEATURE_MASKING_MASK_RATE)
-        
+
         num_graphs = int(batch.batch.max().item()) + 1
-        mask_counts = torch.bincount(batch.batch, weights=mask_candidates.to(torch.long), minlength=num_graphs)
-        node_counts = torch.bincount(batch.batch, minlength=num_graphs)
-        all_masked_graphs = (mask_counts == node_counts) & (node_counts > 0)        
+        mask_counts = torch.bincount(batch.batch.to(self.device), weights=mask_candidates.to(torch.long), minlength=num_graphs)
+        node_counts = torch.bincount(batch.batch.to(self.device), minlength=num_graphs)
+        all_masked_graphs = (mask_counts == node_counts) & (node_counts > 0)
         if all_masked_graphs.any():
             ptr = torch.zeros(num_graphs + 1, device=self.device, dtype=torch.long)
             ptr[1:] = torch.cumsum(node_counts, dim=0)
             starts = ptr[:-1][all_masked_graphs]
             mask_candidates[starts] = False
-        
+
         mask_indices = mask_candidates.nonzero(as_tuple=True)[0]
 
         target_h0 = original_h0[mask_indices].clone()
@@ -152,13 +152,13 @@ class PretrainableGNN(nn.Module):
     def forward_with_h0(self, h_0: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         """
         Forward pass starting from precomputed h_0 embeddings (used by masking task).
-        
+
         Args:
             h_0: Initial node embeddings tensor of shape [total_nodes_in_batch, hidden_dim]
                  Contains concatenated embeddings from all nodes across all graphs in the batch
             edge_index: Edge indices tensor of shape [2, total_edges_in_batch]
                        Contains concatenated edges from all graphs in the batch
-        
+
         Returns:
             Final node embeddings tensor of shape [total_nodes_in_batch, hidden_dim]
         """

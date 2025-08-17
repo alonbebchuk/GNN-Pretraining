@@ -28,7 +28,7 @@ class GRLLambdaScheduler:
     lambda_max: float = GRL_LAMBDA_MAX
 
     def __post_init__(self) -> None:
-        self._current_step: int = 0
+        self._current_step = 0
 
     def __call__(self) -> float:
         p = max(0.0, min(1.0, self._current_step / float(self.total_steps)))

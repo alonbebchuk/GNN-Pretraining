@@ -49,8 +49,6 @@ NODE_FEATURE_MASKING_MASK_RATE = 0.15
 
 NODE_CONTRASTIVE_TEMPERATURE = float(0.1)
 
-NUM_NEGATIVE_SAMPLES = 1
-
 GRAPH_PROPERTY_DIM = 15
 
 # -----------------------------------------------------------------------------

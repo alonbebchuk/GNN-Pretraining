@@ -97,7 +97,7 @@ class GraphPropertyCalculator:
         else:
             betweenness_centralization = 0.0
 
-        props: List[float] = [
+        props = [
             float(N),
             float(E),
             density,
