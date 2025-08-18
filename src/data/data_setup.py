@@ -11,6 +11,7 @@ from torch_geometric.data import Data
 from tqdm import tqdm
 from src.data.graph_properties import GraphPropertyCalculator
 from src.common import (
+    DATA_ROOT_DIR,
     RANDOM_SEED,
     PRETRAIN_TUDATASETS,
     DOWNSTREAM_TUDATASETS,
@@ -27,13 +28,10 @@ from numpy.typing import NDArray
 from sklearn.preprocessing import StandardScaler
 
 
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-DATA_DIR = ROOT_DIR / 'data'
-RAW_DIR = DATA_DIR / 'raw'
-PROCESSED_DIR = DATA_DIR / 'processed'
+RAW_DIR = DATA_ROOT_DIR / 'raw'
+PROCESSED_DIR = DATA_ROOT_DIR / 'processed'
 
 # --- Helper Functions --------------------------------------------------------
-
 
 def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_], dataset_name: str) -> None:
     """Apply appropriate preprocessing based on feature type."""
@@ -185,12 +183,11 @@ def process_planetoid_datasets() -> None:
 
 # --- Main Execution ----------------------------------------------------------
 
-
 def main() -> None:
     """Main function to run data setup process."""
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(DATA_ROOT_DIR, exist_ok=True)
     os.makedirs(RAW_DIR, exist_ok=True)
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     logging.info(f"Raw data: {RAW_DIR}")

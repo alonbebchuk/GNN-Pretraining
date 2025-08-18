@@ -25,6 +25,8 @@ MASK_TOKEN_INIT_STD = 0.02
 # -----------------------------------------------------------------------------
 # Data Processing & Splits
 # -----------------------------------------------------------------------------
+DATA_ROOT_DIR = '/content/data'
+
 VAL_FRACTION = 0.1
 VAL_TEST_FRACTION = 0.2
 VAL_TEST_SPLIT_RATIO = 0.5
@@ -97,10 +99,10 @@ DOMAIN_DIMENSIONS = {
 # -----------------------------------------------------------------------------
 
 PRETRAIN_EPOCHS = 100
-PRETRAIN_BATCH_SIZE_PER_DOMAIN = 8
+PRETRAIN_BATCH_SIZE = 32
 PRETRAIN_EVAL_EVERY_EPOCHS = 1
 PRETRAIN_LOG_EVERY_STEPS = 10
-PRETRAIN_NUM_WORKERS = 0
+PRETRAIN_NUM_WORKERS = 4
 PRETRAIN_LR_WARMUP_FRACTION = 0.1
 PRETRAIN_LR_MIN_FACTOR = 0.0
 
@@ -112,7 +114,7 @@ PRETRAIN_MODEL_WEIGHT_DECAY = 0.01
 PRETRAIN_UNCERTAINTY_WEIGHT_DECAY = 0.0
 
 WANDB_PROJECT = 'gnn-pretraining'
-PRETRAIN_OUTPUT_DIR = 'checkpoints/pretrain'
+PRETRAIN_OUTPUT_DIR = '/content/outputs/pretrain'
 
 PRETRAIN_PIN_MEMORY = True
 PRETRAIN_DROP_LAST = False

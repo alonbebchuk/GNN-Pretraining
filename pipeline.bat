@@ -1,4 +1,11 @@
 @echo off
+
+REM Set your wandb API key here (get it from https://wandb.ai/settings)
+set WANDB_API_KEY=your_api_key_here
+
+REM Optional: Uncomment for offline mode during development/debugging
+REM set WANDB_MODE=offline
+
 REM Prepare data (runs once)
 python -m src.data.data_setup
 
