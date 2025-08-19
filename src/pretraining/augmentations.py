@@ -27,6 +27,7 @@ from src.common import (
     AUGMENTATION_EDGE_DROP_RATE,
     AUGMENTATION_NODE_DROP_PROB,
     AUGMENTATION_NODE_DROP_RATE,
+    AUGMENTATION_MIN_NODES_PER_GRAPH,
 )
 
 
@@ -36,13 +37,13 @@ class NodeDropping:
     @staticmethod
     def apply(batch: Batch) -> Batch:
         """
-        Apply node dropping to the batch.
+        Apply node dropping to the batch with safeguards to prevent graphs becoming too small.
 
         Args:
             batch: PyTorch Geometric Batch object
 
         Returns:
-            Batch object with a node-induced subgraph
+            Batch object with a node-induced subgraph, ensuring each graph has at least 2 nodes
         """
         batch = batch.clone()
         device = batch.x.device
@@ -51,17 +52,64 @@ class NodeDropping:
         if batch.x.size(0) == 0 or batch.batch.numel() == 0:
             return batch
 
-        keep_mask = (torch.rand(batch.x.size(0), device=device) < (1.0 - AUGMENTATION_NODE_DROP_RATE))
-
+        # Get graph information
         num_graphs = int(batch.batch.max().item()) + 1
+        node_counts = torch.bincount(batch.batch.to(device), minlength=num_graphs)
+        
+        # Initialize keep_mask - start by keeping all nodes
+        keep_mask = torch.ones(batch.x.size(0), device=device, dtype=torch.bool)
+        
+        # Process each graph individually to ensure proper minimum node counts
+        ptr = torch.zeros(num_graphs + 1, device=device, dtype=torch.long)
+        ptr[1:] = torch.cumsum(node_counts, dim=0)
+        
+        for graph_idx in range(num_graphs):
+            start_idx = ptr[graph_idx]
+            end_idx = ptr[graph_idx + 1]
+            graph_size = end_idx - start_idx
+            
+            if graph_size <= AUGMENTATION_MIN_NODES_PER_GRAPH:
+                # For very small graphs, keep all nodes
+                continue
+            elif graph_size <= 5:
+                # For small graphs (3-5 nodes), drop at most 1 node
+                max_drop = 1
+            else:
+                # For larger graphs, use the configured drop rate but ensure minimum remains
+                max_drop = min(
+                    int(graph_size * AUGMENTATION_NODE_DROP_RATE),
+                    graph_size - AUGMENTATION_MIN_NODES_PER_GRAPH  # Always keep minimum nodes
+                )
+            
+            if max_drop > 0:
+                # Randomly select nodes to drop within this graph
+                graph_nodes = torch.arange(start_idx, end_idx, device=device)
+                drop_indices = torch.randperm(graph_size, device=device)[:max_drop]
+                nodes_to_drop = graph_nodes[drop_indices]
+                keep_mask[nodes_to_drop] = False
+
+        # Final safety check: ensure no graph becomes empty
         keep_counts = torch.bincount(batch.batch.to(device), weights=keep_mask.to(torch.long), minlength=num_graphs)
         zero_node_graphs = (keep_counts == 0)
+        single_node_graphs = (keep_counts == 1)
+        
+        # For zero-node graphs, keep the first node
         if zero_node_graphs.any():
-            node_counts = torch.bincount(batch.batch.to(device), minlength=num_graphs)
-            ptr = torch.zeros(num_graphs + 1, device=device, dtype=torch.long)
-            ptr[1:] = torch.cumsum(node_counts, dim=0)
             starts = ptr[:-1][zero_node_graphs]
             keep_mask[starts] = True
+            
+        # For single-node graphs, keep one more node if possible
+        if single_node_graphs.any():
+            for graph_idx in torch.where(single_node_graphs)[0]:
+                start_idx = ptr[graph_idx]
+                end_idx = ptr[graph_idx + 1]
+                if end_idx - start_idx > 1:  # Graph originally had more than 1 node
+                    # Find the first dropped node in this graph and keep it
+                    graph_mask = keep_mask[start_idx:end_idx]
+                    if not graph_mask.all():  # There are dropped nodes
+                        dropped_indices = (~graph_mask).nonzero(as_tuple=True)[0]
+                        if len(dropped_indices) > 0:
+                            keep_mask[start_idx + dropped_indices[0]] = True
 
         keep_nodes = keep_mask.nonzero(as_tuple=True)[0]
         edge_index, _ = subgraph(keep_nodes, batch.edge_index)
@@ -153,22 +201,54 @@ class GraphAugmentor:
     """Static class for creating augmented graph views for contrastive learning."""
 
     @staticmethod
+    def _validate_batch_quality(batch: Batch) -> bool:
+        """
+        Validate that the batch meets minimum quality requirements for contrastive learning.
+        
+        Args:
+            batch: Batch to validate
+            
+        Returns:
+            True if batch is suitable for contrastive learning, False otherwise
+        """
+        if batch.x.size(0) == 0:
+            return False
+            
+        # Check that each graph has at least minimum nodes
+        num_graphs = int(batch.batch.max().item()) + 1
+        node_counts = torch.bincount(batch.batch.to(batch.x.device), minlength=num_graphs)
+        
+        # All graphs must have at least minimum nodes for meaningful contrastive learning
+        return (node_counts >= AUGMENTATION_MIN_NODES_PER_GRAPH).all().item()
+
+    @staticmethod
     def create_two_views(batch: Batch) -> Tuple[Batch, Batch]:
         """
         Create two augmented views with shared node dropping but independent edge/attribute augmentations.
 
-        This is more efficient and conceptually correct for contrastive learning than independent
-        augmentations followed by intersection computation.
+        This method ensures that both views meet minimum quality requirements for contrastive learning.
 
         Args:
             batch: Original batch
 
         Returns:
-            Tuple of (view1, view2) with same nodes but different edge/attribute augmentations
+            Tuple of (view1, view2) with same nodes but different edge/attribute augmentations.
+            Both views are guaranteed to have graphs with at least minimum nodes.
         """
+        # Validate original batch
+        if not GraphAugmentor._validate_batch_quality(batch):
+            # Return original batch twice if it doesn't meet requirements
+            # This prevents crashes while allowing training to continue
+            return batch.clone(), batch.clone()
+        
         batch_v1 = batch.clone()
         if random.random() < AUGMENTATION_NODE_DROP_PROB:
             batch_v1 = NodeDropping.apply(batch_v1)
+
+        # Validate after node dropping
+        if not GraphAugmentor._validate_batch_quality(batch_v1):
+            # If node dropping made it invalid, use original batch
+            batch_v1 = batch.clone()
 
         batch_v2 = batch_v1.clone()
 

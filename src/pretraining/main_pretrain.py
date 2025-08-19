@@ -58,6 +58,7 @@ from src.common import (
     AUGMENTATION_EDGE_DROP_RATE,
     AUGMENTATION_NODE_DROP_PROB,
     AUGMENTATION_NODE_DROP_RATE,
+    AUGMENTATION_MIN_NODES_PER_GRAPH,
     # Loss constants
     UNCERTAINTY_LOSS_COEF,
     LOGSIGMA_TO_SIGMA_SCALE,
@@ -537,6 +538,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
             "edge_drop_rate": AUGMENTATION_EDGE_DROP_RATE,
             "node_drop_prob": AUGMENTATION_NODE_DROP_PROB,
             "node_drop_rate": AUGMENTATION_NODE_DROP_RATE,
+            "min_nodes_per_graph": AUGMENTATION_MIN_NODES_PER_GRAPH,
         },
         
         # Loss weighting and scheduling

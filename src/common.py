@@ -43,6 +43,7 @@ AUGMENTATION_EDGE_DROP_PROB = 0.5
 AUGMENTATION_EDGE_DROP_RATE = 0.15
 AUGMENTATION_NODE_DROP_PROB = 0.5
 AUGMENTATION_NODE_DROP_RATE = 0.15
+AUGMENTATION_MIN_NODES_PER_GRAPH = 2
 
 # -----------------------------------------------------------------------------
 # Pretraining Tasks
