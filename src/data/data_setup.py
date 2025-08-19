@@ -28,8 +28,8 @@ from numpy.typing import NDArray
 from sklearn.preprocessing import StandardScaler
 
 
-RAW_DIR = DATA_ROOT_DIR / 'raw'
-PROCESSED_DIR = DATA_ROOT_DIR / 'processed'
+RAW_DIR = Path(DATA_ROOT_DIR) / 'raw'
+PROCESSED_DIR = Path(DATA_ROOT_DIR) / 'processed'
 
 # --- Helper Functions --------------------------------------------------------
 
@@ -62,19 +62,38 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_]
 
 
 def attach_standardized_graph_properties(dataset: List[Data], train_idx: NDArray[np.int_], calculator: GraphPropertyCalculator) -> None:
-    """Compute standardized graph properties and attach per-graph tensor at `graph_properties`."""
+    """Compute standardized graph properties and store them separately due to PyG bug."""
     props = calculator.compute_and_standardize_for_dataset(dataset, train_idx)
-    for i, g in enumerate(dataset):
-        g.graph_properties = props[i]
+    
+    # WORKAROUND: PyG has a severe bug where custom attributes disappear after loops on preprocessed graphs
+    # Instead of trying to attach to graph objects, we'll return the properties tensor for separate storage
+    
+    # Store the properties tensor as a global variable for this dataset processing session
+    global _current_graph_properties
+    _current_graph_properties = props.clone().detach()
+    
+    logging.info(f"Computed and stored graph_properties tensor with shape {props.shape} for {len(dataset)} graphs")
 
+
+# Global variable to store graph properties during processing (workaround for PyG bug)
+_current_graph_properties = None
 
 def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, torch.Tensor]) -> None:
     """Save processed data and splits to disk."""
+    global _current_graph_properties
+    
     save_dir = PROCESSED_DIR / dataset_name
     os.makedirs(save_dir, exist_ok=True)
 
+    # Save main data and splits
     torch.save(data, save_dir / 'data.pt')
     torch.save(splits, save_dir / 'splits.pt')
+    
+    # Save graph properties separately if they exist (workaround for PyG bug)
+    if _current_graph_properties is not None:
+        torch.save(_current_graph_properties, save_dir / 'graph_properties.pt')
+        logging.info(f"Saved graph_properties tensor with shape {_current_graph_properties.shape}")
+        _current_graph_properties = None  # Reset for next dataset
 
     logging.info(f"Successfully processed and saved '{dataset_name}'.")
 

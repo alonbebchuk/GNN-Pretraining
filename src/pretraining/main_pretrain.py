@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import random
 import json
@@ -168,6 +169,15 @@ def make_domain_loader(
     graphs = torch.load(data_path)
     splits = torch.load(splits_path)
     split_idx = splits[split]
+    
+    # Load graph properties separately if they exist (workaround for PyG bug)
+    props_path = dom_dir / "graph_properties.pt"
+    if props_path.exists():
+        graph_properties_tensor = torch.load(props_path)
+        # Attach properties to each graph at runtime
+        for i, graph in enumerate(graphs):
+            graph.graph_properties = graph_properties_tensor[i]
+        logging.info(f"Loaded and attached graph_properties to {len(graphs)} graphs for domain {domain_name}")
 
     ds = DomainSplitDataset(graphs, split_idx)
 

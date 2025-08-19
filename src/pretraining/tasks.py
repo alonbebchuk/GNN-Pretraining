@@ -264,6 +264,13 @@ class GraphPropertyPredictionTask(BasePretrainTask):
         device = self.model.device
 
         for domain_name, batch in batches_by_domain.items():
+            # Check if this batch has graph_properties
+            if not hasattr(batch, 'graph_properties'):
+                # Skip this domain if it doesn't have graph properties
+                # This can happen if the dataset wasn't processed with graph properties
+                per_domain_losses[domain_name] = torch.tensor(0.0, device=device)
+                continue
+                
             h = self.model(batch, domain_name)
             batch_vec = batch.batch.to(device)
             graph_emb = global_mean_pool(h, batch_vec)
@@ -290,6 +297,10 @@ class GraphPropertyPredictionTask(BasePretrainTask):
             total_size += size
             per_domain_losses[domain_name] = loss / size
 
+        if total_size == 0:
+            # No domains had graph properties, return zero loss
+            return torch.tensor(0.0, device=device, requires_grad=True), per_domain_losses
+            
         total_loss /= total_size
         return total_loss, per_domain_losses
 
