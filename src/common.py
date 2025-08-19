@@ -101,7 +101,7 @@ DOMAIN_DIMENSIONS = {
 
 # PRETRAIN_EPOCHS = 20
 PRETRAIN_EPOCHS = 5
-PATIENCE = 20
+PATIENCE = 5
 PRETRAIN_BATCH_SIZE = 32
 PRETRAIN_EVAL_EVERY_EPOCHS = 1
 PRETRAIN_LOG_EVERY_STEPS = 10
@@ -221,6 +221,7 @@ def get_scheme_hyperparameter(scheme: str, param_name: str, default_key: str = '
     """Get hyperparameter value for a specific training scheme."""
     param_dict_map = {
         'lr_model': SCHEME_SPECIFIC_LR_MODEL,
+        'lr_uncertainty': SCHEME_SPECIFIC_LR_UNCERTAINTY,
         'lr_warmup_fraction': SCHEME_SPECIFIC_LR_WARMUP_FRACTION,
         'lr_min_factor': SCHEME_SPECIFIC_LR_MIN_FACTOR,
         'patience': SCHEME_SPECIFIC_PATIENCE,
