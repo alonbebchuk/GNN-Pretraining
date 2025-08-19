@@ -79,22 +79,24 @@ class TrainConfig:
 
 
 def build_config(args: argparse.Namespace) -> TrainConfig:
-    base = TrainConfig()
+    """
+    Build TrainConfig by FIRST loading the YAML specified by --config,
+    then constructing TrainConfig(**yaml_dict). This avoids instantiating
+    TrainConfig() with missing required fields.
+    """
+    cfg_path = Path(getattr(args, "config", None) or "")
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"--config file not found: {cfg_path}")
+    with cfg_path.open("r") as f:
+        data = yaml.safe_load(f) or {}
 
-    with open(args.config, "r", encoding="utf-8") as f:
-        yaml_overrides = yaml.load(f)
+    # If the YAML nests config under a single top-level key, unwrap it:
+    if isinstance(data, dict) and len(data) == 1 and isinstance(next(iter(data.values())), dict):
+        data = next(iter(data.values()))
 
-    base.exp_name = yaml_overrides["exp_name"]
-    base.pretrain_domains = list(yaml_overrides["pretrain_domains"])
-    base.active_tasks = list(yaml_overrides["active_tasks"])
-    base.batch_size_per_domain = base.batch_size // len(base.pretrain_domains)
-
-    return base
+    return TrainConfig(**data)
 
 
-# -----------------------------
-# Data utilities
-# -----------------------------
 
 
 class DomainSplitDataset(Dataset):
