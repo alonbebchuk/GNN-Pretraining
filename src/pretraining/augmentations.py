@@ -112,11 +112,28 @@ class NodeDropping:
                             keep_mask[start_idx + dropped_indices[0]] = True
 
         keep_nodes = keep_mask.nonzero(as_tuple=True)[0]
-        edge_index, _ = subgraph(keep_nodes, batch.edge_index)
+        
+        # Use subgraph to properly remap edge indices
+        if keep_nodes.numel() == 0:
+            # No nodes to keep, return empty batch
+            batch.x = batch.x[keep_nodes]  # Empty tensor
+            batch.batch = batch.batch[keep_nodes]  # Empty tensor
+            batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+            return batch
+        
+        edge_index, _ = subgraph(keep_nodes, batch.edge_index, relabel_nodes=True)
 
         batch.x = batch.x[keep_nodes]
         batch.batch = batch.batch[keep_nodes]
         batch.edge_index = edge_index
+        
+        # Ensure edge indices are valid after remapping
+        if batch.edge_index.numel() > 0:
+            max_node_idx = batch.x.size(0) - 1
+            if batch.edge_index.max().item() > max_node_idx:
+                # Edge indices are still invalid, remove all edges
+                batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+        
         return batch
 
 
@@ -144,15 +161,34 @@ class EdgeDropping:
             
         # Ensure edge indices are within bounds of batch tensor
         max_node_idx = batch.batch.size(0) - 1
-        valid_edge_mask = (batch.edge_index[0] <= max_node_idx) & (batch.edge_index[1] <= max_node_idx)
+        
+        # More robust edge validation
+        if max_node_idx < 0:
+            # No nodes left, return empty edge_index
+            batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+            return batch
+            
+        valid_edge_mask = (batch.edge_index[0] <= max_node_idx) & (batch.edge_index[1] <= max_node_idx) & \
+                         (batch.edge_index[0] >= 0) & (batch.edge_index[1] >= 0)
+        
         if not valid_edge_mask.all():
+            if not valid_edge_mask.any():
+                # No valid edges, return empty edge_index
+                batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+                return batch
             valid_edges = valid_edge_mask.nonzero(as_tuple=True)[0]
             batch.edge_index = batch.edge_index[:, valid_edges]
             num_edges = batch.edge_index.shape[1]
             if num_edges == 0:
                 return batch
         
-        edge_to_graph = batch.batch.to(device)[batch.edge_index[0]]
+        # Safe edge-to-graph mapping with bounds checking
+        try:
+            edge_to_graph = batch.batch.to(device)[batch.edge_index[0]]
+        except (IndexError, RuntimeError) as e:
+            # If indexing fails, return batch with empty edges
+            batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+            return batch
         keep_mask = (torch.rand(num_edges, device=device) < (1.0 - AUGMENTATION_EDGE_DROP_RATE))
 
         num_graphs = int(batch.batch.max().item()) + 1
@@ -222,6 +258,26 @@ class GraphAugmentor:
         return (node_counts >= AUGMENTATION_MIN_NODES_PER_GRAPH).all().item()
 
     @staticmethod
+    def _validate_edge_consistency(batch: Batch) -> bool:
+        """
+        Validate that edge indices are consistent with the current node set.
+        
+        Args:
+            batch: Batch to validate
+            
+        Returns:
+            True if edge indices are valid, False otherwise
+        """
+        if batch.x.size(0) == 0:
+            return batch.edge_index.numel() == 0
+            
+        if batch.edge_index.numel() == 0:
+            return True
+            
+        max_node_idx = batch.x.size(0) - 1
+        return (batch.edge_index >= 0).all().item() and (batch.edge_index <= max_node_idx).all().item()
+
+    @staticmethod
     def create_two_views(batch: Batch) -> Tuple[Batch, Batch]:
         """
         Create two augmented views with shared node dropping but independent edge/attribute augmentations.
@@ -245,8 +301,8 @@ class GraphAugmentor:
         if random.random() < AUGMENTATION_NODE_DROP_PROB:
             batch_v1 = NodeDropping.apply(batch_v1)
 
-        # Validate after node dropping
-        if not GraphAugmentor._validate_batch_quality(batch_v1):
+        # Validate after node dropping - also check edge consistency
+        if not GraphAugmentor._validate_batch_quality(batch_v1) or not GraphAugmentor._validate_edge_consistency(batch_v1):
             # If node dropping made it invalid, use original batch
             batch_v1 = batch.clone()
 
@@ -261,5 +317,11 @@ class GraphAugmentor:
             batch_v1 = AttributeMasking.apply(batch_v1)
         if random.random() < AUGMENTATION_ATTR_MASK_PROB:
             batch_v2 = AttributeMasking.apply(batch_v2)
+
+        # Final validation to ensure both batches are consistent
+        if not GraphAugmentor._validate_edge_consistency(batch_v1):
+            batch_v1.edge_index = torch.empty((2, 0), dtype=batch_v1.edge_index.dtype, device=batch_v1.edge_index.device)
+        if not GraphAugmentor._validate_edge_consistency(batch_v2):
+            batch_v2.edge_index = torch.empty((2, 0), dtype=batch_v2.edge_index.dtype, device=batch_v2.edge_index.device)
 
         return batch_v1, batch_v2
