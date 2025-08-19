@@ -2,9 +2,11 @@ import argparse
 import os
 import random
 import json
+import time
 import wandb
 import yaml
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Any
 from numpy.typing import NDArray
@@ -34,6 +36,37 @@ from src.common import (
     PRETRAIN_ADAM_BETAS,
     PRETRAIN_ADAM_EPS,
     PRETRAIN_UNCERTAINTY_WEIGHT_DECAY,
+    PATIENCE,
+    # Model architecture constants
+    GNN_HIDDEN_DIM,
+    GNN_NUM_LAYERS,
+    DROPOUT_RATE,
+    CONTRASTIVE_PROJ_DIM,
+    GRAPH_PROP_HEAD_HIDDEN_DIM,
+    DOMAIN_ADV_HEAD_HIDDEN_DIM,
+    DOMAIN_ADV_HEAD_OUT_DIM,
+    MASK_TOKEN_INIT_MEAN,
+    MASK_TOKEN_INIT_STD,
+    # Task constants
+    NODE_FEATURE_MASKING_MASK_RATE,
+    NODE_CONTRASTIVE_TEMPERATURE,
+    GRAPH_PROPERTY_DIM,
+    # Augmentation constants
+    AUGMENTATION_ATTR_MASK_PROB,
+    AUGMENTATION_ATTR_MASK_RATE,
+    AUGMENTATION_EDGE_DROP_PROB,
+    AUGMENTATION_EDGE_DROP_RATE,
+    AUGMENTATION_NODE_DROP_PROB,
+    AUGMENTATION_NODE_DROP_RATE,
+    # Loss constants
+    UNCERTAINTY_LOSS_COEF,
+    LOGSIGMA_TO_SIGMA_SCALE,
+    GRL_GAMMA,
+    GRL_LAMBDA_MIN,
+    GRL_LAMBDA_MAX,
+    # Domain information
+    DOMAIN_DIMENSIONS,
+    FEATURE_TYPES,
 )
 from src.model.pretrain_model import PretrainableGNN
 from src.pretraining.losses import UncertaintyWeighter
@@ -200,6 +233,76 @@ def _seed_worker(worker_id: int) -> None:
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
+
+
+# -----------------------------
+# Experiment Classification Helpers
+# -----------------------------
+
+def classify_scheme(exp_name: str, active_tasks: List[str]) -> str:
+    """Classify experiment scheme type for analysis."""
+    if exp_name.startswith("B"):
+        return "baseline"
+    elif len(active_tasks) == 1:
+        return "single_task"
+    else:
+        return "multi_task"
+
+def get_paradigm(active_tasks: List[str]) -> str:
+    """Determine the paradigm based on active tasks."""
+    generative_tasks = {"node_feat_mask", "link_pred"}
+    contrastive_tasks = {"node_contrast", "graph_contrast"}
+    
+    has_generative = any(task in generative_tasks for task in active_tasks)
+    has_contrastive = any(task in contrastive_tasks for task in active_tasks)
+    
+    if has_generative and has_contrastive:
+        return "mixed"
+    elif has_generative:
+        return "generative"
+    elif has_contrastive:
+        return "contrastive"
+    else:
+        return "other"
+
+def has_auxiliary_tasks(active_tasks: List[str]) -> bool:
+    """Check if auxiliary supervised tasks are present."""
+    return "graph_prop" in active_tasks
+
+def has_adversarial_tasks(active_tasks: List[str]) -> bool:
+    """Check if adversarial tasks are present."""
+    return "domain_adv" in active_tasks
+
+def get_comparison_groups(exp_name: str) -> List[str]:
+    """Get comparison groups this experiment belongs to for analysis."""
+    groups = []
+    
+    # Baseline vs Pre-trained comparison
+    if exp_name == "B1":
+        groups.append("from_scratch_baseline")
+    else:
+        groups.append("pretrained")
+    
+    # Scheme type groups
+    if exp_name.startswith("B"):
+        groups.append("baseline_schemes")
+        if exp_name in ["B2", "B3"]:
+            groups.append("single_task_baselines")
+        elif exp_name == "B4":
+            groups.append("single_domain_baseline")
+    elif exp_name.startswith("S"):
+        groups.append("multi_task_schemes")
+        
+        # Specific scheme groups for key comparisons
+        if exp_name in ["S1", "S2"]:
+            groups.append("paradigm_comparison")  # S1 vs S2
+        if exp_name in ["S3", "S4", "S5"]:
+            groups.append("complexity_progression")  # S3 -> S4 -> S5
+        if exp_name in ["S4", "B4"]:
+            groups.append("cross_domain_comparison")  # Multi vs single domain
+    
+    return groups
+
 
 
 # -----------------------------
@@ -380,26 +483,112 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
         lr_min_factor=PRETRAIN_LR_MIN_FACTOR,
     )
 
+    # Classify experiment for analysis
+    scheme_type = classify_scheme(cfg.exp_name, cfg.active_tasks)
+    paradigm = get_paradigm(cfg.active_tasks)
+    comparison_groups = get_comparison_groups(cfg.exp_name)
+    
     wb_tags = [
         "phase:pretrain",
         *(f"domain:{d}" for d in cfg.pretrain_domains),
         *(f"task:{t}" for t in cfg.active_tasks),
+        # Analysis classification tags
+        f"scheme_type:{scheme_type}",
+        f"paradigm:{paradigm}",
+        f"has_auxiliary:{has_auxiliary_tasks(cfg.active_tasks)}",
+        f"has_adversarial:{has_adversarial_tasks(cfg.active_tasks)}",
+        *(f"group:{group}" for group in comparison_groups),
     ]
 
+    # Comprehensive config for WandB - include ALL hyperparameters for reproducibility
+    full_config = {
+        **asdict(cfg),
+        "seed": seed,
+        "steps_per_epoch": steps_per_epoch,
+        "total_steps": total_steps,
+        "domains": cfg.pretrain_domains,
+        "tasks": cfg.active_tasks,
+        
+        # Model architecture hyperparameters
+        "model": {
+            "gnn_hidden_dim": GNN_HIDDEN_DIM,
+            "gnn_num_layers": GNN_NUM_LAYERS,
+            "dropout_rate": DROPOUT_RATE,
+            "contrastive_proj_dim": CONTRASTIVE_PROJ_DIM,
+            "graph_prop_head_hidden_dim": GRAPH_PROP_HEAD_HIDDEN_DIM,
+            "domain_adv_head_hidden_dim": DOMAIN_ADV_HEAD_HIDDEN_DIM,
+            "domain_adv_head_out_dim": DOMAIN_ADV_HEAD_OUT_DIM,
+            "mask_token_init_mean": MASK_TOKEN_INIT_MEAN,
+            "mask_token_init_std": MASK_TOKEN_INIT_STD,
+        },
+        
+        # Task-specific hyperparameters
+        "tasks_config": {
+            "node_feature_masking_mask_rate": NODE_FEATURE_MASKING_MASK_RATE,
+            "node_contrastive_temperature": NODE_CONTRASTIVE_TEMPERATURE,
+            "graph_property_dim": GRAPH_PROPERTY_DIM,
+        },
+        
+        # Augmentation hyperparameters
+        "augmentations": {
+            "attr_mask_prob": AUGMENTATION_ATTR_MASK_PROB,
+            "attr_mask_rate": AUGMENTATION_ATTR_MASK_RATE,
+            "edge_drop_prob": AUGMENTATION_EDGE_DROP_PROB,
+            "edge_drop_rate": AUGMENTATION_EDGE_DROP_RATE,
+            "node_drop_prob": AUGMENTATION_NODE_DROP_PROB,
+            "node_drop_rate": AUGMENTATION_NODE_DROP_RATE,
+        },
+        
+        # Loss weighting and scheduling
+        "loss_config": {
+            "uncertainty_loss_coef": UNCERTAINTY_LOSS_COEF,
+            "logsigma_to_sigma_scale": LOGSIGMA_TO_SIGMA_SCALE,
+            "grl_gamma": GRL_GAMMA,
+            "grl_lambda_min": GRL_LAMBDA_MIN,
+            "grl_lambda_max": GRL_LAMBDA_MAX,
+            "lr_warmup_fraction": PRETRAIN_LR_WARMUP_FRACTION,
+            "lr_min_factor": PRETRAIN_LR_MIN_FACTOR,
+        },
+        
+        # Domain information
+        "domain_info": {
+            "domain_dimensions": {d: DOMAIN_DIMENSIONS[d] for d in cfg.pretrain_domains},
+            "feature_types": {d: FEATURE_TYPES[d] for d in cfg.pretrain_domains},
+            "overlap_tudatasets": OVERLAP_TUDATASETS,
+        },
+        
+        # Experiment classification for analysis
+        "experiment_classification": {
+            "scheme_id": cfg.exp_name,  # B1, B2, S1, etc.
+            "scheme_type": scheme_type,
+            "paradigm": paradigm,
+            "task_count": len(cfg.active_tasks),
+            "domain_count": len(cfg.pretrain_domains),
+            "is_baseline": cfg.exp_name.startswith("B"),
+            "is_single_task": len(cfg.active_tasks) == 1,
+            "is_multi_domain": len(cfg.pretrain_domains) > 1,
+            "has_auxiliary": has_auxiliary_tasks(cfg.active_tasks),
+            "has_adversarial": has_adversarial_tasks(cfg.active_tasks),
+            "comparison_groups": comparison_groups,
+        },
+        
+        # System information
+        "system": {
+            "device": str(device),
+            "torch_version": torch.__version__,
+            "cuda_available": torch.cuda.is_available(),
+            "cuda_version": torch.version.cuda if torch.cuda.is_available() else None,
+        }
+    }
+    
     run = wandb.init(
         project=WANDB_PROJECT,
         group=cfg.exp_name,
         name=f"{cfg.exp_name}-seed{seed}",
         tags=wb_tags,
-        config={**asdict(cfg), "seed": seed},
+        config=full_config,
         reinit=True,
     )
-    wandb.config.update({
-        "steps_per_epoch": steps_per_epoch,
-        "total_steps": total_steps,
-        "domains": cfg.pretrain_domains,
-        "tasks": cfg.active_tasks,
-    }, allow_val_change=True)
     run_url = getattr(wandb.run, "url", None)
 
     os.makedirs(cfg.output_dir, exist_ok=True)
@@ -407,14 +596,27 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
     best_ckpt_path = Path(cfg.output_dir) / f"best_{cfg.exp_name}_seed{seed}.pt"
     manifest_path = Path(cfg.output_dir) / f"manifest_{cfg.exp_name}_seed{seed}.json"
     best_epoch = -1
+    
+    # Early stopping configuration
+    patience = PATIENCE  # Stop if no improvement for PATIENCE epochs
+    epochs_without_improvement = 0
+    
+    # Timing tracking
+    training_start_time = time.time()
+    epoch_start_times = {}
+    step_times = []
 
     global_step = 0
     for epoch in range(1, cfg.epochs + 1):
+        epoch_start_time = time.time()
+        epoch_start_times[epoch] = epoch_start_time
         model.train()
 
         iterators = {d: iter(l) for d, l in train_loaders.items()}
 
         for _ in range(steps_per_epoch):
+            step_start_time = time.time()
+            
             batches_by_domain = combine_next_batches(iterators)
             if not batches_by_domain:
                 break
@@ -448,6 +650,10 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
 
             grl_sched.step(1)
             lr_multiplier.step(1)
+            
+            # Track step timing
+            step_duration = time.time() - step_start_time
+            step_times.append(step_duration)
 
             if global_step % cfg.log_every_steps == 0:
                 log_dict: Dict[str, float] = {
@@ -472,6 +678,25 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 log_dict["train/lr_scale"] = float(scale)
                 log_dict["train/lr_model"] = float(cfg.lr_model * scale)
                 log_dict["train/lr_uncertainty"] = float(cfg.lr_uncertainty * scale)
+                
+                # Add domain loss balance monitoring
+                domain_losses_list = []
+                for task_name, domain_losses in per_task_per_domain_losses.items():
+                    for domain_name, loss in domain_losses.items():
+                        domain_losses_list.append(float(loss.detach().cpu()))
+                
+                if domain_losses_list:
+                    log_dict["train/domain_balance/mean"] = float(np.mean(domain_losses_list))
+                    log_dict["train/domain_balance/std"] = float(np.std(domain_losses_list))
+                    log_dict["train/domain_balance/cv"] = float(np.std(domain_losses_list) / (np.mean(domain_losses_list) + 1e-8))
+                
+                # Add timing metrics
+                current_time = time.time()
+                log_dict["timing/cumulative_training_time_hours"] = (current_time - training_start_time) / 3600
+                if len(step_times) >= 10:  # Only log after some steps for stability
+                    recent_step_times = step_times[-10:]
+                    log_dict["timing/avg_step_time_seconds"] = float(np.mean(recent_step_times))
+                    log_dict["timing/steps_per_second"] = 1.0 / float(np.mean(recent_step_times))
 
                 wandb.log(log_dict, step=global_step)
 
@@ -493,6 +718,12 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 "val/balanced_total": val_balanced,
                 "epoch": float(epoch),
                 "global_step": float(global_step),
+                
+                # Add scheduler states for debugging
+                "schedulers/grl_lambda": grl_sched(),
+                "schedulers/lr_scale": lr_multiplier(),
+                "schedulers/current_lr_model": cfg.lr_model * lr_multiplier(),
+                "schedulers/current_lr_uncertainty": cfg.lr_uncertainty * lr_multiplier(),
             }
 
             for k, v in val_raw.items():
@@ -506,34 +737,190 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
             for task_name, domain_losses in val_per_task_per_domain.items():
                 for domain_name, loss in domain_losses.items():
                     log_dict[f"val/domain/{task_name}/{domain_name}"] = loss
+                    
+            # Log uncertainty weights for each task during validation
+            for t, sigma in weighter.get_task_sigmas().items():
+                log_dict[f"val/sigma/{t}"] = float(sigma)
+            
+            # Add epoch timing metrics
+            if epoch > 1:
+                epoch_duration = time.time() - epoch_start_times[epoch]
+                log_dict["timing/epoch_duration_seconds"] = epoch_duration
+                log_dict["timing/epoch_duration_minutes"] = epoch_duration / 60
+                
+                # Efficiency metrics
+                cumulative_time = time.time() - training_start_time
+                log_dict["timing/cumulative_training_time_seconds"] = cumulative_time
+                log_dict["timing/average_epoch_time_seconds"] = cumulative_time / epoch
+                
+                # Convergence efficiency
+                if best_epoch > 0:
+                    log_dict["efficiency/epochs_to_best"] = best_epoch
+                    log_dict["efficiency/time_to_best_hours"] = (epoch_start_times.get(best_epoch, training_start_time) - training_start_time) / 3600
 
             ood_domains = [d for d in val_domain_totals.keys() if d not in OVERLAP_TUDATASETS]
             if len(ood_domains) > 0:
                 selection_total = float(np.mean([val_domain_totals[d] for d in ood_domains]))
+                selection_method = "ood_average"
             else:
                 selection_total = float(val_balanced)
+                selection_method = "balanced_average"
 
             log_dict["val/selection_total"] = selection_total
+            
+            # Add explicit validation selection verification
+            log_dict["validation_selection/method"] = selection_method
+            log_dict["validation_selection/all_domains_count"] = len(val_domain_totals.keys())
+            log_dict["validation_selection/overlap_domains_count"] = len([d for d in val_domain_totals.keys() if d in OVERLAP_TUDATASETS])
+            log_dict["validation_selection/ood_domains_count"] = len(ood_domains)
+            log_dict["validation_selection/domain_adversarial_excluded"] = "domain_adv" not in val_raw
+            log_dict["validation_selection/selection_total"] = selection_total
+            
+            # Log domain-specific information for verification
+            for i, domain in enumerate(val_domain_totals.keys()):
+                log_dict[f"validation_selection/domain_{i}_name"] = domain
+                log_dict[f"validation_selection/domain_{i}_is_overlap"] = domain in OVERLAP_TUDATASETS
+                log_dict[f"validation_selection/domain_{i}_total"] = val_domain_totals[domain]
+                log_dict[f"validation_selection/domain_{i}_used_for_selection"] = domain in ood_domains or (len(ood_domains) == 0)
             wandb.log(log_dict, step=global_step)
 
             if epoch == 1 or selection_total < best_val_total:
                 best_val_total = selection_total
                 best_epoch = epoch
-                torch.save(
-                    {
-                        "model_state_dict": model.state_dict(),
-                        "weighter_state_dict": weighter.state_dict(),
-                        "cfg": asdict(cfg),
-                        "domain_names": cfg.pretrain_domains,
-                        "task_names": cfg.active_tasks,
-                        "seed": seed,
+                epochs_without_improvement = 0  # Reset counter
+                
+                # Log improvement for monitoring
+                wandb.log({
+                    "checkpoints/new_best_epoch": epoch,
+                    "checkpoints/new_best_val_total": selection_total,
+                    "checkpoints/improvement": (wandb.run.summary.get("best_val_total", float("inf")) - selection_total) if epoch > 1 else 0,
+                }, step=global_step)
+                
+                # Save comprehensive checkpoint with all states needed for resuming/fine-tuning
+                checkpoint_dict = {
+                    # Model states
+                    "model_state_dict": model.state_dict(),
+                    "weighter_state_dict": weighter.state_dict(),
+                    
+                    # Optimizer states (crucial for resuming training)
+                    "opt_model_state_dict": opt_model.state_dict(),
+                    "opt_uncertainty_state_dict": opt_uncertainty.state_dict(),
+                    
+                    # Scheduler states
+                    "grl_scheduler_state": grl_sched.state_dict(),
+                    "lr_scheduler_state": lr_multiplier.state_dict(),
+                    
+                    # Training state
+                    "epoch": epoch,
+                    "global_step": global_step,
+                    "best_val_total": best_val_total,
+                    "best_epoch": best_epoch,
+                    "steps_per_epoch": steps_per_epoch,
+                    "total_steps": total_steps,
+                    
+                    # Configuration and metadata
+                    "cfg": asdict(cfg),
+                    "domain_names": cfg.pretrain_domains,
+                    "task_names": cfg.active_tasks,
+                    "seed": seed,
+                    
+                    # Model architecture info (for loading compatibility)
+                    "model_config": {
+                        "gnn_hidden_dim": GNN_HIDDEN_DIM,
+                        "gnn_num_layers": GNN_NUM_LAYERS,
+                        "dropout_rate": DROPOUT_RATE,
+                        "domain_dimensions": {d: DOMAIN_DIMENSIONS[d] for d in cfg.pretrain_domains},
+                        "contrastive_proj_dim": CONTRASTIVE_PROJ_DIM,
+                        "graph_prop_head_hidden_dim": GRAPH_PROP_HEAD_HIDDEN_DIM,
+                        "domain_adv_head_hidden_dim": DOMAIN_ADV_HEAD_HIDDEN_DIM,
+                    },
+                    
+                    # System info for debugging
+                    "torch_version": torch.__version__,
+                    "device": str(device),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                
+                torch.save(checkpoint_dict, best_ckpt_path)
+
+                wandb.save(str(best_ckpt_path), policy="now")
+
+                # Create comprehensive model artifact with all necessary metadata
+                artifact = wandb.Artifact(
+                    name=f"model-{cfg.exp_name}-seed{seed}",
+                    type="model",
+                    description=f"Best model checkpoint for {cfg.exp_name} seed {seed} at epoch {epoch} (val_loss: {best_val_total:.4f})",
+                    metadata={
+                        # Training state
                         "epoch": epoch,
                         "global_step": global_step,
-                        "best_val_total": best_val_total,
-                    },
-                    best_ckpt_path,
+                        "best_val_total": float(best_val_total),
+                        "best_epoch": int(best_epoch),
+                        
+                        # Experiment configuration
+                        "exp_name": cfg.exp_name,
+                        "seed": seed,
+                        "domains": cfg.pretrain_domains,
+                        "tasks": cfg.active_tasks,
+                        
+                        # Model architecture
+                        "model_config": {
+                            "gnn_hidden_dim": GNN_HIDDEN_DIM,
+                            "gnn_num_layers": GNN_NUM_LAYERS,
+                            "dropout_rate": DROPOUT_RATE,
+                            "domain_dimensions": {d: DOMAIN_DIMENSIONS[d] for d in cfg.pretrain_domains},
+                        },
+                        
+                        # Training hyperparameters (crucial for fine-tuning)
+                        "training_config": {
+                            "lr_model": cfg.lr_model,
+                            "lr_uncertainty": cfg.lr_uncertainty,
+                            "batch_size": cfg.batch_size,
+                            "batch_size_per_domain": cfg.batch_size_per_domain,
+                            "model_weight_decay": cfg.model_weight_decay,
+                            "uncertainty_weight_decay": cfg.uncertainty_weight_decay,
+                            "adam_betas": cfg.adam_betas,
+                            "adam_eps": cfg.adam_eps,
+                        },
+                        
+                        # For reproducibility
+                        "system_info": {
+                            "torch_version": torch.__version__,
+                            "device": str(device),
+                            "cuda_available": torch.cuda.is_available(),
+                        },
+                        
+                        # Analysis metadata
+                        "analysis_metadata": {
+                            "scheme_classification": full_config["experiment_classification"],
+                            "comparison_groups": get_comparison_groups(cfg.exp_name),
+                            "expected_downstream_tasks": ["graph_classification", "node_classification", "link_prediction"],
+                            "validation_selection_method": selection_method,
+                            "validation_ood_domains": ood_domains,
+                            "validation_overlap_domains": [d for d in val_domain_totals.keys() if d in OVERLAP_TUDATASETS],
+                        },
+                        
+                        # File information
+                        "checkpoint_filename": best_ckpt_path.name,
+                        "total_steps": total_steps,
+                        "steps_per_epoch": steps_per_epoch,
+                    }
                 )
-                wandb.save(str(best_ckpt_path), policy="now")
+                
+                # Add both checkpoint and manifest to artifact
+                artifact.add_file(str(best_ckpt_path))
+                artifact.add_file(str(manifest_path))  # Include manifest in artifact
+                wandb.log_artifact(artifact)
+                
+                # Also log as model artifact for Model Registry
+                model_artifact = wandb.Artifact(
+                    name=f"trained-model-{cfg.exp_name}",
+                    type="model",
+                    description=f"Production-ready model from {cfg.exp_name} experiment"
+                )
+                model_artifact.add_file(str(best_ckpt_path))
+                model_artifact.add_file(str(manifest_path))
+                wandb.log_artifact(model_artifact, aliases=["latest", f"seed-{seed}", f"epoch-{epoch}"])
 
                 manifest = {
                     "checkpoint_path": str(best_ckpt_path),
@@ -552,10 +939,66 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 with open(manifest_path, "w", encoding="utf-8") as f:
                     json.dump(manifest, f, indent=2)
                 wandb.save(str(manifest_path), policy="now")
+            else:
+                epochs_without_improvement += 1
+                wandb.log({
+                    "early_stopping/epochs_without_improvement": epochs_without_improvement,
+                    "early_stopping/patience_remaining": patience - epochs_without_improvement,
+                }, step=global_step)
+                
+                # Early stopping check
+                if epochs_without_improvement >= patience:
+                    print(f"Early stopping at epoch {epoch} (no improvement for {patience} epochs)")
+                    wandb.log({
+                        "early_stopping/triggered": True,
+                        "early_stopping/stopped_at_epoch": epoch,
+                        "early_stopping/final_epochs_without_improvement": epochs_without_improvement,
+                    }, step=global_step)
+                    break
 
-    wandb.run.summary["best_val_total"] = float(best_val_total)
-    wandb.run.summary["best_epoch"] = int(best_epoch)
-    wandb.run.summary["best_ckpt_path"] = str(best_ckpt_path)
+    # Calculate final timing metrics
+    total_training_time = time.time() - training_start_time
+    
+    # Comprehensive run summary for easy filtering and analysis
+    wandb.run.summary.update({
+        # Best performance metrics
+        "best_val_total": float(best_val_total),
+        "best_epoch": int(best_epoch),
+        "best_ckpt_path": str(best_ckpt_path),
+        
+        # Training completion status
+        "training_completed": True,
+        "total_epochs_trained": epoch,  # Actual epochs trained (may be less due to early stopping)
+        "planned_epochs": cfg.epochs,
+        "early_stopped": epochs_without_improvement >= patience,
+        "epochs_without_improvement": epochs_without_improvement,
+        "total_steps_trained": global_step,
+        
+        # Experiment metadata
+        "exp_name": cfg.exp_name,
+        "seed": seed,
+        "domains_count": len(cfg.pretrain_domains),
+        "tasks_count": len(cfg.active_tasks),
+        "domains_list": ",".join(cfg.pretrain_domains),
+        "tasks_list": ",".join(cfg.active_tasks),
+        
+        # Model size information
+        "model_parameters": sum(p.numel() for p in model.parameters()),
+        "model_trainable_parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
+        
+        # Timing and efficiency metrics
+        "timing/total_training_time_seconds": total_training_time,
+        "timing/total_training_time_hours": total_training_time / 3600,
+        "timing/average_epoch_time_seconds": total_training_time / epoch,
+        "timing/convergence_epoch": best_epoch,
+        "timing/time_to_convergence_hours": (epoch_start_times.get(best_epoch, training_start_time) - training_start_time) / 3600 if best_epoch > 0 else 0,
+        "efficiency/training_efficiency": best_epoch / epoch if epoch > 0 else 0,  # Fraction of epochs needed
+        "efficiency/steps_per_second_avg": len(step_times) / total_training_time if step_times else 0,
+        
+        # System information
+        "device_used": str(device),
+        "torch_version": torch.__version__,
+    })
 
     run.finish()
 
