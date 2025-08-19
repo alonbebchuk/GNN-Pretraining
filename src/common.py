@@ -98,7 +98,7 @@ DOMAIN_DIMENSIONS = {
 # Pretraining - Training Hyperparameters & Tracking (shared, not per-run)
 # -----------------------------------------------------------------------------
 
-PRETRAIN_EPOCHS = 100
+PRETRAIN_EPOCHS = 10
 PATIENCE = 20
 PRETRAIN_BATCH_SIZE = 32
 PRETRAIN_EVAL_EVERY_EPOCHS = 1
