@@ -1,0 +1,17 @@
+name: "Systematic Pre-training Analysis"
+description: "Complete systematic analysis of multi-task, cross-domain pre-training schemes"
+method: grid
+parameters:
+  config:
+    values: 
+      - "/kaggle/working/gnn-pretraining/configs/pretrain/b2_nfm.yaml"
+      - "/kaggle/working/gnn-pretraining/configs/pretrain/b3_nc.yaml" 
+      - "/kaggle/working/gnn-pretraining/configs/pretrain/b4_single_domain_all.yaml"
+      - "/kaggle/working/gnn-pretraining/configs/pretrain/s1_multi_task_generative.yaml"
+      - "/kaggle/working/gnn-pretraining/configs/pretrain/s2_multi_task_contrastive.yaml"
+      - "/kaggle/working/gnn-pretraining/configs/pretrain/s3_all_self_supervised.yaml"
+      - "/kaggle/working/gnn-pretraining/configs/pretrain/s4_all_objectives.yaml"
+      - "/kaggle/working/gnn-pretraining/configs/pretrain/s5_all_objectives_da.yaml"
+  seed:
+    values: [42, 84, 126]
+program: src/pretraining/main_pretrain.py

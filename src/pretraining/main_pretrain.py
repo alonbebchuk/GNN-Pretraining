@@ -452,9 +452,7 @@ def run_validation(
                 raw_losses[name] = total_loss
                 per_task_per_domain_losses[name] = domain_losses
 
-        raw_losses_no_adv: Dict[str, torch.Tensor] = {k: v for k, v in raw_losses.items() if k != "domain_adv"}
-
-        total_loss, weighted = weighter(raw_losses_no_adv, lambda_val=scheduler())
+        total_loss, weighted = weighter(raw_losses, lambda_val=scheduler())
         total_losses.append(float(total_loss.detach().cpu()))
 
         for k, v in raw_losses.items():
@@ -470,6 +468,8 @@ def run_validation(
 
         for domain_name in batches_by_domain.keys():
             domain_raw_losses = {task: per_task_per_domain_losses[task][domain_name] for task in per_task_per_domain_losses.keys()}
+            if 'domain_adv' in raw_losses:
+                domain_raw_losses['domain_adv'] = raw_losses['domain_adv']
             domain_total, _ = weighter(domain_raw_losses, lambda_val=scheduler())
             agg_per_domain_totals.setdefault(domain_name, []).append(float(domain_total.detach().cpu()))
 
