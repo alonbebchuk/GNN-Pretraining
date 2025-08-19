@@ -768,20 +768,6 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
 
             log_dict["val/selection_total"] = selection_total
             
-            # Add explicit validation selection verification
-            log_dict["validation_selection/method"] = selection_method
-            log_dict["validation_selection/all_domains_count"] = len(val_domain_totals.keys())
-            log_dict["validation_selection/overlap_domains_count"] = len([d for d in val_domain_totals.keys() if d in OVERLAP_TUDATASETS])
-            log_dict["validation_selection/ood_domains_count"] = len(ood_domains)
-            log_dict["validation_selection/domain_adversarial_excluded"] = "domain_adv" not in val_raw
-            log_dict["validation_selection/selection_total"] = selection_total
-            
-            # Log domain-specific information for verification
-            for i, domain in enumerate(val_domain_totals.keys()):
-                log_dict[f"validation_selection/domain_{i}_name"] = domain
-                log_dict[f"validation_selection/domain_{i}_is_overlap"] = domain in OVERLAP_TUDATASETS
-                log_dict[f"validation_selection/domain_{i}_total"] = val_domain_totals[domain]
-                log_dict[f"validation_selection/domain_{i}_used_for_selection"] = domain in ood_domains or (len(ood_domains) == 0)
             wandb.log(log_dict, step=global_step)
 
             if epoch == 1 or selection_total < best_val_total:

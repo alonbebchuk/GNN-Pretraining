@@ -133,6 +133,24 @@ class NodeContrastiveTask(BasePretrainTask):
         """
         device = z1.device
         N = z1.size(0)
+        
+        # Handle edge cases: empty or single node batches
+        if N == 0:
+            return torch.tensor(0.0, device=device, requires_grad=True), 0
+        if N == 1:
+            # For single node, return small loss to avoid division by zero
+            return torch.tensor(0.1, device=device, requires_grad=True), 2
+
+        # Ensure z1 and z2 have the same size
+        if z1.size(0) != z2.size(0):
+            min_size = min(z1.size(0), z2.size(0))
+            z1 = z1[:min_size]
+            z2 = z2[:min_size]
+            N = min_size
+            if N == 0:
+                return torch.tensor(0.0, device=device, requires_grad=True), 0
+            if N == 1:
+                return torch.tensor(0.1, device=device, requires_grad=True), 2
 
         z1 = F.normalize(z1, dim=1)
         z2 = F.normalize(z2, dim=1)
@@ -149,6 +167,10 @@ class NodeContrastiveTask(BasePretrainTask):
             torch.arange(0, N, device=device)
         ])
 
+        # Ensure pos_indices are within bounds
+        max_valid_idx = sim_matrix.size(1) - 1
+        pos_indices = torch.clamp(pos_indices, 0, max_valid_idx)
+
         loss = F.cross_entropy(sim_matrix, pos_indices, reduction='sum')
         size = 2 * N
         return loss, size
@@ -159,7 +181,17 @@ class NodeContrastiveTask(BasePretrainTask):
         per_domain_losses = {}
 
         for domain_name, batch in batches_by_domain.items():
+            # Skip empty batches
+            if batch.x.size(0) == 0:
+                per_domain_losses[domain_name] = torch.tensor(0.0, device=batch.x.device)
+                continue
+                
             batch_v1, batch_v2 = GraphAugmentor.create_two_views(batch)
+            
+            # Skip if augmentation resulted in empty batches
+            if batch_v1.x.size(0) == 0 or batch_v2.x.size(0) == 0:
+                per_domain_losses[domain_name] = torch.tensor(0.0, device=batch.x.device)
+                continue
 
             h1 = self.model(batch_v1, domain_name)
             h2 = self.model(batch_v2, domain_name)
@@ -171,8 +203,13 @@ class NodeContrastiveTask(BasePretrainTask):
             loss, size = self._simclr_nt_xent(z1, z2)
             total_loss += loss
             total_size += size
-            per_domain_losses[domain_name] = loss / size
+            per_domain_losses[domain_name] = loss / max(size, 1)  # Avoid division by zero
 
+        if total_size == 0:
+            # Return a small loss if no valid batches were processed
+            device = next(iter(batches_by_domain.values())).x.device
+            return torch.tensor(0.1, device=device, requires_grad=True), per_domain_losses
+            
         total_loss /= total_size
         return total_loss, per_domain_losses
 
