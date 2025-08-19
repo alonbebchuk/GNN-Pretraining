@@ -99,7 +99,8 @@ DOMAIN_DIMENSIONS = {
 # Pretraining - Training Hyperparameters & Tracking (shared, not per-run)
 # -----------------------------------------------------------------------------
 
-PRETRAIN_EPOCHS = 20
+# PRETRAIN_EPOCHS = 20
+PRETRAIN_EPOCHS = 5
 PATIENCE = 20
 PRETRAIN_BATCH_SIZE = 32
 PRETRAIN_EVAL_EVERY_EPOCHS = 1
@@ -216,6 +217,19 @@ def get_training_scheme(exp_name: str, active_tasks: list) -> str:
     
     return 'default'
 
-def get_scheme_hyperparameter(scheme: str, param_dict: dict, default_key: str = 'default'):
+def get_scheme_hyperparameter(scheme: str, param_name: str, default_key: str = 'default'):
     """Get hyperparameter value for a specific training scheme."""
+    param_dict_map = {
+        'lr_model': SCHEME_SPECIFIC_LR_MODEL,
+        'lr_warmup_fraction': SCHEME_SPECIFIC_LR_WARMUP_FRACTION,
+        'lr_min_factor': SCHEME_SPECIFIC_LR_MIN_FACTOR,
+        'patience': SCHEME_SPECIFIC_PATIENCE,
+        'dropout_rate': SCHEME_SPECIFIC_DROPOUT,
+        'weight_decay': SCHEME_SPECIFIC_MODEL_WEIGHT_DECAY
+    }
+    
+    param_dict = param_dict_map.get(param_name)
+    if param_dict is None:
+        raise ValueError(f"Unknown parameter name: {param_name}")
+    
     return param_dict.get(scheme, param_dict.get(default_key, None))
