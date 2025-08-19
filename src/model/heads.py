@@ -13,20 +13,21 @@ class MLPHead(nn.Module):
     This is used as the standard prediction head throughout the system.
     """
 
-    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM) -> None:
+    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM, dropout_rate: float = DROPOUT_RATE) -> None:
         """
         Initialize the MLP head.
 
         Args:
             dim_hidden: Hidden dimension (defaults to GNN_HIDDEN_DIM)
             dim_out: Output dimension (defaults to GNN_HIDDEN_DIM)
+            dropout_rate: Dropout rate (defaults to DROPOUT_RATE, can be scheme-specific)
         """
         super(MLPHead, self).__init__()
 
         self.mlp = nn.Sequential(
             nn.Linear(GNN_HIDDEN_DIM, dim_hidden),
             nn.ReLU(),
-            nn.Dropout(p=DROPOUT_RATE),
+            nn.Dropout(p=dropout_rate),
             nn.Linear(dim_hidden, dim_out)
         )
 
@@ -83,19 +84,25 @@ class BilinearDiscriminator(nn.Module):
 
     Computes scores for (node_embedding, graph_embedding) pairs using:
     D(x, y) = sigmoid(x^T * W * y)
+    
+    Enhanced with dropout regularization for contrastive learning stability.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, dropout_rate: float = DROPOUT_RATE) -> None:
         """
-        Initialize the bilinear discriminator.
+        Initialize the bilinear discriminator with optional dropout.
+        
+        Args:
+            dropout_rate: Dropout rate for regularization (scheme-specific)
         """
         super(BilinearDiscriminator, self).__init__()
 
         self.W = nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, bias=False)
+        self.dropout = nn.Dropout(p=dropout_rate) if dropout_rate > 0 else nn.Identity()
 
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
-        Compute discriminator scores for input pairs.
+        Compute discriminator scores for input pairs with regularization.
 
         Args:
             x: Node embeddings tensor of shape (N, GNN_HIDDEN_DIM)
@@ -104,6 +111,10 @@ class BilinearDiscriminator(nn.Module):
         Returns:
             Scores of shape (N, G) - scores between each node and each graph
         """
+        # Apply dropout regularization to inputs for contrastive stability
+        x = self.dropout(x)
+        y = self.dropout(y)
+        
         # x: (N, D), y: (G, D)
         # We want to compute scores for all (node, graph) pairs
         x_expanded = x.unsqueeze(1)  # (N, 1, D)

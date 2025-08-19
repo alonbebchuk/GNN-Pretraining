@@ -69,6 +69,16 @@ from src.common import (
     # Domain information
     DOMAIN_DIMENSIONS,
     FEATURE_TYPES,
+    # Scheme-specific hyperparameters
+    get_training_scheme,
+    get_scheme_hyperparameter,
+    SCHEME_SPECIFIC_LR_MODEL,
+    SCHEME_SPECIFIC_LR_UNCERTAINTY,
+    SCHEME_SPECIFIC_LR_MIN_FACTOR,
+    SCHEME_SPECIFIC_LR_WARMUP_FRACTION,
+    SCHEME_SPECIFIC_PATIENCE,
+    SCHEME_SPECIFIC_DROPOUT,
+    SCHEME_SPECIFIC_MODEL_WEIGHT_DECAY,
 )
 from src.model.pretrain_model import PretrainableGNN
 from src.pretraining.losses import UncertaintyWeighter
@@ -111,12 +121,44 @@ class TrainConfig:
     adam_eps: float = PRETRAIN_ADAM_EPS
     model_weight_decay: float = PRETRAIN_MODEL_WEIGHT_DECAY
     uncertainty_weight_decay: float = PRETRAIN_UNCERTAINTY_WEIGHT_DECAY
+    
+    # Scheme-specific parameters (will be set automatically)
+    training_scheme: Optional[str] = None
+    lr_min_factor: float = PRETRAIN_LR_MIN_FACTOR
+    lr_warmup_fraction: float = PRETRAIN_LR_WARMUP_FRACTION
+    patience: int = PATIENCE
+    dropout_rate: float = DROPOUT_RATE
 
     def __post_init__(self):
-        """Automatically calculate batch_size_per_domain if not provided."""
+        """
+        Automatically calculate batch_size_per_domain if not provided.
+        Apply scheme-specific hyperparameters based on experiment configuration.
+        """
         if self.batch_size_per_domain is None:
             num_domains = len(self.pretrain_domains)
             self.batch_size_per_domain = self.batch_size // num_domains
+        
+        # Determine training scheme and apply scheme-specific hyperparameters
+        if self.training_scheme is None:
+            self.training_scheme = get_training_scheme(self.exp_name, self.active_tasks)
+        
+        # Apply scheme-specific hyperparameters (literature-informed)
+        self.lr_model = get_scheme_hyperparameter(self.training_scheme, SCHEME_SPECIFIC_LR_MODEL, 'default')
+        self.lr_uncertainty = get_scheme_hyperparameter(self.training_scheme, SCHEME_SPECIFIC_LR_UNCERTAINTY, 'default')
+        self.lr_min_factor = get_scheme_hyperparameter(self.training_scheme, SCHEME_SPECIFIC_LR_MIN_FACTOR, 'default')
+        self.lr_warmup_fraction = get_scheme_hyperparameter(self.training_scheme, SCHEME_SPECIFIC_LR_WARMUP_FRACTION, 'default')
+        self.patience = get_scheme_hyperparameter(self.training_scheme, SCHEME_SPECIFIC_PATIENCE, 'default')
+        self.dropout_rate = get_scheme_hyperparameter(self.training_scheme, SCHEME_SPECIFIC_DROPOUT, 'default')
+        self.model_weight_decay = get_scheme_hyperparameter(self.training_scheme, SCHEME_SPECIFIC_MODEL_WEIGHT_DECAY, 'default')
+        
+        print(f"Applied scheme-specific hyperparameters for '{self.training_scheme}' scheme:")
+        print(f"  - lr_model: {self.lr_model}")
+        print(f"  - lr_uncertainty: {self.lr_uncertainty}")
+        print(f"  - lr_min_factor: {self.lr_min_factor}")
+        print(f"  - lr_warmup_fraction: {self.lr_warmup_fraction}")
+        print(f"  - patience: {self.patience}")
+        print(f"  - dropout_rate: {self.dropout_rate}")
+        print(f"  - model_weight_decay: {self.model_weight_decay}")
 
 
 def build_config(args: argparse.Namespace) -> TrainConfig:
@@ -468,7 +510,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
 
     total_steps = cfg.epochs * steps_per_epoch
 
-    model = PretrainableGNN(device=device, domain_names=cfg.pretrain_domains, task_names=cfg.active_tasks)
+    model = PretrainableGNN(device=device, domain_names=cfg.pretrain_domains, task_names=cfg.active_tasks, dropout_rate=cfg.dropout_rate)
     tasks = instantiate_tasks(model, cfg.active_tasks)
 
     weighter = UncertaintyWeighter(task_names=cfg.active_tasks).to(device)
@@ -490,8 +532,8 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
     grl_sched = GRLLambdaScheduler(total_steps=total_steps)
     lr_multiplier = CosineWithWarmup(
         total_steps=total_steps,
-        warmup_fraction=PRETRAIN_LR_WARMUP_FRACTION,
-        lr_min_factor=PRETRAIN_LR_MIN_FACTOR,
+        warmup_fraction=cfg.lr_warmup_fraction,  # Use scheme-specific warmup
+        lr_min_factor=cfg.lr_min_factor,        # Use scheme-specific min factor
     )
 
     # Classify experiment for analysis
@@ -609,8 +651,8 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
     manifest_path = Path(cfg.output_dir) / f"manifest_{cfg.exp_name}_seed{seed}.json"
     best_epoch = -1
     
-    # Early stopping configuration
-    patience = PATIENCE  # Stop if no improvement for PATIENCE epochs
+    # Early stopping configuration - use scheme-specific patience
+    patience = cfg.patience  # Stop if no improvement for scheme-specific epochs
     epochs_without_improvement = 0
     
     # Timing tracking
