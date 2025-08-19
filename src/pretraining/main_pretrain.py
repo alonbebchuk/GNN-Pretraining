@@ -61,7 +61,7 @@ class TrainConfig:
     exp_name: str
     pretrain_domains: List[str]
     active_tasks: List[str]
-    batch_size_per_domain: int
+    batch_size_per_domain: Optional[int] = None
 
     epochs: int = PRETRAIN_EPOCHS
     batch_size: int = PRETRAIN_BATCH_SIZE
@@ -77,26 +77,29 @@ class TrainConfig:
     model_weight_decay: float = PRETRAIN_MODEL_WEIGHT_DECAY
     uncertainty_weight_decay: float = PRETRAIN_UNCERTAINTY_WEIGHT_DECAY
 
+    def __post_init__(self):
+        """Automatically calculate batch_size_per_domain if not provided."""
+        if self.batch_size_per_domain is None:
+            num_domains = len(self.pretrain_domains)
+            self.batch_size_per_domain = self.batch_size // num_domains
+
 
 def build_config(args: argparse.Namespace) -> TrainConfig:
     """
-    Build TrainConfig by FIRST loading the YAML specified by --config,
-    then constructing TrainConfig(**yaml_dict). This avoids instantiating
-    TrainConfig() with missing required fields.
+    Build TrainConfig by loading the YAML configuration file.
+    batch_size_per_domain will be automatically calculated if not provided.
     """
     cfg_path = Path(getattr(args, "config", None) or "")
     if not cfg_path.exists():
         raise FileNotFoundError(f"--config file not found: {cfg_path}")
-    with cfg_path.open("r") as f:
+
+    with cfg_path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
 
-    # If the YAML nests config under a single top-level key, unwrap it:
     if isinstance(data, dict) and len(data) == 1 and isinstance(next(iter(data.values())), dict):
         data = next(iter(data.values()))
 
     return TrainConfig(**data)
-
-
 
 
 class DomainSplitDataset(Dataset):
