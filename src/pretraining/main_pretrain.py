@@ -907,21 +907,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                     }
                 )
                 
-                # Add both checkpoint and manifest to artifact
-                artifact.add_file(str(best_ckpt_path))
-                artifact.add_file(str(manifest_path))  # Include manifest in artifact
-                wandb.log_artifact(artifact)
-                
-                # Also log as model artifact for Model Registry
-                model_artifact = wandb.Artifact(
-                    name=f"trained-model-{cfg.exp_name}",
-                    type="model",
-                    description=f"Production-ready model from {cfg.exp_name} experiment"
-                )
-                model_artifact.add_file(str(best_ckpt_path))
-                model_artifact.add_file(str(manifest_path))
-                wandb.log_artifact(model_artifact, aliases=["latest", f"seed-{seed}", f"epoch-{epoch}"])
-
+                # Create manifest first before adding to artifacts
                 manifest = {
                     "checkpoint_path": str(best_ckpt_path),
                     "exp_name": cfg.exp_name,
@@ -939,6 +925,21 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 with open(manifest_path, "w", encoding="utf-8") as f:
                     json.dump(manifest, f, indent=2)
                 wandb.save(str(manifest_path), policy="now")
+
+                # Add both checkpoint and manifest to artifact
+                artifact.add_file(str(best_ckpt_path))
+                artifact.add_file(str(manifest_path))  # Include manifest in artifact
+                wandb.log_artifact(artifact)
+                
+                # Also log as model artifact for Model Registry
+                model_artifact = wandb.Artifact(
+                    name=f"trained-model-{cfg.exp_name}",
+                    type="model",
+                    description=f"Production-ready model from {cfg.exp_name} experiment"
+                )
+                model_artifact.add_file(str(best_ckpt_path))
+                model_artifact.add_file(str(manifest_path))
+                wandb.log_artifact(model_artifact, aliases=["latest", f"seed-{seed}", f"epoch-{epoch}"])
                 
                 # Register model in central registry
                 register_model_completion(
