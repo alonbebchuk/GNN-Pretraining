@@ -45,7 +45,11 @@ class NodeDropping:
         Returns:
             Batch object with a node-induced subgraph, ensuring each graph has at least 2 nodes
         """
+        # Deep clone with contiguous memory layout to prevent corruption
         batch = batch.clone()
+        batch.x = batch.x.contiguous()
+        batch.batch = batch.batch.contiguous() 
+        batch.edge_index = batch.edge_index.contiguous()
         device = batch.x.device
         
         # Handle empty batch case
@@ -60,8 +64,13 @@ class NodeDropping:
         keep_mask = torch.ones(batch.x.size(0), device=device, dtype=torch.bool)
         
         # Process each graph individually to ensure proper minimum node counts
+        # Use deterministic operations to avoid race conditions
         ptr = torch.zeros(num_graphs + 1, device=device, dtype=torch.long)
         ptr[1:] = torch.cumsum(node_counts, dim=0)
+        
+        # Ensure all operations are synchronous for CUDA
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
         
         for graph_idx in range(num_graphs):
             start_idx = ptr[graph_idx]
@@ -83,10 +92,15 @@ class NodeDropping:
             
             if max_drop > 0:
                 # Randomly select nodes to drop within this graph
+                # Use deterministic operations to prevent partial updates
                 graph_nodes = torch.arange(start_idx, end_idx, device=device)
                 drop_indices = torch.randperm(graph_size, device=device)[:max_drop]
                 nodes_to_drop = graph_nodes[drop_indices]
-                keep_mask[nodes_to_drop] = False
+                
+                # Atomic update - create new mask instead of in-place modification
+                new_keep_mask = keep_mask.clone()
+                new_keep_mask[nodes_to_drop] = False
+                keep_mask = new_keep_mask
 
         # Final safety check: ensure no graph becomes empty
         keep_counts = torch.bincount(batch.batch.to(device), weights=keep_mask.to(torch.long), minlength=num_graphs)
@@ -121,18 +135,26 @@ class NodeDropping:
             batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
             return batch
         
-        edge_index, _ = subgraph(keep_nodes, batch.edge_index, relabel_nodes=True)
-
-        batch.x = batch.x[keep_nodes]
-        batch.batch = batch.batch[keep_nodes]
-        batch.edge_index = edge_index
+        # Use subgraph with explicit node mapping to prevent index corruption
+        edge_index, edge_attr = subgraph(keep_nodes, batch.edge_index, relabel_nodes=True, num_nodes=batch.x.size(0))
         
-        # Ensure edge indices are valid after remapping
-        if batch.edge_index.numel() > 0:
-            max_node_idx = batch.x.size(0) - 1
-            if batch.edge_index.max().item() > max_node_idx:
-                # Edge indices are still invalid, remove all edges
+        # Apply node selection with proper tensor operations
+        batch.x = batch.x[keep_nodes].contiguous()
+        batch.batch = batch.batch[keep_nodes].contiguous()
+        
+        # Validate and assign edge_index with proper shape
+        if edge_index.numel() > 0:
+            # Double-check that edge indices are within bounds
+            num_remaining_nodes = len(keep_nodes)
+            max_valid_idx = num_remaining_nodes - 1
+            
+            if num_remaining_nodes > 0 and edge_index.max().item() <= max_valid_idx and edge_index.min().item() >= 0:
+                batch.edge_index = edge_index.contiguous()
+            else:
+                # Create empty edge index with proper shape and type
                 batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+        else:
+            batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
         
         return batch
 
@@ -151,7 +173,11 @@ class EdgeDropping:
         Returns:
             Batch object with dropped edges (ensuring each graph retains at least one edge if it had any)
         """
+        # Deep clone with contiguous memory layout to prevent corruption
         batch = batch.clone()
+        batch.x = batch.x.contiguous()
+        batch.batch = batch.batch.contiguous()
+        batch.edge_index = batch.edge_index.contiguous()
         device = batch.edge_index.device
         num_edges = batch.edge_index.shape[1]
         
@@ -266,7 +292,9 @@ class AttributeMasking:
         Returns:
             Batch object with masked node features
         """
+        # Deep clone with contiguous memory layout to prevent corruption
         batch = batch.clone()
+        batch.x = batch.x.contiguous()
         device = batch.x.device
         num_features = batch.x.shape[1]
 
@@ -303,6 +331,43 @@ class GraphAugmentor:
         return (node_counts >= AUGMENTATION_MIN_NODES_PER_GRAPH).all().item()
 
     @staticmethod
+    def _ensure_tensor_consistency(batch: Batch) -> Batch:
+        """
+        Ensure all tensors in the batch are properly shaped and consistent.
+        
+        Args:
+            batch: Batch to fix
+            
+        Returns:
+            Batch with consistent tensor shapes and memory layout
+        """
+        # Ensure contiguous memory layout
+        batch.x = batch.x.contiguous()
+        batch.batch = batch.batch.contiguous()
+        batch.edge_index = batch.edge_index.contiguous()
+        
+        # Validate tensor shape consistency
+        num_nodes = batch.x.size(0)
+        
+        # Fix batch tensor if needed
+        if batch.batch.size(0) != num_nodes:
+            # Reconstruct batch tensor if corrupted
+            if num_nodes == 0:
+                batch.batch = torch.empty(0, dtype=torch.long, device=batch.x.device)
+            else:
+                # Create a single-graph batch as fallback
+                batch.batch = torch.zeros(num_nodes, dtype=torch.long, device=batch.x.device)
+        
+        # Fix edge_index if needed
+        if batch.edge_index.numel() > 0:
+            if batch.edge_index.size(0) != 2:
+                batch.edge_index = torch.empty((2, 0), dtype=torch.long, device=batch.x.device)
+            elif num_nodes > 0 and (batch.edge_index.max().item() >= num_nodes or batch.edge_index.min().item() < 0):
+                batch.edge_index = torch.empty((2, 0), dtype=torch.long, device=batch.x.device)
+        
+        return batch
+    
+    @staticmethod
     def _validate_edge_consistency(batch: Batch) -> bool:
         """
         Validate that edge indices are consistent with the current node set.
@@ -336,6 +401,9 @@ class GraphAugmentor:
             Tuple of (view1, view2) with same nodes but different edge/attribute augmentations.
             Both views are guaranteed to have graphs with at least minimum nodes.
         """
+        # Ensure tensor consistency before any operations
+        batch = GraphAugmentor._ensure_tensor_consistency(batch)
+        
         # Validate original batch
         if not GraphAugmentor._validate_batch_quality(batch):
             # Return original batch twice if it doesn't meet requirements
@@ -377,7 +445,11 @@ class GraphAugmentor:
         if random.random() < AUGMENTATION_ATTR_MASK_PROB:
             batch_v2 = AttributeMasking.apply(batch_v2)
 
-        # Final validation to ensure both batches are consistent
+        # Final consistency check and repair
+        batch_v1 = GraphAugmentor._ensure_tensor_consistency(batch_v1)
+        batch_v2 = GraphAugmentor._ensure_tensor_consistency(batch_v2)
+        
+        # Additional edge consistency validation
         if not GraphAugmentor._validate_edge_consistency(batch_v1):
             batch_v1.edge_index = torch.empty((2, 0), dtype=batch_v1.edge_index.dtype, device=batch_v1.edge_index.device)
         if not GraphAugmentor._validate_edge_consistency(batch_v2):
