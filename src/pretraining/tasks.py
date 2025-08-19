@@ -270,10 +270,22 @@ class GraphPropertyPredictionTask(BasePretrainTask):
 
             preds = self.model.get_head('graph_prop', domain_name)(graph_emb)
 
+            # Reshape labels to match predictions shape
+            # batch.graph_properties is flattened: [batch_size * num_properties]
+            # preds has shape: [batch_size, num_properties]
             labels = batch.graph_properties.to(device).to(torch.float32)
+            batch_size = graph_emb.size(0)
+            num_properties = preds.size(1)
+            
+            # Ensure labels can be reshaped correctly
+            expected_size = batch_size * num_properties
+            if labels.numel() != expected_size:
+                raise ValueError(f"Label size mismatch: expected {expected_size}, got {labels.numel()}")
+            
+            labels = labels.view(batch_size, num_properties)
 
             loss = F.mse_loss(preds, labels, reduction='sum')
-            size = labels.size(0)
+            size = batch_size
             total_loss += loss
             total_size += size
             per_domain_losses[domain_name] = loss / size
