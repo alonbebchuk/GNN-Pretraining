@@ -81,7 +81,7 @@ from src.pretraining.tasks import (
 )
 from src.data.data_setup import PROCESSED_DIR
 from src.common import OVERLAP_TUDATASETS
-from src.common import OVERLAP_TUDATASETS
+from src.pretraining.model_registry import register_model_completion
 
 
 # -----------------------------
@@ -939,6 +939,20 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 with open(manifest_path, "w", encoding="utf-8") as f:
                     json.dump(manifest, f, indent=2)
                 wandb.save(str(manifest_path), policy="now")
+                
+                # Register model in central registry
+                register_model_completion(
+                    exp_name=cfg.exp_name,
+                    seed=seed,
+                    checkpoint_path=str(best_ckpt_path),
+                    manifest_path=str(manifest_path),
+                    best_val_total=float(best_val_total),
+                    best_epoch=int(best_epoch),
+                    wandb_run_id=getattr(wandb.run, "id", None),
+                    wandb_artifact_name=f"model-{cfg.exp_name}-seed{seed}",
+                    domains=cfg.pretrain_domains,
+                    tasks=cfg.active_tasks
+                )
             else:
                 epochs_without_improvement += 1
                 wandb.log({
