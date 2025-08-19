@@ -43,6 +43,24 @@ class GRLLambdaScheduler:
 
     def reset(self) -> None:
         self._current_step = 0
+    
+    def state_dict(self) -> dict:
+        """Return scheduler state for checkpointing."""
+        return {
+            'total_steps': self.total_steps,
+            'gamma': self.gamma,
+            'lambda_min': self.lambda_min,
+            'lambda_max': self.lambda_max,
+            '_current_step': self._current_step,
+        }
+    
+    def load_state_dict(self, state_dict: dict) -> None:
+        """Load scheduler state from checkpoint."""
+        self.total_steps = state_dict['total_steps']
+        self.gamma = state_dict['gamma']
+        self.lambda_min = state_dict['lambda_min']
+        self.lambda_max = state_dict['lambda_max']
+        self._current_step = state_dict['_current_step']
 
 
 @dataclass
@@ -77,3 +95,21 @@ class CosineWithWarmup:
 
     def reset(self) -> None:
         self._current_step = 0
+    
+    def state_dict(self) -> dict:
+        """Return scheduler state for checkpointing."""
+        return {
+            'total_steps': self.total_steps,
+            'warmup_fraction': self.warmup_fraction,
+            'lr_min_factor': self.lr_min_factor,
+            '_current_step': self._current_step,
+            '_warmup_steps': self._warmup_steps,
+        }
+    
+    def load_state_dict(self, state_dict: dict) -> None:
+        """Load scheduler state from checkpoint."""
+        self.total_steps = state_dict['total_steps']
+        self.warmup_fraction = state_dict['warmup_fraction']
+        self.lr_min_factor = state_dict['lr_min_factor']
+        self._current_step = state_dict['_current_step']
+        self._warmup_steps = state_dict['_warmup_steps']

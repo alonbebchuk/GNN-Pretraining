@@ -46,6 +46,10 @@ class NodeDropping:
         """
         batch = batch.clone()
         device = batch.x.device
+        
+        # Handle empty batch case
+        if batch.x.size(0) == 0 or batch.batch.numel() == 0:
+            return batch
 
         keep_mask = (torch.rand(batch.x.size(0), device=device) < (1.0 - AUGMENTATION_NODE_DROP_RATE))
 
@@ -85,8 +89,22 @@ class EdgeDropping:
         batch = batch.clone()
         device = batch.edge_index.device
         num_edges = batch.edge_index.shape[1]
+        
+        # Handle empty batch case
+        if num_edges == 0 or batch.batch.numel() == 0:
+            return batch
+            
+        # Ensure edge indices are within bounds of batch tensor
+        max_node_idx = batch.batch.size(0) - 1
+        valid_edge_mask = (batch.edge_index[0] <= max_node_idx) & (batch.edge_index[1] <= max_node_idx)
+        if not valid_edge_mask.all():
+            valid_edges = valid_edge_mask.nonzero(as_tuple=True)[0]
+            batch.edge_index = batch.edge_index[:, valid_edges]
+            num_edges = batch.edge_index.shape[1]
+            if num_edges == 0:
+                return batch
+        
         edge_to_graph = batch.batch.to(device)[batch.edge_index[0]]
-
         keep_mask = (torch.rand(num_edges, device=device) < (1.0 - AUGMENTATION_EDGE_DROP_RATE))
 
         num_graphs = int(batch.batch.max().item()) + 1

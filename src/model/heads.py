@@ -98,13 +98,20 @@ class BilinearDiscriminator(nn.Module):
         Compute discriminator scores for input pairs.
 
         Args:
-            x: First input tensor of shape (N, GNN_HIDDEN_DIM)
-            y: Second input tensor of shape (N, GNN_HIDDEN_DIM)
+            x: Node embeddings tensor of shape (N, GNN_HIDDEN_DIM)
+            y: Graph embeddings tensor of shape (G, GNN_HIDDEN_DIM) where G is number of graphs
 
         Returns:
-            Scores of shape (N,)
+            Scores of shape (N, G) - scores between each node and each graph
         """
-        scores = torch.sigmoid((self.W(x) * y).sum(dim=-1))
+        # x: (N, D), y: (G, D)
+        # We want to compute scores for all (node, graph) pairs
+        x_expanded = x.unsqueeze(1)  # (N, 1, D)
+        y_expanded = y.unsqueeze(0)  # (1, G, D)
+        
+        # Broadcast and compute element-wise multiplication
+        x_transformed = self.W(x_expanded)  # (N, 1, D)
+        scores = torch.sigmoid((x_transformed * y_expanded).sum(dim=-1))  # (N, G)
 
         return scores
 

@@ -197,8 +197,9 @@ class GraphContrastiveTask(BasePretrainTask):
             N = h.size(0)
 
             disc = self.model.get_head('graph_contrast', domain_name)
-            probs = disc(h, s)
+            probs = disc(h, s)  # Shape: (N, G) where G is number of graphs in batch
 
+            # Create labels: each node should be positive with its own graph
             labels = torch.zeros_like(probs)
             labels[torch.arange(N, device=device), batch_vec] = 1.0
 
