@@ -25,7 +25,7 @@ MASK_TOKEN_INIT_STD = 0.02
 # -----------------------------------------------------------------------------
 # Data Processing & Splits
 # -----------------------------------------------------------------------------
-DATA_ROOT_DIR = '/content/data'
+DATA_ROOT_DIR = '/kaggle/working/gnn-pretraining/data'
 
 VAL_FRACTION = 0.1
 VAL_TEST_FRACTION = 0.2
@@ -114,7 +114,7 @@ PRETRAIN_MODEL_WEIGHT_DECAY = 0.01
 PRETRAIN_UNCERTAINTY_WEIGHT_DECAY = 0.0
 
 WANDB_PROJECT = 'gnn-pretraining'
-PRETRAIN_OUTPUT_DIR = '/content/outputs/pretrain'
+PRETRAIN_OUTPUT_DIR = '/kaggle/working/gnn-pretraining/outputs/pretrain'
 
 PRETRAIN_PIN_MEMORY = True
 PRETRAIN_DROP_LAST = False
