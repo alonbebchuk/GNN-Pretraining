@@ -159,6 +159,21 @@ class EdgeDropping:
         if num_edges == 0 or batch.batch.numel() == 0:
             return batch
             
+        # Pre-validation: if batch seems corrupted, skip edge dropping entirely
+        try:
+            # Quick validation checks
+            if batch.x.size(0) == 0:
+                return batch
+            if batch.batch.max().item() < 0 or batch.batch.min().item() < 0:
+                return batch
+            if batch.edge_index.max().item() >= batch.x.size(0) or batch.edge_index.min().item() < 0:
+                # Edge indices are already invalid, clear them
+                batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+                return batch
+        except (RuntimeError, ValueError, AttributeError):
+            # If basic validation fails, return original batch
+            return batch
+            
         # Ensure edge indices are within bounds of batch tensor
         max_node_idx = batch.batch.size(0) - 1
         
@@ -189,22 +204,52 @@ class EdgeDropping:
             # If indexing fails, return batch with empty edges
             batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
             return batch
-        keep_mask = (torch.rand(num_edges, device=device) < (1.0 - AUGMENTATION_EDGE_DROP_RATE))
+        try:
+            keep_mask = (torch.rand(num_edges, device=device) < (1.0 - AUGMENTATION_EDGE_DROP_RATE))
 
-        num_graphs = int(batch.batch.max().item()) + 1
-        keep_counts = torch.bincount(edge_to_graph.to(device), weights=keep_mask.to(torch.long), minlength=num_graphs)
-        zero_edge_graphs = (keep_counts == 0)
-        if zero_edge_graphs.any():
-            edge_counts = torch.bincount(edge_to_graph.to(device), minlength=num_graphs)
-            ptr = torch.zeros(num_graphs + 1, device=device, dtype=torch.long)
-            ptr[1:] = torch.cumsum(edge_counts, dim=0)
-            starts = ptr[:-1][zero_edge_graphs]
-            keep_mask[starts] = True
+            # Validate edge_to_graph before using it
+            if edge_to_graph.min().item() < 0:
+                # Invalid graph indices, return batch with no edges
+                batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+                return batch
 
-        keep_edges = keep_mask.nonzero(as_tuple=True)[0]
+            num_graphs = int(batch.batch.max().item()) + 1
+            
+            # Ensure edge_to_graph indices are within valid range
+            if edge_to_graph.max().item() >= num_graphs:
+                # Invalid graph indices, return batch with no edges
+                batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+                return batch
+            
+            keep_counts = torch.bincount(edge_to_graph.to(device), weights=keep_mask.to(torch.long), minlength=num_graphs)
+            zero_edge_graphs = (keep_counts == 0)
+            
+            if zero_edge_graphs.any():
+                edge_counts = torch.bincount(edge_to_graph.to(device), minlength=num_graphs)
+                ptr = torch.zeros(num_graphs + 1, device=device, dtype=torch.long)
+                ptr[1:] = torch.cumsum(edge_counts, dim=0)
+                starts = ptr[:-1][zero_edge_graphs]
+                
+                # Validate starts indices before using them
+                if len(starts) > 0 and starts.max().item() < len(keep_mask):
+                    keep_mask[starts] = True
 
-        batch.edge_index = batch.edge_index[:, keep_edges]
-        return batch
+            # Safe nonzero operation with validation
+            if keep_mask.any():
+                keep_edges = keep_mask.nonzero(as_tuple=True)[0]
+                if len(keep_edges) > 0:
+                    batch.edge_index = batch.edge_index[:, keep_edges]
+                else:
+                    batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+            else:
+                batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+            
+            return batch
+            
+        except (RuntimeError, IndexError, ValueError) as e:
+            # If any operation fails, return batch with empty edges
+            batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
+            return batch
 
 
 class AttributeMasking:
@@ -308,10 +353,24 @@ class GraphAugmentor:
 
         batch_v2 = batch_v1.clone()
 
+        # Apply edge dropping with additional safety
         if random.random() < AUGMENTATION_EDGE_DROP_PROB:
-            batch_v1 = EdgeDropping.apply(batch_v1)
+            try:
+                batch_v1_aug = EdgeDropping.apply(batch_v1)
+                # Validate the result before using it
+                if GraphAugmentor._validate_edge_consistency(batch_v1_aug):
+                    batch_v1 = batch_v1_aug
+            except Exception:
+                pass  # Keep original batch_v1 if augmentation fails
+                
         if random.random() < AUGMENTATION_EDGE_DROP_PROB:
-            batch_v2 = EdgeDropping.apply(batch_v2)
+            try:
+                batch_v2_aug = EdgeDropping.apply(batch_v2)
+                # Validate the result before using it
+                if GraphAugmentor._validate_edge_consistency(batch_v2_aug):
+                    batch_v2 = batch_v2_aug
+            except Exception:
+                pass  # Keep original batch_v2 if augmentation fails
 
         if random.random() < AUGMENTATION_ATTR_MASK_PROB:
             batch_v1 = AttributeMasking.apply(batch_v1)
