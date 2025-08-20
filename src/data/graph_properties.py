@@ -8,7 +8,13 @@ import torch
 from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx, to_undirected, remove_self_loops
-from src.common import NORMALIZATION_EPS, NORMALIZATION_STD_FALLBACK
+from src.common import (
+    NORMALIZATION_EPS, 
+    NORMALIZATION_STD_FALLBACK,
+    TRIANGLE_DIVISOR,
+    CLUSTERING_DIVISOR,
+    TASK_ZERO_LOSS
+)
 
 
 class GraphPropertyCalculator:
@@ -58,7 +64,7 @@ class GraphPropertyCalculator:
 
         if N > 2:
             tri_dict = nx.triangles(G)
-            triangles = float(sum(tri_dict.values()) / 3.0)
+            triangles = float(sum(tri_dict.values()) / TRIANGLE_DIVISOR)
         else:
             triangles = 0.0
 
@@ -69,7 +75,7 @@ class GraphPropertyCalculator:
         H = max(components, key=lambda g: g.number_of_nodes())
         diameter = float(nx.diameter(H))
 
-        if float(degrees.std()) == 0.0:
+        if float(degrees.std()) == TASK_ZERO_LOSS:
             assortativity = 0.0
         else:
             assortativity = float(nx.degree_assortativity_coefficient(G))
@@ -92,7 +98,7 @@ class GraphPropertyCalculator:
             betw_dict = nx.betweenness_centrality(G, normalized=True)
             betw = np.array(list(betw_dict.values()), dtype=float)
             b_max = betw.max()
-            denom = float((N - 1) * (N - 2) / 2.0)
+            denom = float((N - 1) * (N - 2) / CLUSTERING_DIVISOR)
             betweenness_centralization = float((b_max - betw).sum() / denom)
         else:
             betweenness_centralization = 0.0

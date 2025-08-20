@@ -5,7 +5,12 @@ from src.common import (
     GRL_LAMBDA_MIN, 
     GRL_LAMBDA_MAX,
     PRETRAIN_LR_WARMUP_FRACTION,
-    PRETRAIN_LR_MIN_FACTOR
+    PRETRAIN_LR_MIN_FACTOR,
+    SCHEDULER_PROGRESS_CLAMP_MIN,
+    SCHEDULER_PROGRESS_CLAMP_MAX,
+    GRL_CORE_NUMERATOR,
+    COSINE_MULTIPLIER,
+    COSINE_OFFSET
 )
 
 
@@ -31,8 +36,8 @@ class GRLLambdaScheduler:
         self._current_step = 0
 
     def __call__(self) -> float:
-        p = max(0.0, min(1.0, self._current_step / float(self.total_steps)))
-        core = 2.0 / (1.0 + math.exp(-self.gamma * p)) - 1.0
+        p = max(SCHEDULER_PROGRESS_CLAMP_MIN, min(SCHEDULER_PROGRESS_CLAMP_MAX, self._current_step / float(self.total_steps)))
+        core = GRL_CORE_NUMERATOR / (SCHEDULER_PROGRESS_CLAMP_MAX + math.exp(-self.gamma * p)) - SCHEDULER_PROGRESS_CLAMP_MAX
         return float(self.lambda_min + (self.lambda_max - self.lambda_min) * core)
 
     def step(self, n: int = 1) -> None:
@@ -83,9 +88,9 @@ class CosineWithWarmup:
         s = min(self._current_step, self.total_steps)
         if s < self._warmup_steps:
             return float((s + 1) / float(self._warmup_steps))
-        progress = (s - self._warmup_steps) / max(1.0, float(self.total_steps - self._warmup_steps))
-        cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
-        return float(self.lr_min_factor + (1.0 - self.lr_min_factor) * cosine)
+        progress = (s - self._warmup_steps) / max(SCHEDULER_PROGRESS_CLAMP_MAX, float(self.total_steps - self._warmup_steps))
+        cosine = COSINE_MULTIPLIER * (COSINE_OFFSET + math.cos(math.pi * progress))
+        return float(self.lr_min_factor + (SCHEDULER_PROGRESS_CLAMP_MAX - self.lr_min_factor) * cosine)
 
     def step(self, n: int = 1) -> None:
         self._current_step = min(self.total_steps, self._current_step + n)

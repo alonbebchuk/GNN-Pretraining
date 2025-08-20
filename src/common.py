@@ -117,6 +117,47 @@ PRETRAIN_MODEL_WEIGHT_DECAY = 0.01
 PRETRAIN_UNCERTAINTY_WEIGHT_DECAY = 0.0
 
 # -----------------------------------------------------------------------------
+# Task-Specific Loss Scaling (Fix for task imbalance)
+# -----------------------------------------------------------------------------
+TASK_LOSS_SCALES = {
+    'node_feat_mask': 0.1,     # Scale down the dominant task (after dimension fix)
+    'graph_prop': 0.3,         # Scale down moderately  
+    'node_contrast': 1.0,      # Keep as reference
+    'graph_contrast': 2.0,     # Scale up slightly (was too low)
+    'link_pred': 1.5,          # Scale up slightly (was too low)
+    'domain_adv': 1.0,         # Keep as reference
+}
+
+# Domain-specific feature scaling factors
+ENZYMES_FEATURE_SCALE_FACTOR = 0.5  # Additional scaling for ENZYMES continuous features
+
+# Task computation constants
+CONTRASTIVE_FALLBACK_LOSS = 0.1  # Fallback loss for edge cases in contrastive tasks
+TASK_ZERO_LOSS = 0.0  # Zero loss for empty batches
+DEFAULT_TASK_SCALE = 1.0  # Default scaling factor for tasks
+
+# Monitoring and logging constants
+CONTRIBUTION_PCT_MULTIPLIER = 100  # Convert to percentage
+DIVISION_EPSILON = 1e-8  # Small epsilon to avoid division by zero
+GRAD_NORM_EXPONENT = 0.5  # Exponent for gradient norm calculation (sqrt)
+TIMING_STEPS_WINDOW = 10  # Number of recent steps for timing calculations
+PERCENTAGE_CONVERSION = 100  # Convert ratios to percentages
+
+# Mathematical constants for schedulers
+SCHEDULER_PROGRESS_CLAMP_MIN = 0.0
+SCHEDULER_PROGRESS_CLAMP_MAX = 1.0
+GRL_CORE_NUMERATOR = 2.0
+COSINE_MULTIPLIER = 0.5
+COSINE_OFFSET = 1.0
+
+# Graph processing constants
+MIN_NODES_AFTER_DROP = 2  # Minimum nodes to keep after node dropping
+SMALL_GRAPH_THRESHOLD = 5  # Threshold for small graphs
+MAX_SINGLE_NODE_DROP = 1  # Maximum nodes to drop from small graphs
+TRIANGLE_DIVISOR = 3.0  # Divisor for triangle counting
+CLUSTERING_DIVISOR = 2.0  # Divisor for clustering coefficient calculation
+
+# -----------------------------------------------------------------------------
 # Scheme-Specific Hyperparameters (Literature-Informed)
 # -----------------------------------------------------------------------------
 

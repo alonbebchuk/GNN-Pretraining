@@ -28,6 +28,10 @@ from src.common import (
     AUGMENTATION_NODE_DROP_PROB,
     AUGMENTATION_NODE_DROP_RATE,
     AUGMENTATION_MIN_NODES_PER_GRAPH,
+    DEFAULT_TASK_SCALE,
+    MIN_NODES_AFTER_DROP,
+    SMALL_GRAPH_THRESHOLD,
+    MAX_SINGLE_NODE_DROP
 )
 
 
@@ -231,7 +235,7 @@ class EdgeDropping:
             batch.edge_index = torch.empty((2, 0), dtype=batch.edge_index.dtype, device=device)
             return batch
         try:
-            keep_mask = (torch.rand(num_edges, device=device) < (1.0 - AUGMENTATION_EDGE_DROP_RATE))
+            keep_mask = (torch.rand(num_edges, device=device) < (DEFAULT_TASK_SCALE - AUGMENTATION_EDGE_DROP_RATE))
 
             # Validate edge_to_graph before using it
             if edge_to_graph.min().item() < 0:

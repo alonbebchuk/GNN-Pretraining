@@ -47,6 +47,11 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_]
         for g in dataset:
             X = g.x.detach().cpu().numpy()
             X_scaled = scaler.transform(X)
+            # CRITICAL FIX: Additional scaling for node feature masking task
+            # Reduce variance to be more comparable with categorical features
+            if dataset_name == 'ENZYMES':
+                from src.common import ENZYMES_FEATURE_SCALE_FACTOR
+                X_scaled = X_scaled * ENZYMES_FEATURE_SCALE_FACTOR  # Scale down ENZYMES features for better task balance
             g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
 
         logging.info(f"Applied z-score standardization to {dataset_name}")

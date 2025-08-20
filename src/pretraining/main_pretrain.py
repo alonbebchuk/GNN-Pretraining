@@ -79,6 +79,12 @@ from src.common import (
     SCHEME_SPECIFIC_PATIENCE,
     SCHEME_SPECIFIC_DROPOUT,
     SCHEME_SPECIFIC_MODEL_WEIGHT_DECAY,
+    # Constants for monitoring and computation
+    DIVISION_EPSILON,
+    CONTRIBUTION_PCT_MULTIPLIER,
+    GRAD_NORM_EXPONENT,
+    TIMING_STEPS_WINDOW,
+    DEFAULT_TASK_SCALE,
 )
 from src.model.pretrain_model import PretrainableGNN
 from src.pretraining.losses import UncertaintyWeighter
@@ -729,6 +735,26 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 for t, sigma in weighter.get_task_sigmas().items():
                     log_dict[f"train/sigma/{t}"] = float(sigma)
 
+                # ENHANCED MONITORING: Add task contribution percentages
+                total_weighted_loss = sum(float(v.detach().cpu()) for v in weighted_components.values())
+                if total_weighted_loss > DIVISION_EPSILON:  # Avoid division by zero
+                    for task_name, weighted_loss in weighted_components.items():
+                        contribution_pct = float(weighted_loss.detach().cpu()) / total_weighted_loss * CONTRIBUTION_PCT_MULTIPLIER
+                        log_dict[f"train/contribution_pct/{task_name}"] = contribution_pct
+
+                # ENHANCED MONITORING: Add gradient norms per task head
+                if hasattr(model, 'task_heads'):
+                    for task_name, heads_dict in model.task_heads.items():
+                        total_grad_norm = 0.0
+                        param_count = 0
+                        for domain_name, head in heads_dict.items():
+                            for param in head.parameters():
+                                if param.grad is not None:
+                                    total_grad_norm += param.grad.norm().item() ** 2
+                                    param_count += 1
+                        if param_count > 0:
+                            log_dict[f"train/grad_norm/{task_name}"] = (total_grad_norm / param_count) ** GRAD_NORM_EXPONENT
+
                 log_dict["train/lr_scale"] = float(scale)
                 log_dict["train/lr_model"] = float(cfg.lr_model * scale)
                 log_dict["train/lr_uncertainty"] = float(cfg.lr_uncertainty * scale)
@@ -742,15 +768,15 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 if domain_losses_list:
                     log_dict["train/domain_balance/mean"] = float(np.mean(domain_losses_list))
                     log_dict["train/domain_balance/std"] = float(np.std(domain_losses_list))
-                    log_dict["train/domain_balance/cv"] = float(np.std(domain_losses_list) / (np.mean(domain_losses_list) + 1e-8))
+                    log_dict["train/domain_balance/cv"] = float(np.std(domain_losses_list) / (np.mean(domain_losses_list) + DIVISION_EPSILON))
                 
                 # Add timing metrics
                 current_time = time.time()
                 log_dict["timing/cumulative_training_time_hours"] = (current_time - training_start_time) / 3600
-                if len(step_times) >= 10:  # Only log after some steps for stability
-                    recent_step_times = step_times[-10:]
+                if len(step_times) >= TIMING_STEPS_WINDOW:  # Only log after some steps for stability
+                    recent_step_times = step_times[-TIMING_STEPS_WINDOW:]
                     log_dict["timing/avg_step_time_seconds"] = float(np.mean(recent_step_times))
-                    log_dict["timing/steps_per_second"] = 1.0 / float(np.mean(recent_step_times))
+                    log_dict["timing/steps_per_second"] = DEFAULT_TASK_SCALE / float(np.mean(recent_step_times))
 
                 wandb.log(log_dict, step=global_step)
 

@@ -11,6 +11,8 @@ from torch_geometric.utils import batched_negative_sampling
 
 from src.common import (
     NODE_CONTRASTIVE_TEMPERATURE,
+    CONTRASTIVE_FALLBACK_LOSS,
+    TASK_ZERO_LOSS
 )
 from src.pretraining.augmentations import GraphAugmentor
 
@@ -44,9 +46,12 @@ class NodeFeatureMaskingTask(BasePretrainTask):
     """
     Reconstruct original h0 embeddings of masked nodes.
     Loss: MSE between reconstructed h0 and target h0 for masked nodes, averaged over batch.
+    FIXED: Normalized by feature dimension to handle different domain sizes.
     """
 
     def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
+        from src.common import DOMAIN_DIMENSIONS
+        
         total_loss = 0.0
         total_size = 0
         per_domain_losses = {}
@@ -57,7 +62,12 @@ class NodeFeatureMaskingTask(BasePretrainTask):
 
             h_final = self.model.forward_with_h0(masked_h0.to(device), batch.edge_index.to(device))
             reconstructed_h0 = self.model.get_head('node_feat_mask', domain_name)(h_final[mask_indices])
-            loss = F.mse_loss(reconstructed_h0, target_h0, reduction='sum')
+            
+            # CRITICAL FIX: Normalize by feature dimension to make losses comparable across domains
+            raw_loss = F.mse_loss(reconstructed_h0, target_h0, reduction='sum')
+            feature_dim = DOMAIN_DIMENSIONS[domain_name]
+            loss = raw_loss / feature_dim  # Scale down by feature dimensionality
+            
             size = mask_indices.size(0)
             total_loss += loss
             total_size += size
@@ -136,10 +146,10 @@ class NodeContrastiveTask(BasePretrainTask):
         
         # Handle edge cases: empty or single node batches
         if N == 0:
-            return torch.tensor(0.0, device=device, requires_grad=True), 0
+            return torch.tensor(TASK_ZERO_LOSS, device=device, requires_grad=True), 0
         if N == 1:
             # For single node, return small loss to avoid division by zero
-            return torch.tensor(0.1, device=device, requires_grad=True), 2
+            return torch.tensor(CONTRASTIVE_FALLBACK_LOSS, device=device, requires_grad=True), 2
 
         # Ensure z1 and z2 have the same size
         if z1.size(0) != z2.size(0):
@@ -148,9 +158,9 @@ class NodeContrastiveTask(BasePretrainTask):
             z2 = z2[:min_size]
             N = min_size
             if N == 0:
-                return torch.tensor(0.0, device=device, requires_grad=True), 0
+                return torch.tensor(TASK_ZERO_LOSS, device=device, requires_grad=True), 0
             if N == 1:
-                return torch.tensor(0.1, device=device, requires_grad=True), 2
+                return torch.tensor(CONTRASTIVE_FALLBACK_LOSS, device=device, requires_grad=True), 2
 
         z1 = F.normalize(z1, dim=1)
         z2 = F.normalize(z2, dim=1)
@@ -183,14 +193,14 @@ class NodeContrastiveTask(BasePretrainTask):
         for domain_name, batch in batches_by_domain.items():
             # Skip empty batches
             if batch.x.size(0) == 0:
-                per_domain_losses[domain_name] = torch.tensor(0.0, device=batch.x.device)
+                per_domain_losses[domain_name] = torch.tensor(TASK_ZERO_LOSS, device=batch.x.device)
                 continue
                 
             batch_v1, batch_v2 = GraphAugmentor.create_two_views(batch)
             
             # Skip if augmentation resulted in empty batches
             if batch_v1.x.size(0) == 0 or batch_v2.x.size(0) == 0:
-                per_domain_losses[domain_name] = torch.tensor(0.0, device=batch.x.device)
+                per_domain_losses[domain_name] = torch.tensor(TASK_ZERO_LOSS, device=batch.x.device)
                 continue
 
             h1 = self.model(batch_v1, domain_name)
@@ -208,7 +218,7 @@ class NodeContrastiveTask(BasePretrainTask):
         if total_size == 0:
             # Return a small loss if no valid batches were processed
             device = next(iter(batches_by_domain.values())).x.device
-            return torch.tensor(0.1, device=device, requires_grad=True), per_domain_losses
+            return torch.tensor(CONTRASTIVE_FALLBACK_LOSS, device=device, requires_grad=True), per_domain_losses
             
         total_loss /= total_size
         return total_loss, per_domain_losses
@@ -268,7 +278,7 @@ class GraphPropertyPredictionTask(BasePretrainTask):
             if not hasattr(batch, 'graph_properties'):
                 # Skip this domain if it doesn't have graph properties
                 # This can happen if the dataset wasn't processed with graph properties
-                per_domain_losses[domain_name] = torch.tensor(0.0, device=device)
+                per_domain_losses[domain_name] = torch.tensor(TASK_ZERO_LOSS, device=device)
                 continue
                 
             h = self.model(batch, domain_name)
@@ -299,7 +309,7 @@ class GraphPropertyPredictionTask(BasePretrainTask):
 
         if total_size == 0:
             # No domains had graph properties, return zero loss
-            return torch.tensor(0.0, device=device, requires_grad=True), per_domain_losses
+            return torch.tensor(TASK_ZERO_LOSS, device=device, requires_grad=True), per_domain_losses
             
         total_loss /= total_size
         return total_loss, per_domain_losses
@@ -319,7 +329,7 @@ class DomainAdversarialTask(BasePretrainTask):
 
     def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         total_loss = 0.0
-        lambda_val = kwargs.get('lambda_val', 0.0)
+        lambda_val = kwargs.get('lambda_val', TASK_ZERO_LOSS)
         embeddings = []
         labels = []
         device = self.model.device

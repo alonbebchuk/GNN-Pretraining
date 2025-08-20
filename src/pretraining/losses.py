@@ -1,7 +1,13 @@
 import torch
 import torch.nn as nn
 from typing import Dict, Tuple, List
-from src.common import UNCERTAINTY_LOSS_COEF, LOGSIGMA_TO_SIGMA_SCALE
+from src.common import (
+    UNCERTAINTY_LOSS_COEF, 
+    LOGSIGMA_TO_SIGMA_SCALE, 
+    TASK_LOSS_SCALES,
+    DEFAULT_TASK_SCALE,
+    TASK_ZERO_LOSS
+)
 
 
 class UncertaintyWeighter(nn.Module):
@@ -21,7 +27,7 @@ class UncertaintyWeighter(nn.Module):
         self.log_sigma_sq = nn.ParameterDict({t: nn.Parameter(torch.zeros(())) for t in self.weighted_task_names})
         self.include_domain_adv = 'domain_adv' in task_names
 
-    def forward(self, raw_losses: Dict[str, torch.Tensor], lambda_val: float = 0.0) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def forward(self, raw_losses: Dict[str, torch.Tensor], lambda_val: float = TASK_ZERO_LOSS) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Args:
             raw_losses: Mapping from task name to its raw scalar loss tensor.
@@ -32,17 +38,24 @@ class UncertaintyWeighter(nn.Module):
             components: Dict of per-task contributions (already weighted)
         """
         device = next(iter(raw_losses.values())).device
-        total = torch.tensor(0.0, device=device)
+        total = torch.tensor(TASK_ZERO_LOSS, device=device)
         components = {}
 
         for t in self.weighted_task_names:
             ls = raw_losses[t]
-            ls_weighted = UNCERTAINTY_LOSS_COEF * torch.exp(-self.log_sigma_sq[t]) * ls + UNCERTAINTY_LOSS_COEF * self.log_sigma_sq[t]
+            
+            # CRITICAL FIX: Apply task-specific loss scaling BEFORE uncertainty weighting
+            task_scale = TASK_LOSS_SCALES.get(t, DEFAULT_TASK_SCALE)
+            ls_scaled = ls * task_scale
+            
+            # Apply uncertainty weighting to scaled loss
+            ls_weighted = UNCERTAINTY_LOSS_COEF * torch.exp(-self.log_sigma_sq[t]) * ls_scaled + UNCERTAINTY_LOSS_COEF * self.log_sigma_sq[t]
             total = total + ls_weighted
             components[t] = ls_weighted
 
         if self.include_domain_adv:
-            domain_term = -float(lambda_val) * raw_losses['domain_adv']
+            domain_scale = TASK_LOSS_SCALES.get('domain_adv', DEFAULT_TASK_SCALE)
+            domain_term = -float(lambda_val) * raw_losses['domain_adv'] * domain_scale
             total = total + domain_term
             components['domain_adv'] = domain_term
 
