@@ -1,20 +1,13 @@
 import math
-from typing import List, Iterable
-from numpy.typing import NDArray
-
 import networkx as nx
 import numpy as np
 import torch
+from typing import Iterable
+from numpy.typing import NDArray
 from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx, to_undirected, remove_self_loops
-from src.common import (
-    NORMALIZATION_EPS, 
-    NORMALIZATION_STD_FALLBACK,
-    TRIANGLE_DIVISOR,
-    CLUSTERING_DIVISOR,
-    TASK_ZERO_LOSS
-)
+from src.common import EPSILON
 
 
 class GraphPropertyCalculator:
@@ -64,7 +57,7 @@ class GraphPropertyCalculator:
 
         if N > 2:
             tri_dict = nx.triangles(G)
-            triangles = float(sum(tri_dict.values()) / TRIANGLE_DIVISOR)
+            triangles = float(sum(tri_dict.values()) / 3.0)
         else:
             triangles = 0.0
 
@@ -75,7 +68,7 @@ class GraphPropertyCalculator:
         H = max(components, key=lambda g: g.number_of_nodes())
         diameter = float(nx.diameter(H))
 
-        if float(degrees.std()) == TASK_ZERO_LOSS:
+        if float(degrees.std()) == 0:
             assortativity = 0.0
         else:
             assortativity = float(nx.degree_assortativity_coefficient(G))
@@ -98,7 +91,7 @@ class GraphPropertyCalculator:
             betw_dict = nx.betweenness_centrality(G, normalized=True)
             betw = np.array(list(betw_dict.values()), dtype=float)
             b_max = betw.max()
-            denom = float((N - 1) * (N - 2) / CLUSTERING_DIVISOR)
+            denom = float((N - 1) * (N - 2) / 2.0)
             betweenness_centralization = float((b_max - betw).sum() / denom)
         else:
             betweenness_centralization = 0.0
@@ -161,8 +154,7 @@ class GraphPropertyCalculator:
 
         train_props = all_props[train_idx]
         mean = train_props.mean(dim=0)
-        std = train_props.std(dim=0, unbiased=True)
-        std[std < NORMALIZATION_EPS] = NORMALIZATION_STD_FALLBACK
+        std = train_props.std(dim=0, unbiased=True) + EPSILON
 
         all_props = (all_props - mean) / std
         return all_props

@@ -11,6 +11,7 @@ from torch_geometric.data import Data
 from tqdm import tqdm
 from src.data.graph_properties import GraphPropertyCalculator
 from src.common import (
+    CONTINUOUS_FEATURE_SCALE_FACTOR,
     DATA_ROOT_DIR,
     RANDOM_SEED,
     PRETRAIN_TUDATASETS,
@@ -46,12 +47,7 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_]
 
         for g in dataset:
             X = g.x.detach().cpu().numpy()
-            X_scaled = scaler.transform(X)
-            # CRITICAL FIX: Additional scaling for node feature masking task
-            # Reduce variance to be more comparable with categorical features
-            if dataset_name == 'ENZYMES':
-                from src.common import ENZYMES_FEATURE_SCALE_FACTOR
-                X_scaled = X_scaled * ENZYMES_FEATURE_SCALE_FACTOR  # Scale down ENZYMES features for better task balance
+            X_scaled = scaler.transform(X) * CONTINUOUS_FEATURE_SCALE_FACTOR
             g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
 
         logging.info(f"Applied z-score standardization to {dataset_name}")
@@ -66,39 +62,34 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_]
         logging.warning(f"Unknown feature type '{feature_type}' for dataset {dataset_name}")
 
 
-def attach_standardized_graph_properties(dataset: List[Data], train_idx: NDArray[np.int_], calculator: GraphPropertyCalculator) -> None:
-    """Compute standardized graph properties and store them separately due to PyG bug."""
+def compute_standardized_graph_properties(dataset: List[Data], train_idx: NDArray[np.int_], calculator: GraphPropertyCalculator) -> torch.Tensor:
+    """Compute standardized graph properties and return them.
+    
+    Returns:
+        torch.Tensor: Graph properties tensor of shape [num_graphs, 15]
+    """
     props = calculator.compute_and_standardize_for_dataset(dataset, train_idx)
     
-    # WORKAROUND: PyG has a severe bug where custom attributes disappear after loops on preprocessed graphs
-    # Instead of trying to attach to graph objects, we'll return the properties tensor for separate storage
-    
-    # Store the properties tensor as a global variable for this dataset processing session
-    global _current_graph_properties
-    _current_graph_properties = props.clone().detach()
-    
-    logging.info(f"Computed and stored graph_properties tensor with shape {props.shape} for {len(dataset)} graphs")
+    logging.info(f"Computed graph_properties tensor with shape {props.shape} for {len(dataset)} graphs")
+    return props.clone().detach()
 
 
-# Global variable to store graph properties during processing (workaround for PyG bug)
-_current_graph_properties = None
-
-def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, torch.Tensor]) -> None:
-    """Save processed data and splits to disk."""
-    global _current_graph_properties
+def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, torch.Tensor], graph_properties: torch.Tensor = None) -> None:
+    """Save processed data and splits to disk.
     
+    Args:
+        dataset_name: Name of the dataset
+        data: List of PyG Data objects
+        splits: Dictionary containing train/val/test splits
+        graph_properties: Optional tensor of graph properties [num_graphs, 15]
+    """
     save_dir = PROCESSED_DIR / dataset_name
     os.makedirs(save_dir, exist_ok=True)
 
-    # Save main data and splits
     torch.save(data, save_dir / 'data.pt')
     torch.save(splits, save_dir / 'splits.pt')
-    
-    # Save graph properties separately if they exist (workaround for PyG bug)
-    if _current_graph_properties is not None:
-        torch.save(_current_graph_properties, save_dir / 'graph_properties.pt')
-        logging.info(f"Saved graph_properties tensor with shape {_current_graph_properties.shape}")
-        _current_graph_properties = None  # Reset for next dataset
+    if graph_properties is not None:
+        torch.save(graph_properties, save_dir / 'graph_properties.pt')
 
     logging.info(f"Successfully processed and saved '{dataset_name}'.")
 
@@ -142,13 +133,13 @@ def process_tudatasets() -> None:
 
             apply_feature_preprocessing(canonical_train_graphs, tr_rel, name)
 
-            attach_standardized_graph_properties(canonical_train_graphs, tr_rel, calculator)
+            graph_properties = compute_standardized_graph_properties(canonical_train_graphs, tr_rel, calculator)
 
             pretrain_splits = {
                 'train': torch.tensor(tr_rel, dtype=torch.long),
                 'val': torch.tensor(va_rel, dtype=torch.long),
             }
-            save_processed_data(f"{name}_pretrain", list(canonical_train_graphs), pretrain_splits)
+            save_processed_data(f"{name}_pretrain", list(canonical_train_graphs), pretrain_splits, graph_properties)
 
         else:
             if name in PRETRAIN_TUDATASETS:
@@ -159,13 +150,13 @@ def process_tudatasets() -> None:
 
                 apply_feature_preprocessing(pretrain_dataset, train_idx, name)
 
-                attach_standardized_graph_properties(pretrain_dataset, train_idx, calculator)
+                graph_properties = compute_standardized_graph_properties(pretrain_dataset, train_idx, calculator)
 
                 pretrain_splits = {
                     'train': torch.tensor(train_idx, dtype=torch.long),
                     'val': torch.tensor(val_idx, dtype=torch.long),
                 }
-                save_processed_data(f"{name}_pretrain", list(pretrain_dataset), pretrain_splits)
+                save_processed_data(f"{name}_pretrain", list(pretrain_dataset), pretrain_splits, graph_properties)
 
             if name in DOWNSTREAM_TUDATASETS:
                 downstream_dataset = copy.deepcopy(dataset)

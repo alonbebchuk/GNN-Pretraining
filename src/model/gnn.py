@@ -11,14 +11,18 @@ class InputEncoder(nn.Module):
 
     Architecture: Linear -> LayerNorm -> ReLU -> Dropout
     This creates a standardized representation from domain-specific features.
+    
+    Uses constant dropout for downstream transfer learning compatibility.
+    Scheme-specific regularization is applied in task heads instead.
     """
 
-    def __init__(self, dim_in: int) -> None:
+    def __init__(self, dim_in: int, dropout_rate: float = DROPOUT_RATE) -> None:
         """
         Initialize the input encoder.
 
         Args:
             dim_in: Input feature dimension (domain-specific)
+            dropout_rate: Dropout rate (can be scheme-specific)
         """
         super(InputEncoder, self).__init__()
 
@@ -26,7 +30,7 @@ class InputEncoder(nn.Module):
             nn.Linear(dim_in, GNN_HIDDEN_DIM),
             nn.LayerNorm(GNN_HIDDEN_DIM),
             nn.ReLU(),
-            nn.Dropout(p=DROPOUT_RATE)
+            nn.Dropout(p=dropout_rate)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

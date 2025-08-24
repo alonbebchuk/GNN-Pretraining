@@ -20,6 +20,7 @@ from torch_geometric.data import Batch
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from src.common import (
+    PERCENTAGE_CONVERSION,
     PRETRAIN_EPOCHS,
     PRETRAIN_BATCH_SIZE,
     PRETRAIN_LR_MODEL,
@@ -71,17 +72,8 @@ from src.common import (
     FEATURE_TYPES,
     # Scheme-specific hyperparameters
     get_training_scheme,
-    get_scheme_hyperparameter,
-    SCHEME_SPECIFIC_LR_MODEL,
-    SCHEME_SPECIFIC_LR_UNCERTAINTY,
-    SCHEME_SPECIFIC_LR_MIN_FACTOR,
-    SCHEME_SPECIFIC_LR_WARMUP_FRACTION,
-    SCHEME_SPECIFIC_PATIENCE,
-    SCHEME_SPECIFIC_DROPOUT,
-    SCHEME_SPECIFIC_MODEL_WEIGHT_DECAY,
     # Constants for monitoring and computation
-    DIVISION_EPSILON,
-    CONTRIBUTION_PCT_MULTIPLIER,
+    EPSILON,
     GRAD_NORM_EXPONENT,
     TIMING_STEPS_WINDOW,
     DEFAULT_TASK_SCALE,
@@ -121,6 +113,11 @@ class TrainConfig:
     log_every_steps: int = PRETRAIN_LOG_EVERY_STEPS
     eval_every_epochs: int = PRETRAIN_EVAL_EVERY_EPOCHS
     output_dir: str = PRETRAIN_OUTPUT_DIR
+    
+    # NEW: Step-based training configuration
+    max_steps: Optional[int] = None  # If provided, use step-based training instead of epochs
+    eval_every_steps: Optional[int] = None  # For step-based training
+    patience_steps: Optional[int] = None  # For step-based training
     lr_model: float = PRETRAIN_LR_MODEL
     lr_uncertainty: float = PRETRAIN_LR_UNCERTAINTY
     adam_betas: Tuple[float, float] = PRETRAIN_ADAM_BETAS
@@ -138,7 +135,7 @@ class TrainConfig:
     def __post_init__(self):
         """
         Automatically calculate batch_size_per_domain if not provided.
-        Apply scheme-specific hyperparameters based on experiment configuration.
+        Apply scheme-specific hyperparameters and configure step-based training.
         """
         if self.batch_size_per_domain is None:
             num_domains = len(self.pretrain_domains)
@@ -148,23 +145,40 @@ class TrainConfig:
         if self.training_scheme is None:
             self.training_scheme = get_training_scheme(self.exp_name, self.active_tasks)
         
-        # Apply scheme-specific hyperparameters (literature-informed)
-        self.lr_model = get_scheme_hyperparameter(self.training_scheme, 'lr_model', 'default')
-        self.lr_uncertainty = get_scheme_hyperparameter(self.training_scheme, 'lr_uncertainty', 'default')
-        self.lr_min_factor = get_scheme_hyperparameter(self.training_scheme, 'lr_min_factor', 'default')
-        self.lr_warmup_fraction = get_scheme_hyperparameter(self.training_scheme, 'lr_warmup_fraction', 'default')
-        self.patience = get_scheme_hyperparameter(self.training_scheme, 'patience', 'default')
-        self.dropout_rate = get_scheme_hyperparameter(self.training_scheme, 'dropout_rate', 'default')
-        self.model_weight_decay = get_scheme_hyperparameter(self.training_scheme, 'weight_decay', 'default')
+        # Import step-based training configuration  
+        from src.common import (
+            get_scheme_hyperparameters, PRETRAIN_MAX_STEPS, 
+            PRETRAIN_EVAL_EVERY_STEPS, PRETRAIN_PATIENCE_STEPS,
+            PRETRAIN_LOG_EVERY_STEPS
+        )
         
-        print(f"Applied scheme-specific hyperparameters for '{self.training_scheme}' scheme:")
-        print(f"  - lr_model: {self.lr_model}")
-        print(f"  - lr_uncertainty: {self.lr_uncertainty}")
-        print(f"  - lr_min_factor: {self.lr_min_factor}")
-        print(f"  - lr_warmup_fraction: {self.lr_warmup_fraction}")
-        print(f"  - patience: {self.patience}")
-        print(f"  - dropout_rate: {self.dropout_rate}")
-        print(f"  - model_weight_decay: {self.model_weight_decay}")
+        # Get complete scheme configuration
+        scheme_config = get_scheme_hyperparameters(self.training_scheme)
+        
+        # Apply scheme-specific hyperparameters
+        self.lr_model = scheme_config['lr_model']
+        self.lr_uncertainty = scheme_config['lr_uncertainty']
+        self.lr_min_factor = scheme_config['lr_min_factor']
+        self.dropout_rate = scheme_config['dropout_rate']
+        self.model_weight_decay = scheme_config['weight_decay']
+        
+        # Configure step-based training (replaces epoch-based)
+        self.max_steps = scheme_config['max_steps']
+        self.eval_every_steps = scheme_config['eval_every_steps']
+        self.patience_steps = scheme_config['patience_steps']
+        
+        # Update logging frequency
+        self.log_every_steps = PRETRAIN_LOG_EVERY_STEPS
+        
+        # For warmup calculation, we need warmup in steps
+        self.lr_warmup_steps = scheme_config['warmup_steps']
+        self.lr_warmup_fraction = self.lr_warmup_steps / self.max_steps  # For compatibility
+        
+        print(f"✅ Applied scheme '{self.training_scheme}' configuration:")
+        print(f"  🎯 Step-based training: {self.max_steps} steps ({self.max_steps // 188:.1f} equiv epochs)")
+        print(f"  📚 Learning rates: model={self.lr_model}, uncertainty={self.lr_uncertainty}")
+        print(f"  🎲 Regularization: task_heads_dropout={self.dropout_rate} (encoders/backbone=0.2 for transfer), weight_decay={self.model_weight_decay}")
+        print(f"  ⏱️  Schedule: warmup={self.lr_warmup_steps}s, eval_every={self.eval_every_steps}s, patience={self.patience_steps}s")
 
 
 def build_config(args: argparse.Namespace) -> TrainConfig:
@@ -514,7 +528,9 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
         seed=seed,
     )
 
-    total_steps = cfg.epochs * steps_per_epoch
+    # Use step-based training configuration
+    total_steps = cfg.max_steps
+    print(f"🚀 Step-based training: {total_steps} steps (replacing {cfg.epochs} epochs)")
 
     model = PretrainableGNN(device=device, domain_names=cfg.pretrain_domains, task_names=cfg.active_tasks, dropout_rate=cfg.dropout_rate)
     tasks = instantiate_tasks(model, cfg.active_tasks)
@@ -538,7 +554,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
     grl_sched = GRLLambdaScheduler(total_steps=total_steps)
     lr_multiplier = CosineWithWarmup(
         total_steps=total_steps,
-        warmup_fraction=cfg.lr_warmup_fraction,  # Use scheme-specific warmup
+        warmup_fraction=cfg.lr_warmup_fraction, # Use warmup fraction (calculated from steps)
         lr_min_factor=cfg.lr_min_factor,        # Use scheme-specific min factor
     )
 
@@ -572,7 +588,9 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
         "model": {
             "gnn_hidden_dim": GNN_HIDDEN_DIM,
             "gnn_num_layers": GNN_NUM_LAYERS,
-            "dropout_rate": DROPOUT_RATE,
+            "dropout_rate_backbone": DROPOUT_RATE,  # Constant for downstream consistency
+            "dropout_rate_encoders": DROPOUT_RATE,  # Constant for downstream reusability
+            "dropout_rate_task_heads": cfg.dropout_rate,  # Scheme-specific for task heads only
             "contrastive_proj_dim": CONTRASTIVE_PROJ_DIM,
             "graph_prop_head_hidden_dim": GRAPH_PROP_HEAD_HIDDEN_DIM,
             "domain_adv_head_hidden_dim": DOMAIN_ADV_HEAD_HIDDEN_DIM,
@@ -657,9 +675,10 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
     manifest_path = Path(cfg.output_dir) / f"manifest_{cfg.exp_name}_seed{seed}.json"
     best_epoch = -1
     
-    # Early stopping configuration - use scheme-specific patience
-    patience = cfg.patience  # Stop if no improvement for scheme-specific epochs
-    epochs_without_improvement = 0
+    # Early stopping configuration - step-based with scheme-specific patience
+    patience_steps = cfg.patience_steps  # Stop if no improvement for scheme-specific steps
+    steps_since_improvement = 0
+    best_step = -1
     
     # Timing tracking
     training_start_time = time.time()
@@ -737,9 +756,9 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
 
                 # ENHANCED MONITORING: Add task contribution percentages
                 total_weighted_loss = sum(float(v.detach().cpu()) for v in weighted_components.values())
-                if total_weighted_loss > DIVISION_EPSILON:  # Avoid division by zero
+                if total_weighted_loss > EPSILON:  # Avoid division by zero
                     for task_name, weighted_loss in weighted_components.items():
-                        contribution_pct = float(weighted_loss.detach().cpu()) / total_weighted_loss * CONTRIBUTION_PCT_MULTIPLIER
+                        contribution_pct = float(weighted_loss.detach().cpu()) / total_weighted_loss * PERCENTAGE_CONVERSION
                         log_dict[f"train/contribution_pct/{task_name}"] = contribution_pct
 
                 # ENHANCED MONITORING: Add gradient norms per task head
@@ -768,7 +787,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 if domain_losses_list:
                     log_dict["train/domain_balance/mean"] = float(np.mean(domain_losses_list))
                     log_dict["train/domain_balance/std"] = float(np.std(domain_losses_list))
-                    log_dict["train/domain_balance/cv"] = float(np.std(domain_losses_list) / (np.mean(domain_losses_list) + DIVISION_EPSILON))
+                    log_dict["train/domain_balance/cv"] = float(np.std(domain_losses_list) / (np.mean(domain_losses_list) + EPSILON))
                 
                 # Add timing metrics
                 current_time = time.time()
@@ -780,23 +799,30 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
 
                 wandb.log(log_dict, step=global_step)
 
-            global_step += 1
+        global_step += 1
+        step += 1
 
-        if (epoch % cfg.eval_every_epochs) == 0:
-            val_total, val_raw, val_weighted, val_domain_totals, val_balanced, val_per_task_per_domain = run_validation(
-                model=model,
-                tasks=tasks,
-                weighter=weighter,
-                val_loaders=val_loaders,
-                scheduler=grl_sched,
-                device=device,
+        # Evaluation at regular step intervals
+        if step % cfg.eval_every_steps == 0 or step >= total_steps:
+            eval_step += 1
+            
+            # Calculate equivalent epochs for logging
+            equivalent_epoch = step / (total_steps / 30)  # 30 equivalent epochs
+            selection_total, raw_means, weighted_means, per_domain_total, balanced_total, per_task_per_domain_means = run_validation(
+                model,
+                tasks,
+                weighter,
+                val_loaders,
+                grl_sched,
+                device
             )
 
             log_dict = {
-                "val/total_loss": val_total,
+                "val/total_loss": selection_total,
                 "val/grl_lambda": grl_sched(),
-                "val/balanced_total": val_balanced,
-                "epoch": float(epoch),
+                "val/balanced_total": balanced_total,
+                "step": float(step),
+                "epoch_equiv": float(equivalent_epoch),
                 "global_step": float(global_step),
                 
                 # Add scheduler states for debugging
@@ -806,15 +832,15 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 "schedulers/current_lr_uncertainty": cfg.lr_uncertainty * lr_multiplier(),
             }
 
-            for k, v in val_raw.items():
+            for k, v in raw_means.items():
                 log_dict[f"val/raw/{k}"] = v
-            for k, v in val_weighted.items():
+            for k, v in weighted_means.items():
                 log_dict[f"val/weighted/{k}"] = v
 
-            for d, v in val_domain_totals.items():
+            for d, v in per_domain_total.items():
                 log_dict[f"val/domain_total/{d}"] = v
 
-            for task_name, domain_losses in val_per_task_per_domain.items():
+            for task_name, domain_losses in per_task_per_domain_means.items():
                 for domain_name, loss in domain_losses.items():
                     log_dict[f"val/domain/{task_name}/{domain_name}"] = loss
                     
@@ -822,44 +848,45 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
             for t, sigma in weighter.get_task_sigmas().items():
                 log_dict[f"val/sigma/{t}"] = float(sigma)
             
-            # Add epoch timing metrics
-            if epoch > 1:
-                epoch_duration = time.time() - epoch_start_times[epoch]
-                log_dict["timing/epoch_duration_seconds"] = epoch_duration
-                log_dict["timing/epoch_duration_minutes"] = epoch_duration / 60
-                
+            # Add step timing metrics
+            if eval_step > 1:
                 # Efficiency metrics
                 cumulative_time = time.time() - training_start_time
                 log_dict["timing/cumulative_training_time_seconds"] = cumulative_time
-                log_dict["timing/average_epoch_time_seconds"] = cumulative_time / epoch
+                log_dict["timing/average_time_per_step_seconds"] = cumulative_time / step
+                log_dict["timing/steps_per_second"] = step / cumulative_time
                 
                 # Convergence efficiency
                 if best_epoch > 0:
                     log_dict["efficiency/epochs_to_best"] = best_epoch
                     log_dict["efficiency/time_to_best_hours"] = (epoch_start_times.get(best_epoch, training_start_time) - training_start_time) / 3600
 
-            ood_domains = [d for d in val_domain_totals.keys() if d not in OVERLAP_TUDATASETS]
+            ood_domains = [d for d in per_domain_total.keys() if d not in OVERLAP_TUDATASETS]
             if len(ood_domains) > 0:
-                selection_total = float(np.mean([val_domain_totals[d] for d in ood_domains]))
+                # Use OOD domains for selection if available
+                pass  # selection_total already calculated from validation
                 selection_method = "ood_average"
             else:
-                selection_total = float(val_balanced)
+                # Use balanced total for selection
+                pass  # selection_total already calculated from validation
                 selection_method = "balanced_average"
 
             log_dict["val/selection_total"] = selection_total
             
             wandb.log(log_dict, step=global_step)
 
-            if epoch == 1 or selection_total < best_val_total:
+            if eval_step == 1 or selection_total < best_val_total:
                 best_val_total = selection_total
-                best_epoch = epoch
-                epochs_without_improvement = 0  # Reset counter
+                best_step = step
+                steps_since_improvement = 0  # Reset counter
+                best_epoch = int(equivalent_epoch)  # For logging compatibility
                 
                 # Log improvement for monitoring
                 wandb.log({
-                    "checkpoints/new_best_epoch": epoch,
+                    "checkpoints/new_best_step": step,
+                    "checkpoints/new_best_epoch_equiv": equivalent_epoch,
                     "checkpoints/new_best_val_total": selection_total,
-                    "checkpoints/improvement": (wandb.run.summary.get("best_val_total", float("inf")) - selection_total) if epoch > 1 else 0,
+                    "checkpoints/improvement": (wandb.run.summary.get("best_val_total", float("inf")) - selection_total) if eval_step > 1 else 0,
                 }, step=global_step)
                 
                 # Save comprehensive checkpoint with all states needed for resuming/fine-tuning
@@ -877,11 +904,12 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                     "lr_scheduler_state": lr_multiplier.state_dict(),
                     
                     # Training state
-                    "epoch": epoch,
+                    "step": step,
                     "global_step": global_step,
                     "best_val_total": best_val_total,
-                    "best_epoch": best_epoch,
-                    "steps_per_epoch": steps_per_epoch,
+                    "best_step": best_step,
+                    "best_epoch_equiv": equivalent_epoch,
+                    "eval_every_steps": cfg.eval_every_steps,
                     "total_steps": total_steps,
                     
                     # Configuration and metadata
@@ -963,7 +991,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                             "expected_downstream_tasks": ["graph_classification", "node_classification", "link_prediction"],
                             "validation_selection_method": selection_method,
                             "validation_ood_domains": ood_domains,
-                            "validation_overlap_domains": [d for d in val_domain_totals.keys() if d in OVERLAP_TUDATASETS],
+                            "validation_overlap_domains": [d for d in per_domain_total.keys() if d in OVERLAP_TUDATASETS],
                         },
                         
                         # File information
@@ -1021,21 +1049,25 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                     tasks=cfg.active_tasks
                 )
             else:
-                epochs_without_improvement += 1
+                steps_since_improvement += cfg.eval_every_steps  # Add evaluation interval
                 wandb.log({
-                    "early_stopping/epochs_without_improvement": epochs_without_improvement,
-                    "early_stopping/patience_remaining": patience - epochs_without_improvement,
+                    "early_stopping/steps_since_improvement": steps_since_improvement,
+                    "early_stopping/patience_remaining": patience_steps - steps_since_improvement,
+                    "early_stopping/equiv_epochs_without_improvement": steps_since_improvement / (cfg.eval_every_steps),
                 }, step=global_step)
                 
                 # Early stopping check
-                if epochs_without_improvement >= patience:
-                    print(f"Early stopping at epoch {epoch} (no improvement for {patience} epochs)")
+                if steps_since_improvement >= patience_steps:
+                    print(f"🛑 Early stopping at step {step} (no improvement for {steps_since_improvement} steps = {steps_since_improvement//cfg.eval_every_steps:.1f} eval intervals)")
                     wandb.log({
                         "early_stopping/triggered": True,
-                        "early_stopping/stopped_at_epoch": epoch,
-                        "early_stopping/final_epochs_without_improvement": epochs_without_improvement,
+                        "early_stopping/stopped_at_step": step,
+                        "early_stopping/stopped_at_epoch_equiv": equivalent_epoch,
+                        "early_stopping/final_steps_since_improvement": steps_since_improvement,
                     }, step=global_step)
                     break
+            
+            model.train()  # Return to training mode
 
     # Calculate final timing metrics
     total_training_time = time.time() - training_start_time
@@ -1044,16 +1076,18 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
     wandb.run.summary.update({
         # Best performance metrics
         "best_val_total": float(best_val_total),
-        "best_epoch": int(best_epoch),
+        "best_step": int(best_step),
+        "best_epoch_equiv": float(best_step / (total_steps / 30)) if best_step > 0 else 0,
         "best_ckpt_path": str(best_ckpt_path),
         
         # Training completion status
         "training_completed": True,
-        "total_epochs_trained": epoch,  # Actual epochs trained (may be less due to early stopping)
-        "planned_epochs": cfg.epochs,
-        "early_stopped": epochs_without_improvement >= patience,
-        "epochs_without_improvement": epochs_without_improvement,
-        "total_steps_trained": global_step,
+        "total_steps_trained": step,  # Actual steps trained (may be less due to early stopping)
+        "planned_steps": total_steps,
+        "equiv_epochs_trained": step / (total_steps / 30),
+        "early_stopped": steps_since_improvement >= patience_steps,
+        "steps_since_improvement": steps_since_improvement,
+        "total_steps_global": global_step,
         
         # Experiment metadata
         "exp_name": cfg.exp_name,

@@ -47,11 +47,12 @@ class PretrainableGNN(nn.Module):
         # Use provided dropout rate or default
         self.dropout_rate = dropout_rate if dropout_rate is not None else DROPOUT_RATE
 
-        # --- Domain-specific Input Encoders ---
+        # --- Domain-specific Input Encoders (constant dropout for downstream reusability) ---
         self.input_encoders = nn.ModuleDict()
         for domain_name in domain_names:
             dim_in = DOMAIN_DIMENSIONS[domain_name]
-            self.input_encoders[domain_name] = InputEncoder(dim_in=dim_in)
+            # Use constant dropout for transfer learning compatibility
+            self.input_encoders[domain_name] = InputEncoder(dim_in=dim_in, dropout_rate=DROPOUT_RATE)
 
         # --- Shared [MASK] token in hidden space for node feature masking ---
         self.mask_token = nn.Parameter(torch.zeros(GNN_HIDDEN_DIM))
@@ -61,34 +62,37 @@ class PretrainableGNN(nn.Module):
         self.gnn_backbone = GIN_Backbone()
 
         # --- Task-specific Prediction Heads with scheme-specific dropout ---
+        # self.dropout_rate comes from cfg.dropout_rate (scheme-specific, e.g., 0.4 for contrastive)
         self.heads = nn.ModuleDict()
         for task_name in task_names:
             if task_name == 'node_feat_mask':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
+                    # SCHEME-SPECIFIC DROPOUT APPLIED HERE ← 
                     dom_heads[domain_name] = MLPHead(dropout_rate=self.dropout_rate)
                 self.heads[task_name] = dom_heads
             elif task_name == 'link_pred':
-                self.heads[task_name] = DotProductDecoder()
+                self.heads[task_name] = DotProductDecoder()  # No dropout needed
             elif task_name == 'node_contrast':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    # Higher dropout for contrastive learning heads (literature-informed)
+                    # SCHEME-SPECIFIC DROPOUT APPLIED HERE ← (contrastive needs higher dropout)
                     dom_heads[domain_name] = MLPHead(dim_out=CONTRASTIVE_PROJ_DIM, dropout_rate=self.dropout_rate)
                 self.heads[task_name] = dom_heads
             elif task_name == 'graph_contrast':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    # Apply dropout to graph contrastive discriminator
+                    # SCHEME-SPECIFIC DROPOUT APPLIED HERE ← (contrastive discriminator needs regularization)
                     dom_heads[domain_name] = BilinearDiscriminator(dropout_rate=self.dropout_rate)
                 self.heads[task_name] = dom_heads
             elif task_name == 'graph_prop':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
+                    # SCHEME-SPECIFIC DROPOUT APPLIED HERE ← 
                     dom_heads[domain_name] = MLPHead(dim_hidden=GRAPH_PROP_HEAD_HIDDEN_DIM, dim_out=GRAPH_PROPERTY_DIM, dropout_rate=self.dropout_rate)
                 self.heads[task_name] = dom_heads
             elif task_name == 'domain_adv':
-                # Domain adversarial head should remain strong (no extra dropout)
+                # Domain adversarial head intentionally gets NO dropout (needs to be strong discriminator)
                 self.heads[task_name] = DomainClassifierHead()
 
         self.to(self.device)
