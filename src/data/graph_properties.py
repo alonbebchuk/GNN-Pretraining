@@ -154,7 +154,8 @@ class GraphPropertyCalculator:
 
         train_props = all_props[train_idx]
         mean = train_props.mean(dim=0)
-        std = train_props.std(dim=0, unbiased=True) + EPSILON
+        std = train_props.std(dim=0, unbiased=True)
+        std[std == 0] = 1
 
         all_props = (all_props - mean) / std
         return all_props

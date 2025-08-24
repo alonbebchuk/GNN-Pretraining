@@ -1,10 +1,9 @@
-name: "Pre-training"
 method: grid
 parameters:
   config:
-    values: 
+    values:
       - "/kaggle/working/gnn-pretraining/configs/pretrain/b2_nfm.yaml"
-      - "/kaggle/working/gnn-pretraining/configs/pretrain/b3_nc.yaml" 
+      - "/kaggle/working/gnn-pretraining/configs/pretrain/b3_nc.yaml"
       - "/kaggle/working/gnn-pretraining/configs/pretrain/b4_single_domain_all.yaml"
       - "/kaggle/working/gnn-pretraining/configs/pretrain/s1_multi_task_generative.yaml"
       - "/kaggle/working/gnn-pretraining/configs/pretrain/s2_multi_task_contrastive.yaml"
