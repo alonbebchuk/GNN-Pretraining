@@ -13,14 +13,14 @@ class MLPHead(nn.Module):
     This is used as the standard prediction head throughout the system.
     """
 
-    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM, dropout_rate: float = DROPOUT_RATE) -> None:
+    def __init__(self, dropout_rate: float, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM) -> None:
         """
         Initialize the MLP head.
 
         Args:
             dim_hidden: Hidden dimension (defaults to GNN_HIDDEN_DIM)
             dim_out: Output dimension (defaults to GNN_HIDDEN_DIM)
-            dropout_rate: Dropout rate (defaults to DROPOUT_RATE, can be scheme-specific)
+            dropout_rate: Dropout rate (defaults to DROPOUT_RATE)
         """
         super(MLPHead, self).__init__()
 
@@ -84,21 +84,19 @@ class BilinearDiscriminator(nn.Module):
 
     Computes scores for (node_embedding, graph_embedding) pairs using:
     D(x, y) = sigmoid(x^T * W * y)
-    
-    Enhanced with dropout regularization for contrastive learning stability.
     """
 
-    def __init__(self, dropout_rate: float = DROPOUT_RATE) -> None:
+    def __init__(self, dropout_rate: float) -> None:
         """
-        Initialize the bilinear discriminator with optional dropout.
+        Initialize the bilinear discriminator.
         
         Args:
-            dropout_rate: Dropout rate for regularization (scheme-specific)
+            dropout_rate: Dropout rate for regularization
         """
         super(BilinearDiscriminator, self).__init__()
 
         self.W = nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, bias=False)
-        self.dropout = nn.Dropout(p=dropout_rate) if dropout_rate > 0 else nn.Identity()
+        self.dropout = nn.Dropout(p=dropout_rate)
 
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """

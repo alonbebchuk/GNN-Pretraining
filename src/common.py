@@ -50,7 +50,7 @@ PERCENTAGE_CONVERSION = 100       # Convert ratios to percentages
 # Core GNN Architecture
 GNN_HIDDEN_DIM = 256              # Hidden dimension for GNN layers
 GNN_NUM_LAYERS = 5                # Number of GNN layers
-DROPOUT_RATE = 0.2                # Base dropout rate (constant for transfer learning compatibility)
+DROPOUT_RATE = 0.2                # Base dropout rate
 
 # Task-Specific Head Dimensions
 CONTRASTIVE_PROJ_DIM = 128        # Contrastive projection dimension

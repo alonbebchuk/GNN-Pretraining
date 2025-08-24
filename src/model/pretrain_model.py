@@ -12,7 +12,6 @@ from src.common import (
     GRAPH_PROPERTY_DIM,
     CONTRASTIVE_PROJ_DIM,
     GRAPH_PROP_HEAD_HIDDEN_DIM,
-    DROPOUT_RATE,
 )
 from src.model.gnn import InputEncoder, GIN_Backbone
 from src.model.heads import MLPHead, DotProductDecoder, BilinearDiscriminator, DomainClassifierHead
@@ -31,7 +30,7 @@ class PretrainableGNN(nn.Module):
     - Graph augmentation capabilities for contrastive learning
     """
 
-    def __init__(self, device: torch.device, domain_names: list[str], task_names: list[str], dropout_rate: float = None) -> None:
+    def __init__(self, device: torch.device, domain_names: list[str], task_names: list[str], dropout_rate: float) -> None:
         """
         Initialize the pretrainable GNN model.
 
@@ -44,15 +43,13 @@ class PretrainableGNN(nn.Module):
         super(PretrainableGNN, self).__init__()
 
         self.device = device
-        # Use provided dropout rate or default
-        self.dropout_rate = dropout_rate if dropout_rate is not None else DROPOUT_RATE
+        self.dropout_rate = dropout_rate
 
         # --- Domain-specific Input Encoders (constant dropout for downstream reusability) ---
         self.input_encoders = nn.ModuleDict()
         for domain_name in domain_names:
             dim_in = DOMAIN_DIMENSIONS[domain_name]
-            # Use constant dropout for transfer learning compatibility
-            self.input_encoders[domain_name] = InputEncoder(dim_in=dim_in, dropout_rate=DROPOUT_RATE)
+            self.input_encoders[domain_name] = InputEncoder(dim_in=dim_in)
 
         # --- Shared [MASK] token in hidden space for node feature masking ---
         self.mask_token = nn.Parameter(torch.zeros(GNN_HIDDEN_DIM))
@@ -62,37 +59,31 @@ class PretrainableGNN(nn.Module):
         self.gnn_backbone = GIN_Backbone()
 
         # --- Task-specific Prediction Heads with scheme-specific dropout ---
-        # self.dropout_rate comes from cfg.dropout_rate (scheme-specific, e.g., 0.4 for contrastive)
         self.heads = nn.ModuleDict()
         for task_name in task_names:
             if task_name == 'node_feat_mask':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    # SCHEME-SPECIFIC DROPOUT APPLIED HERE ← 
-                    dom_heads[domain_name] = MLPHead(dropout_rate=self.dropout_rate)
+                    dom_heads[domain_name] = MLPHead(self.dropout_rate)
                 self.heads[task_name] = dom_heads
             elif task_name == 'link_pred':
-                self.heads[task_name] = DotProductDecoder()  # No dropout needed
+                self.heads[task_name] = DotProductDecoder()
             elif task_name == 'node_contrast':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    # SCHEME-SPECIFIC DROPOUT APPLIED HERE ← (contrastive needs higher dropout)
-                    dom_heads[domain_name] = MLPHead(dim_out=CONTRASTIVE_PROJ_DIM, dropout_rate=self.dropout_rate)
+                    dom_heads[domain_name] = MLPHead(self.dropout_rate, dim_out=CONTRASTIVE_PROJ_DIM)
                 self.heads[task_name] = dom_heads
             elif task_name == 'graph_contrast':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    # SCHEME-SPECIFIC DROPOUT APPLIED HERE ← (contrastive discriminator needs regularization)
-                    dom_heads[domain_name] = BilinearDiscriminator(dropout_rate=self.dropout_rate)
+                    dom_heads[domain_name] = BilinearDiscriminator(self.dropout_rate)
                 self.heads[task_name] = dom_heads
             elif task_name == 'graph_prop':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    # SCHEME-SPECIFIC DROPOUT APPLIED HERE ← 
-                    dom_heads[domain_name] = MLPHead(dim_hidden=GRAPH_PROP_HEAD_HIDDEN_DIM, dim_out=GRAPH_PROPERTY_DIM, dropout_rate=self.dropout_rate)
+                    dom_heads[domain_name] = MLPHead(self.dropout_rate, dim_hidden=GRAPH_PROP_HEAD_HIDDEN_DIM, dim_out=GRAPH_PROPERTY_DIM)
                 self.heads[task_name] = dom_heads
             elif task_name == 'domain_adv':
-                # Domain adversarial head intentionally gets NO dropout (needs to be strong discriminator)
                 self.heads[task_name] = DomainClassifierHead()
 
         self.to(self.device)
