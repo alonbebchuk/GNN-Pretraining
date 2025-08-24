@@ -18,9 +18,9 @@ class MLPHead(nn.Module):
         Initialize the MLP head.
 
         Args:
+            dropout_rate: Dropout rate (defaults to DROPOUT_RATE)
             dim_hidden: Hidden dimension (defaults to GNN_HIDDEN_DIM)
             dim_out: Output dimension (defaults to GNN_HIDDEN_DIM)
-            dropout_rate: Dropout rate (defaults to DROPOUT_RATE)
         """
         super(MLPHead, self).__init__()
 

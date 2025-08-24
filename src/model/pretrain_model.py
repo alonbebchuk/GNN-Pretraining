@@ -1,8 +1,9 @@
-from typing import Optional, Tuple
 import torch
 import torch.nn as nn
+from typing import Optional, Tuple
 from torch_geometric.data import Batch
-
+from src.model.gnn import InputEncoder, GIN_Backbone
+from src.model.heads import MLPHead, DotProductDecoder, BilinearDiscriminator, DomainClassifierHead
 from src.common import (
     DOMAIN_DIMENSIONS,
     GNN_HIDDEN_DIM,
@@ -13,8 +14,6 @@ from src.common import (
     CONTRASTIVE_PROJ_DIM,
     GRAPH_PROP_HEAD_HIDDEN_DIM,
 )
-from src.model.gnn import InputEncoder, GIN_Backbone
-from src.model.heads import MLPHead, DotProductDecoder, BilinearDiscriminator, DomainClassifierHead
 
 
 class PretrainableGNN(nn.Module):
@@ -45,7 +44,7 @@ class PretrainableGNN(nn.Module):
         self.device = device
         self.dropout_rate = dropout_rate
 
-        # --- Domain-specific Input Encoders (constant dropout for downstream reusability) ---
+        # --- Domain-specific Input Encoders ---
         self.input_encoders = nn.ModuleDict()
         for domain_name in domain_names:
             dim_in = DOMAIN_DIMENSIONS[domain_name]
@@ -58,7 +57,7 @@ class PretrainableGNN(nn.Module):
         # --- Shared GNN Backbone ---
         self.gnn_backbone = GIN_Backbone()
 
-        # --- Task-specific Prediction Heads with scheme-specific dropout ---
+        # --- Task-specific Prediction Heads ---
         self.heads = nn.ModuleDict()
         for task_name in task_names:
             if task_name == 'node_feat_mask':
