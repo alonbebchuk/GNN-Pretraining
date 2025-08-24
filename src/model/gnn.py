@@ -1,25 +1,11 @@
 import torch
 import torch.nn as nn
 from torch_geometric.nn import GINConv
-
 from src.common import DROPOUT_RATE, GNN_HIDDEN_DIM, GNN_NUM_LAYERS
 
 
 class InputEncoder(nn.Module):
-    """
-    Domain-specific input encoder that maps raw features to shared hidden space.
-
-    Architecture: Linear -> LayerNorm -> ReLU -> Dropout
-    This creates a standardized representation from domain-specific features.
-    """
-
     def __init__(self, dim_in: int) -> None:
-        """
-        Initialize the input encoder.
-
-        Args:
-            dim_in: Input feature dimension (domain-specific)
-        """
         super(InputEncoder, self).__init__()
 
         self.encoder = nn.Sequential(
@@ -30,32 +16,11 @@ class InputEncoder(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Encode domain-specific features to shared representation.
-
-        Args:
-            x: Input features of shape (num_nodes, dim_in)
-
-        Returns:
-            Encoded features of shape (num_nodes, hidden_dim)
-        """
         return self.encoder(x)
 
 
 class GINLayer(nn.Module):
-    """
-    Single GIN layer with residual connections and post-activation normalization.
-
-    This implements the following architecture:
-    1. GIN convolution with learnable epsilon
-    2. Residual connection
-    3. Post-activation: LayerNorm -> ReLU -> Dropout
-    """
-
     def __init__(self) -> None:
-        """
-        Initialize a single GIN layer.
-        """
         super(GINLayer, self).__init__()
 
         gin_mlp = nn.Sequential(
@@ -71,16 +36,6 @@ class GINLayer(nn.Module):
         self.dropout = nn.Dropout(p=DROPOUT_RATE)
 
     def forward(self, h: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the GIN layer.
-
-        Args:
-            h: Node embeddings of shape (num_nodes, hidden_dim)
-            edge_index: Edge indices of shape (2, num_edges)
-
-        Returns:
-            Updated node embeddings of shape (num_nodes, hidden_dim)
-        """
         h_conv = self.gin_conv(h, edge_index)
 
         h_res = h_conv + h
@@ -93,16 +48,7 @@ class GINLayer(nn.Module):
 
 
 class GIN_Backbone(nn.Module):
-    """
-    The main GNN backbone consisting of stacked GIN layers.
-
-    This is the shared component that processes all domains after input encoding.
-    """
-
     def __init__(self) -> None:
-        """
-        Initialize the GIN backbone.
-        """
         super(GIN_Backbone, self).__init__()
 
         self.layers = nn.ModuleList([
@@ -111,16 +57,6 @@ class GIN_Backbone(nn.Module):
         ])
 
     def forward(self, h: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through all GIN layers.
-
-        Args:
-            h: Initial node embeddings of shape (num_nodes, hidden_dim)
-            edge_index: Edge indices of shape (2, num_edges)
-
-        Returns:
-            Final node embeddings of shape (num_nodes, hidden_dim)
-        """
         for layer in self.layers:
             h = layer(h, edge_index)
 
