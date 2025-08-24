@@ -7,7 +7,6 @@ from numpy.typing import NDArray
 from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx, to_undirected, remove_self_loops
-from src.common import EPSILON
 
 
 class GraphPropertyCalculator:
@@ -68,7 +67,7 @@ class GraphPropertyCalculator:
         H = max(components, key=lambda g: g.number_of_nodes())
         diameter = float(nx.diameter(H))
 
-        if float(degrees.std()) == 0:
+        if float(degrees.std()) == 0.0:
             assortativity = 0.0
         else:
             assortativity = float(nx.degree_assortativity_coefficient(G))
@@ -155,7 +154,7 @@ class GraphPropertyCalculator:
         train_props = all_props[train_idx]
         mean = train_props.mean(dim=0)
         std = train_props.std(dim=0, unbiased=True)
-        std[std == 0] = 1
+        std[std == 0.0] = 1.0
 
         all_props = (all_props - mean) / std
         return all_props
