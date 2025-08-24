@@ -167,6 +167,13 @@ AUGMENTATION_MIN_NODES_PER_GRAPH = 2  # Min nodes after augmentation
 # 2 nodes allows ≥1 potential edge, preserving minimal graph semantics
 # Based on GraphCL literature and GNN requirements for connectivity
 
+# Edge Structure Constraints
+AUGMENTATION_MIN_EDGES_PER_GRAPH = 1      # Always keep at least 1 edge if graph had edges
+SMALL_GRAPH_EDGE_THRESHOLD = 8            # Graphs with ≤8 edges need conservative dropping  
+MIN_EDGE_RETENTION_RATE = 0.5             # Keep at least 50% edges for small graphs
+# WHY these values? Small molecular/social graphs need structural preservation
+# Dropping >50% edges from graphs with ≤8 edges often destroys meaningful connectivity
+
 # Graph Processing Constraints
 MIN_NODES_AFTER_DROP = 2          # Min nodes to keep after node dropping
 SMALL_GRAPH_THRESHOLD = 5         # Threshold for small graphs
@@ -188,9 +195,8 @@ DEFAULT_TASK_SCALE = 1.0          # Default scaling factor
 # Dataset Collections
 PRETRAIN_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
 DOWNSTREAM_TUDATASETS = ['ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
-OVERLAP_TUDATASETS = sorted(
-    list(set(PRETRAIN_TUDATASETS).intersection(set(DOWNSTREAM_TUDATASETS))))
-ALL_TUDATASETS = sorted(list(set(PRETRAIN_TUDATASETS + DOWNSTREAM_TUDATASETS)))
+OVERLAP_TUDATASETS = list(set(PRETRAIN_TUDATASETS).intersection(set(DOWNSTREAM_TUDATASETS)))
+ALL_TUDATASETS = list(set(PRETRAIN_TUDATASETS + DOWNSTREAM_TUDATASETS))
 ALL_PLANETOID_DATASETS = ['Cora', 'CiteSeer']
 
 # Dataset Feature Types

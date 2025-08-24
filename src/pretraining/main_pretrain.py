@@ -224,7 +224,7 @@ def make_domain_loader(
     batches as List[(Data, domain_name)] to match task expectations.
     Returns the number of batches per epoch (len(loader)).
     """
-    dom_dir = PROCESSED_DIR / f"{domain_name}_pretrain"
+    dom_dir = PROCESSED_DIR / domain_name
     data_path = dom_dir / "data.pt"
     splits_path = dom_dir / "splits.pt"
 

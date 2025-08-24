@@ -7,37 +7,17 @@ from numpy.typing import NDArray
 from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx, to_undirected, remove_self_loops
+from sklearn.preprocessing import StandardScaler
 
 
 class GraphPropertyCalculator:
-    """
-    Computes a fixed 15-D vector of graph structural properties from a PyG Data object.
-
-    Properties:
-      0: num_nodes
-      1: num_edges (undirected, self-loops removed)
-      2: density
-      3: degree_mean
-      4: degree_var
-      5: degree_max
-      6: average_clustering
-      7: transitivity
-      8: triangles (total, not per-node)
-      9: num_connected_components
-     10: diameter (on largest connected component)
-     11: degree_assortativity
-     12: degree_centralization (Freeman)
-     13: closeness_centralization
-      14: betweenness_centralization
-    """
-
     def __call__(self, graph: Data) -> Tensor:
         num_nodes = graph.x.shape[0]
-        edge_index = graph.edge_index
+        edge_index = graph.edge_index.clone()
 
         edge_index, _ = remove_self_loops(edge_index)
         edge_index = to_undirected(edge_index, num_nodes=num_nodes)
-        pyg_simple = Data(edge_index=edge_index, num_nodes=num_nodes)
+        pyg_simple = Data(x=graph.x, edge_index=edge_index)
         G = to_networkx(pyg_simple, to_undirected=True)
 
         N = G.number_of_nodes()
@@ -67,7 +47,7 @@ class GraphPropertyCalculator:
         H = max(components, key=lambda g: g.number_of_nodes())
         diameter = float(nx.diameter(H))
 
-        if float(degrees.std()) == 0.0:
+        if deg_var == 0.0:
             assortativity = 0.0
         else:
             assortativity = float(nx.degree_assortativity_coefficient(G))
@@ -116,16 +96,7 @@ class GraphPropertyCalculator:
         return torch.tensor(props, dtype=torch.float32)
 
     def compute_for_dataset(self, dataset: Iterable[Data]) -> Tensor:
-        """
-        Compute graph property vectors for an entire dataset and return a stacked tensor.
-
-        Args:
-            dataset: Iterable of PyG Data graphs.
-
-        Returns:
-            Tensor of shape [num_graphs, 15]
-        """
-        dataset_list = list(dataset) if not isinstance(dataset, list) else dataset
+        dataset_list = list(dataset)
         props_tensor = torch.zeros((len(dataset_list), 15), dtype=torch.float32)
 
         for i, g in enumerate(dataset_list):
@@ -133,28 +104,13 @@ class GraphPropertyCalculator:
 
         return props_tensor
 
-    def compute_and_standardize_for_dataset(
-        self,
-        dataset: Iterable[Data],
-        train_idx: NDArray[np.int_],
-    ) -> Tensor:
-        """
-        Compute graph properties for all graphs and standardize using statistics from
-        the subset indexed by train_idx.
-
-        Args:
-            dataset: Iterable of PyG Data graphs.
-            train_idx: Indices of graphs to use for computing mean and std.
-
-        Returns:
-            Tensor of shape [num_graphs, 15] standardized via z-score using train stats.
-        """
+    def compute_and_standardize_for_dataset(self, dataset: Iterable[Data], train_idx: NDArray[np.int_]) -> Tensor:
         all_props = self.compute_for_dataset(dataset)
 
-        train_props = all_props[train_idx]
-        mean = train_props.mean(dim=0)
-        std = train_props.std(dim=0, unbiased=True)
-        std[std == 0.0] = 1.0
+        scaler = StandardScaler()
+        scaler.fit(all_props[train_idx].numpy())
 
-        all_props = (all_props - mean) / std
-        return all_props
+        all_props_scaled = scaler.transform(all_props.numpy())
+        all_props_scaled = torch.from_numpy(all_props_scaled).float()
+
+        return all_props_scaled
