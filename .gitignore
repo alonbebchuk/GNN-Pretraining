@@ -1,24 +1,6 @@
-# Data folders
-data/raw/
-data/processed/
-
 # Python cache
 __pycache__/
 
-# Unit test / coverage reports
-.pytest_cache/
-
-# Environments
-env/
-venv/
-
-# IDE
-.vscode/
-.idea/
-
-# Model checkpoints and logs
-*.pth
-*.ckpt
-logs/
-runs/
-wandb/
+# Data folders
+data/raw/
+data/processed/

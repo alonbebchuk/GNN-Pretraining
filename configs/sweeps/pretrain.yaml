@@ -1,5 +1,4 @@
-name: "Systematic Pre-training Analysis"
-description: "Complete systematic analysis of multi-task, cross-domain pre-training schemes"
+name: "Pre-training"
 method: grid
 parameters:
   config:
@@ -14,4 +13,4 @@ parameters:
       - "/kaggle/working/gnn-pretraining/configs/pretrain/s5_all_objectives_da.yaml"
   seed:
     values: [42, 84, 126]
-program: src/pretraining/main_pretrain.py
+program: "/kaggle/working/gnn-pretraining/src/pretraining/main_pretrain.py"
