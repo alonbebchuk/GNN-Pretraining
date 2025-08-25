@@ -15,7 +15,7 @@ GRAPH_PROPERTY_DIM = 15
 
 class GraphPropertyCalculator:
     def __call__(self, graph: Data) -> Tensor:
-        num_nodes = graph.x.shape[0]
+        num_nodes = graph.num_nodes
         edge_index = graph.edge_index.clone()
 
         edge_index, _ = remove_self_loops(edge_index)

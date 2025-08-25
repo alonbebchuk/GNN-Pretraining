@@ -17,7 +17,8 @@ from src.model.heads import (
 )
 
 MASK_TOKEN_INIT_MEAN = 0.0
-MASK_TOKEN_INIT_STD = 0.02
+MASK_TOKEN_INIT_STD = 0.1
+NODE_FEATURE_MASKING_MIN_NUM_NODES = 3
 NODE_FEATURE_MASKING_MASK_RATE = 0.15
 
 
@@ -81,8 +82,8 @@ class PretrainableGNN(nn.Module):
             end_idx = batch.ptr[i + 1].item()
             graph_num_nodes = end_idx - start_idx
 
-            num_nodes_to_mask = int(graph_num_nodes * NODE_FEATURE_MASKING_MASK_RATE)
-            if num_nodes_to_mask > 0:
+            if graph_num_nodes >= NODE_FEATURE_MASKING_MIN_NUM_NODES:
+                num_nodes_to_mask = max(1, int(graph_num_nodes * NODE_FEATURE_MASKING_MASK_RATE))
                 graph_mask_indices = torch.randperm(graph_num_nodes, device=self.device)[:num_nodes_to_mask]
                 global_mask_indices = graph_mask_indices + start_idx
                 all_mask_indices.append(global_mask_indices)
