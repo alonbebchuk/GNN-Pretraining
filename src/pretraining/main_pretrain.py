@@ -20,40 +20,31 @@ from torch_geometric.data import Batch
 from torch_geometric.loader import DataLoader as PyGDataLoader
 
 from src.common import (
-    PERCENTAGE_CONVERSION,
-    PRETRAIN_EPOCHS,
-    PRETRAIN_BATCH_SIZE,
-    PRETRAIN_LR_MODEL,
-    PRETRAIN_LR_UNCERTAINTY,
-    PRETRAIN_MODEL_WEIGHT_DECAY,
-    PRETRAIN_EVAL_EVERY_EPOCHS,
-    PRETRAIN_LOG_EVERY_STEPS,
-    PRETRAIN_NUM_WORKERS,
-    PRETRAIN_OUTPUT_DIR,
-    WANDB_PROJECT,
-    PRETRAIN_PIN_MEMORY,
-    PRETRAIN_DROP_LAST,
-    PRETRAIN_LR_WARMUP_FRACTION,
-    PRETRAIN_LR_MIN_FACTOR,
-    PRETRAIN_ADAM_BETAS,
-    PRETRAIN_ADAM_EPS,
-    PRETRAIN_UNCERTAINTY_WEIGHT_DECAY,
-    PATIENCE,
-    # Model architecture constants
-    GNN_HIDDEN_DIM,
-    GNN_NUM_LAYERS,
-    DROPOUT_RATE,
-    CONTRASTIVE_PROJ_DIM,
-    GRAPH_PROP_HEAD_HIDDEN_DIM,
-    DOMAIN_ADV_HEAD_HIDDEN_DIM,
-    DOMAIN_ADV_HEAD_OUT_DIM,
-    MASK_TOKEN_INIT_MEAN,
-    MASK_TOKEN_INIT_STD,
-    # Task constants
-    NODE_FEATURE_MASKING_MASK_RATE,
-    NODE_CONTRASTIVE_TEMPERATURE,
-    GRAPH_PROPERTY_DIM,
-    # Augmentation constants
+    # Scheme-specific hyperparameters
+    get_training_scheme,
+    # Constants for monitoring and computation
+    GRAD_NORM_EXPONENT,
+    # Step-based training system constants
+    SAMPLES_PER_DOMAIN_PER_BATCH,
+    LARGEST_DOMAIN_SIZE,
+    STEPS_PER_EPOCH_MULTI_DOMAIN,
+    STEPS_PER_EPOCH_SINGLE_DOMAIN,
+    EQUIVALENT_EPOCHS,
+    PRETRAIN_MAX_STEPS_MULTI_DOMAIN,
+    PRETRAIN_MAX_STEPS_SINGLE_DOMAIN,
+    PRETRAIN_EVAL_EVERY_STEPS_MULTI_DOMAIN,
+    PRETRAIN_EVAL_EVERY_STEPS_SINGLE_DOMAIN,
+    PRETRAIN_PATIENCE_STEPS_MULTI_DOMAIN,
+    PRETRAIN_PATIENCE_STEPS_SINGLE_DOMAIN,
+    PRETRAIN_WARMUP_STEPS_MULTI_DOMAIN,
+    PRETRAIN_WARMUP_STEPS_SINGLE_DOMAIN,
+    PRETRAIN_LOG_EVERY_STEPS_MULTI_DOMAIN,
+    PRETRAIN_LOG_EVERY_STEPS_SINGLE_DOMAIN,
+
+)
+# Import moved constants from their new locations
+from src.model.gnn import GNN_HIDDEN_DIM, GNN_NUM_LAYERS, GNN_DROPOUT_RATE
+from src.pretraining.augmentations import (
     AUGMENTATION_ATTR_MASK_PROB,
     AUGMENTATION_ATTR_MASK_RATE,
     AUGMENTATION_EDGE_DROP_PROB,
@@ -61,25 +52,17 @@ from src.common import (
     AUGMENTATION_NODE_DROP_PROB,
     AUGMENTATION_NODE_DROP_RATE,
     AUGMENTATION_MIN_NODES_PER_GRAPH,
-    # Loss constants
-    UNCERTAINTY_LOSS_COEF,
-    LOGSIGMA_TO_SIGMA_SCALE,
+    MIN_NODES_AFTER_DROP,
+)
+from src.pretraining.schedulers import (
     GRL_GAMMA,
     GRL_LAMBDA_MIN,
     GRL_LAMBDA_MAX,
-    # Domain information
-    DOMAIN_DIMENSIONS,
-    FEATURE_TYPES,
-    # Scheme-specific hyperparameters
-    get_training_scheme,
-    # Constants for monitoring and computation
-    EPSILON,
-    GRAD_NORM_EXPONENT,
-    TIMING_STEPS_WINDOW,
-    DEFAULT_TASK_SCALE,
 )
-from src.model.pretrain_model import PretrainableGNN
-from src.pretraining.losses import UncertaintyWeighter
+from src.pretraining.tasks import NODE_CONTRASTIVE_TEMPERATURE, NODE_FEATURE_MASKING_MASK_RATE, GRAPH_PROPERTY_DIM
+from src.model.heads import DOMAIN_ADV_HEAD_HIDDEN_DIM, DOMAIN_ADV_HEAD_OUT_DIM, CONTRASTIVE_PROJ_DIM, GRAPH_PROP_HEAD_HIDDEN_DIM
+from src.model.pretrain_model import PretrainableGNN, MASK_TOKEN_INIT_MEAN, MASK_TOKEN_INIT_STD
+from src.pretraining.losses import UncertaintyWeighter, UNCERTAINTY_LOSS_COEF, LOGSIGMA_TO_SIGMA_SCALE
 from src.pretraining.schedulers import GRLLambdaScheduler, CosineWithWarmup
 from src.pretraining.tasks import (
     DomainAdversarialTask,
@@ -89,10 +72,219 @@ from src.pretraining.tasks import (
     NodeContrastiveTask,
     NodeFeatureMaskingTask,
 )
-from src.data.data_setup import PROCESSED_DIR
-from src.common import OVERLAP_TUDATASETS
+from src.data.data_setup import PROCESSED_DIR, OVERLAP_TUDATASETS, DOMAIN_DIMENSIONS, FEATURE_TYPES, DATASET_SIZES
 from src.pretraining.model_registry import register_model_completion
 
+# Training Configuration Constants  
+PRETRAIN_BATCH_SIZE = 32          # Batch size
+PRETRAIN_NUM_WORKERS = 4          # DataLoader workers
+PRETRAIN_WARMUP_FRACTION = 0.1    # Warmup fraction (10% of training)
+PRETRAIN_LR_MIN_FACTOR = 0.01     # Min LR = initial_lr * 0.01 (1% decay floor)
+PRETRAIN_ADAM_BETAS = (0.9, 0.999) # Adam optimizer betas
+PRETRAIN_ADAM_EPS = 1e-8          # Adam epsilon
+
+# Monitoring Constants
+TIMING_STEPS_WINDOW = 10          # Number of recent steps for timing
+DEFAULT_TASK_SCALE = 1.0          # Default scaling factor
+
+# Task Balancing & Monitoring System
+TASK_LOSS_SCALES = {
+    'node_feat_mask': 0.1,     # Scale DOWN - dominating due to high dimensionality
+    'graph_prop': 0.3,         # Scale DOWN - medium complexity task
+    'node_contrast': 1.0,      # Reference task (baseline)
+    'graph_contrast': 2.0,     # Scale UP - needs more signal
+    'link_pred': 1.5,          # Scale UP - important structural task
+    'domain_adv': 1.0,         # Reference task (baseline)
+}
+
+MONITORING_METRICS = {
+    # Task Performance Metrics
+    'task_losses': ['node_feat_mask_loss', 'graph_prop_loss', 'node_contrast_loss', 'graph_contrast_loss', 'link_pred_loss', 'domain_adv_loss'],
+    # Task Balancing Metrics
+    'uncertainty_weights': ['unc_weight_node_feat_mask', 'unc_weight_graph_prop', 'unc_weight_node_contrast', 'unc_weight_graph_contrast', 'unc_weight_link_pred', 'unc_weight_domain_adv'],
+    # Loss Scale Effects
+    'scaled_losses': ['scaled_node_feat_mask', 'scaled_graph_prop', 'scaled_node_contrast', 'scaled_graph_contrast', 'scaled_link_pred', 'scaled_domain_adv'],
+    # Task Contributions (scaled_loss * uncertainty_weight)
+    'task_contributions': ['contrib_node_feat_mask', 'contrib_graph_prop', 'contrib_node_contrast', 'contrib_graph_contrast', 'contrib_link_pred', 'contrib_domain_adv'],
+    # Balance Analysis
+    'balance_metrics': ['total_loss', 'uncertainty_loss', 'dominant_task', 'task_balance_ratio', 'contribution_entropy', 'uncertainty_adaptation_rate'],
+    # Training Progress
+    'training_metrics': ['step', 'lr_model', 'lr_uncertainty', 'grad_norm_model', 'grad_norm_uncertainty'],
+    # System Metrics
+    'system_metrics': ['step_time', 'memory_usage', 'gpu_utilization']
+}
+
+# Scheme-Specific Hyperparameters
+SCHEME_HYPERPARAMETERS = {
+    'multi_task_contrastive': {
+        # Contrastive learning requires careful tuning to prevent collapse
+        'lr_model': 1e-4,              # LOWER - prevents representation collapse (MA-GCL, GraphCL-DTA)
+        'lr_uncertainty': 1e-3,        # LOWER - uncertainty adapts slowly with contrastive
+        'lr_min_factor': 0.1,          # LOWER - avoids optimization cliff (MA-GCL)
+        'warmup_steps_fraction': 0.2,  # HIGHER - critical for stability (GraphCL-DTA)
+        'patience_fraction': 0.15,     # SHORTER patience - overfitting tendency with contrastive
+        'dropout_rate': 0.4,           # HIGHER - prevents overfitting (MA-GCL, RHCO)
+        'weight_decay': 0.05,          # STRONGER - regularization critical for contrastive
+    },
+    'single_domain': {
+        'lr_model': 3e-4,              # Standard rate for focused training
+        'lr_uncertainty': 5e-3,        # Standard for single-domain focus
+        'lr_min_factor': 0.01,         # Standard 1% minimum
+        'warmup_steps_fraction': 0.1,  # Standard warmup
+        'patience_fraction': 0.3,      # Moderate patience for focused training
+        'dropout_rate': 0.2,           # Standard regularization
+        'weight_decay': 0.01,          # Standard L2 regularization
+    },
+    'multi_task_generative': {
+        # Generative tasks (masking, graph properties)
+        'lr_model': 2e-4,              # Moderate - generative tasks need stability
+        'lr_uncertainty': 3e-3,        # Moderate adaptation rate
+        'lr_min_factor': 0.05,         # Moderate decay to 5%
+        'warmup_steps_fraction': 0.15,  # Moderate warmup for stability
+        'patience_fraction': 0.25,     # Moderate patience
+        'dropout_rate': 0.3,           # Moderate regularization
+        'weight_decay': 0.02,          # Moderate regularization
+    },
+    'all_self_supervised': {
+        # Comprehensive training with all tasks
+        'lr_model': 1e-3,              # HIGHER - comprehensive training (GSR)
+        'lr_uncertainty': 5e-3,        # Standard for comprehensive training
+        'lr_min_factor': 0.01,         # Standard decay for stability
+        'warmup_steps_fraction': 0.1,  # Standard warmup
+        'patience_fraction': 0.35,     # LONGER - complex training needs more time
+        'dropout_rate': 0.2,           # Standard for comprehensive training
+        'weight_decay': 0.01,          # Standard regularization
+    },
+    'default': {
+        # Fallback configuration
+        'lr_model': 3e-4,
+        'lr_uncertainty': 5e-3,
+        'lr_min_factor': 0.01,
+        'warmup_steps_fraction': 0.1,
+        'patience_fraction': 0.25,
+        'dropout_rate': 0.2,
+        'weight_decay': 0.01,
+    }
+}
+
+def get_scheme_hyperparameters(scheme: str) -> dict:
+    """
+    Get all hyperparameters for a specific training scheme with fair step allocation.
+
+    Args:
+        scheme: Training scheme name
+
+    Returns:
+        dict: Complete hyperparameter configuration for the scheme
+    """
+    scheme_config = SCHEME_HYPERPARAMETERS.get(
+        scheme, SCHEME_HYPERPARAMETERS['default']).copy()
+
+    # Determine fair step allocation based on training mode
+    if scheme == 'single_domain':
+        max_steps = PRETRAIN_MAX_STEPS_SINGLE_DOMAIN
+        eval_every_steps = PRETRAIN_EVAL_EVERY_STEPS_SINGLE_DOMAIN
+        patience_steps_base = PRETRAIN_PATIENCE_STEPS_SINGLE_DOMAIN
+        warmup_steps_base = PRETRAIN_WARMUP_STEPS_SINGLE_DOMAIN
+        log_every_steps = PRETRAIN_LOG_EVERY_STEPS_SINGLE_DOMAIN
+    else:
+        # Multi-domain schemes (multi_task_*, all_self_supervised, default)
+        max_steps = PRETRAIN_MAX_STEPS_MULTI_DOMAIN
+        eval_every_steps = PRETRAIN_EVAL_EVERY_STEPS_MULTI_DOMAIN
+        patience_steps_base = PRETRAIN_PATIENCE_STEPS_MULTI_DOMAIN
+        warmup_steps_base = PRETRAIN_WARMUP_STEPS_MULTI_DOMAIN
+        log_every_steps = PRETRAIN_LOG_EVERY_STEPS_MULTI_DOMAIN
+
+    # Convert fractional values to absolute step values using fair base
+    scheme_config['warmup_steps'] = int(
+        scheme_config['warmup_steps_fraction'] * max_steps)
+    scheme_config['patience_steps'] = int(
+        scheme_config['patience_fraction'] * max_steps)
+
+    # Add fair training configuration
+    scheme_config.update({
+        'max_steps': max_steps,
+        'eval_every_steps': eval_every_steps,
+        'patience_steps': patience_steps_base,
+        'warmup_steps': warmup_steps_base,
+        'log_every_steps': log_every_steps,
+        'batch_size': PRETRAIN_BATCH_SIZE,
+        'num_workers': PRETRAIN_NUM_WORKERS,
+        'training_mode': 'steps'
+    })
+
+    return scheme_config
+
+
+def get_scheme_hyperparameter(scheme: str, param_name: str, default_scheme: str = 'default'):
+    """Get specific hyperparameter value for a training scheme (backward compatibility)."""
+    scheme_config = SCHEME_HYPERPARAMETERS.get(
+        scheme, SCHEME_HYPERPARAMETERS.get(default_scheme, {}))
+    return scheme_config.get(param_name)
+
+
+def setup_training_config(scheme: str, experiment_name: str = None) -> dict:
+    """
+    Complete training setup for a given scheme with all configurations.
+
+    Args:
+        scheme: Training scheme name
+        experiment_name: Optional experiment name for logging
+
+    Returns:
+        dict: Complete training configuration
+    """
+    config = get_scheme_hyperparameters(scheme)
+
+    # Add experiment metadata
+    config.update({
+        'scheme': scheme,
+        'experiment_name': experiment_name or f"{scheme}_experiment",
+        'task_loss_scales': TASK_LOSS_SCALES.copy(),
+        'monitoring_metrics': MONITORING_METRICS.copy(),
+        'dataset_info': {
+            'sizes': DATASET_SIZES,
+            'steps_per_epoch_multi': STEPS_PER_EPOCH_MULTI_DOMAIN,
+            'steps_per_epoch_single': STEPS_PER_EPOCH_SINGLE_DOMAIN,
+            'equivalent_epochs': EQUIVALENT_EPOCHS
+        }
+    })
+
+    return config
+
+
+def get_monitoring_config() -> dict:
+    """Get comprehensive monitoring configuration for Wandb (uses multi-domain defaults)."""
+    return {
+        'log_every_steps': PRETRAIN_LOG_EVERY_STEPS_MULTI_DOMAIN,
+        'eval_every_steps': PRETRAIN_EVAL_EVERY_STEPS_MULTI_DOMAIN,
+        'metrics': MONITORING_METRICS,
+        'task_names': list(TASK_LOSS_SCALES.keys()),
+        'track_gradients': True,
+        'track_system_metrics': True,
+        # Save less frequently than eval
+        'save_checkpoints_every_steps': PRETRAIN_EVAL_EVERY_STEPS_MULTI_DOMAIN * 2
+    }
+
+
+def calculate_training_progress(current_step: int) -> dict:
+    """Calculate training progress metrics (uses multi-domain defaults)."""
+    progress_fraction = min(current_step / PRETRAIN_MAX_STEPS_MULTI_DOMAIN, 1.0)
+
+    return {
+        'progress_fraction': progress_fraction,
+        'current_step': current_step,
+        'max_steps': PRETRAIN_MAX_STEPS_MULTI_DOMAIN,
+        'steps_remaining': max(PRETRAIN_MAX_STEPS_MULTI_DOMAIN - current_step, 0),
+        'equivalent_epochs_completed': (current_step / STEPS_PER_EPOCH_MULTI_DOMAIN),
+        'is_in_warmup': current_step < PRETRAIN_WARMUP_STEPS_MULTI_DOMAIN,
+        'warmup_progress': min(current_step / PRETRAIN_WARMUP_STEPS_MULTI_DOMAIN, 1.0) if PRETRAIN_WARMUP_STEPS_MULTI_DOMAIN > 0 else 1.0
+    }
+
+PRETRAIN_OUTPUT_DIR = '/kaggle/working/gnn-pretraining/outputs/pretrain'
+WANDB_PROJECT = 'gnn-pretraining'
+PRETRAIN_PIN_MEMORY = True
+EPSILON = 1e-8
 
 # -----------------------------
 # Configuration
@@ -104,42 +296,44 @@ class TrainConfig:
     exp_name: str
     pretrain_domains: List[str]
     active_tasks: List[str]
-    batch_size_per_domain: Optional[int] = None
+    
+    # Balanced multi-domain training - batch_size must be divisible by len(pretrain_domains)
+    # batch_size_per_domain: DEPRECATED - use batch_size // len(pretrain_domains) 
 
-    epochs: int = PRETRAIN_EPOCHS
+    # Step-based training configuration (modern approach)
+    max_steps: int = 5640  # Default from PRETRAIN_MAX_STEPS equivalent
+    eval_every_steps: int = 94  # Default from PRETRAIN_EVAL_EVERY_STEPS equivalent
+    patience_steps: int = 1410  # Default from PRETRAIN_PATIENCE_STEPS equivalent
+    
     batch_size: int = PRETRAIN_BATCH_SIZE
     num_workers: int = PRETRAIN_NUM_WORKERS
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    log_every_steps: int = PRETRAIN_LOG_EVERY_STEPS
-    eval_every_epochs: int = PRETRAIN_EVAL_EVERY_EPOCHS
+    log_every_steps: int = 50  # Will be overridden by scheme-specific value in __post_init__
     output_dir: str = PRETRAIN_OUTPUT_DIR
-    
-    # NEW: Step-based training configuration
-    max_steps: Optional[int] = None  # If provided, use step-based training instead of epochs
-    eval_every_steps: Optional[int] = None  # For step-based training
-    patience_steps: Optional[int] = None  # For step-based training
-    lr_model: float = PRETRAIN_LR_MODEL
-    lr_uncertainty: float = PRETRAIN_LR_UNCERTAINTY
+    lr_model: float = 3e-4  # Default scheme value
+    lr_uncertainty: float = 5e-3  # Default scheme value
     adam_betas: Tuple[float, float] = PRETRAIN_ADAM_BETAS
     adam_eps: float = PRETRAIN_ADAM_EPS
-    model_weight_decay: float = PRETRAIN_MODEL_WEIGHT_DECAY
-    uncertainty_weight_decay: float = PRETRAIN_UNCERTAINTY_WEIGHT_DECAY
+    model_weight_decay: float = 0.01  # Default scheme value
+    uncertainty_weight_decay: float = 0.0  # No L2 for uncertainty weights
     
     # Scheme-specific parameters (will be set automatically)
     training_scheme: Optional[str] = None
     lr_min_factor: float = PRETRAIN_LR_MIN_FACTOR
-    lr_warmup_fraction: float = PRETRAIN_LR_WARMUP_FRACTION
-    patience: int = PATIENCE
-    dropout_rate: float = DROPOUT_RATE
+    lr_warmup_fraction: float = PRETRAIN_WARMUP_FRACTION
+    dropout_rate: float = GNN_DROPOUT_RATE
 
     def __post_init__(self):
         """
-        Automatically calculate batch_size_per_domain if not provided.
-        Apply scheme-specific hyperparameters and configure step-based training.
+        Validate balanced multi-domain configuration and apply scheme-specific hyperparameters.
         """
-        if self.batch_size_per_domain is None:
-            num_domains = len(self.pretrain_domains)
-            self.batch_size_per_domain = self.batch_size // num_domains
+        
+        # Validate balanced multi-domain configuration
+        if len(self.pretrain_domains) > 1:
+            if self.batch_size % len(self.pretrain_domains) != 0:
+                raise ValueError(f"batch_size ({self.batch_size}) must be divisible by number of domains ({len(self.pretrain_domains)}) for balanced sampling")
+            samples_per_domain = self.batch_size // len(self.pretrain_domains)
+            logging.info(f"Balanced multi-domain setup: {samples_per_domain} samples per domain per batch")
         
         # Determine training scheme and apply scheme-specific hyperparameters
         if self.training_scheme is None:
@@ -148,8 +342,7 @@ class TrainConfig:
         # Import step-based training configuration  
         from src.common import (
             get_scheme_hyperparameters, PRETRAIN_MAX_STEPS, 
-            PRETRAIN_EVAL_EVERY_STEPS, PRETRAIN_PATIENCE_STEPS,
-            PRETRAIN_LOG_EVERY_STEPS
+            PRETRAIN_EVAL_EVERY_STEPS, PRETRAIN_PATIENCE_STEPS
         )
         
         # Get complete scheme configuration
@@ -167,8 +360,8 @@ class TrainConfig:
         self.eval_every_steps = scheme_config['eval_every_steps']
         self.patience_steps = scheme_config['patience_steps']
         
-        # Update logging frequency
-        self.log_every_steps = PRETRAIN_LOG_EVERY_STEPS
+        # Update logging frequency (use scheme-specific value)
+        self.log_every_steps = scheme_config['log_every_steps']
         
         # For warmup calculation, we need warmup in steps
         self.lr_warmup_steps = scheme_config['warmup_steps']
@@ -251,7 +444,6 @@ def make_domain_loader(
             sampler=sampler,
             num_workers=num_workers,
             pin_memory=PRETRAIN_PIN_MEMORY,
-            drop_last=PRETRAIN_DROP_LAST,
             worker_init_fn=_seed_worker,
             generator=generator,
         )
@@ -263,7 +455,6 @@ def make_domain_loader(
             shuffle=(split == "train"),
             num_workers=num_workers,
             pin_memory=PRETRAIN_PIN_MEMORY,
-            drop_last=PRETRAIN_DROP_LAST,
             worker_init_fn=_seed_worker,
             generator=generator,
         )
@@ -272,12 +463,198 @@ def make_domain_loader(
     return loader, length
 
 
+class BalancedMultiDomainSampler:
+    """
+    Balanced sampler that ensures exactly equal representation of each domain in each batch.
+    Each batch contains exactly batch_size // num_domains samples from each domain.
+    """
+    
+    def __init__(self, domain_datasets: Dict[str, DomainSplitDataset], batch_size: int, num_steps: int, generator: Optional[torch.Generator] = None):
+        self.domain_datasets = domain_datasets
+        self.domains = list(domain_datasets.keys())
+        self.num_domains = len(self.domains)
+        self.batch_size = batch_size
+        self.samples_per_domain = batch_size // self.num_domains
+        self.num_steps = num_steps
+        self.generator = generator
+        
+        # Ensure batch_size is divisible by number of domains
+        if batch_size % self.num_domains != 0:
+            raise ValueError(f"batch_size ({batch_size}) must be divisible by number of domains ({self.num_domains})")
+        
+        # Get dataset sizes for sampling with replacement
+        self.dataset_sizes = {domain: len(dataset) for domain, dataset in domain_datasets.items()}
+        
+        logging.info(f"BalancedMultiDomainSampler: {self.samples_per_domain} samples per domain per batch")
+        logging.info(f"Domain sizes: {self.dataset_sizes}")
+    
+    def __iter__(self):
+        if self.generator is not None:
+            rng_state = self.generator.get_state()
+        
+        for step in range(self.num_steps):
+            batch_items = []
+            
+            # Sample exactly samples_per_domain from each domain
+            for domain in self.domains:
+                dataset = self.domain_datasets[domain]
+                dataset_size = self.dataset_sizes[domain]
+                
+                # Sample with replacement to ensure we can always get samples_per_domain samples
+                if self.generator is not None:
+                    indices = torch.randint(0, dataset_size, (self.samples_per_domain,), generator=self.generator)
+                else:
+                    indices = torch.randint(0, dataset_size, (self.samples_per_domain,))
+                
+                # Get actual data items
+                for idx in indices:
+                    batch_items.append((dataset[idx.item()], domain))
+            
+            yield batch_items
+    
+    def __len__(self):
+        return self.num_steps
+
+
+def build_balanced_multi_domain_loader(
+    domains: List[str], 
+    split: str,
+    batch_size: int, 
+    num_workers: int, 
+    num_steps: int,
+    seed: int
+) -> PyGDataLoader:
+    """
+    Create a balanced multi-domain loader that ensures equal representation per batch.
+    """
+    
+    # Load all domain datasets
+    domain_datasets = {}
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+    
+    for domain in domains:
+        dom_dir = PROCESSED_DIR / domain
+        data_path = dom_dir / "data.pt"
+        splits_path = dom_dir / "splits.pt"
+
+        graphs = torch.load(data_path)
+        splits = torch.load(splits_path)
+        split_idx = splits[split]
+        
+        # Load graph properties if they exist
+        props_path = dom_dir / "graph_properties.pt"
+        if props_path.exists():
+            graph_properties_tensor = torch.load(props_path)
+            for i, graph in enumerate(graphs):
+                graph.graph_properties = graph_properties_tensor[i]
+            logging.info(f"Loaded graph properties for {domain}")
+
+        domain_datasets[domain] = DomainSplitDataset(graphs, split_idx)
+        logging.info(f"Loaded {domain}: {len(domain_datasets[domain])} {split} samples")
+    
+    # Create balanced sampler
+    sampler = BalancedMultiDomainSampler(domain_datasets, batch_size, num_steps, generator)
+    
+    # Custom collate function to handle (graph, domain) tuples
+    def collate_balanced_batch(batch_items):
+        graphs = []
+        domain_labels = []
+        
+        for graph, domain in batch_items:
+            graphs.append(graph)
+            domain_labels.append(domain)
+        
+        # Create batched graph using PyG's Batch
+        batched_graph = Batch.from_data_list(graphs)
+        
+        # Add domain information
+        batched_graph.domain_labels = domain_labels
+        
+        return batched_graph
+    
+    # Create DataLoader with custom sampler and collate function
+    loader = torch.utils.data.DataLoader(
+        dataset=sampler,  # Use sampler as dataset
+        batch_size=1,     # Sampler already creates batches
+        num_workers=num_workers,
+        pin_memory=PRETRAIN_PIN_MEMORY,
+        drop_last=False,
+        worker_init_fn=_seed_worker,
+        collate_fn=lambda batch: collate_balanced_batch(batch[0])  # batch[0] because batch_size=1
+    )
+    
+    return loader
+
+
+def build_balanced_multi_domain_loaders(
+    domains: List[str],
+    batch_size: int,
+    num_workers: int,
+    seed: int,
+) -> Tuple[PyGDataLoader, Dict[str, PyGDataLoader], int]:
+    """
+    Build balanced multi-domain loaders for fair representation.
+    
+    Returns:
+        train_loader: Single loader with balanced batches from all domains
+        val_loaders: Separate validation loaders per domain (for evaluation)
+        steps_per_epoch: Number of steps per epoch (based on largest domain)
+    """
+    
+    # Calculate steps per epoch based on largest domain for fair comparison
+    domain_sizes = {}
+    for domain in domains:
+        dom_dir = PROCESSED_DIR / domain
+        splits_path = dom_dir / "splits.pt"
+        splits = torch.load(splits_path)
+        domain_sizes[domain] = len(splits['train'])
+    
+    largest_domain_size = max(domain_sizes.values())
+    samples_per_domain_per_batch = batch_size // len(domains)
+    
+    # Steps per epoch: largest domain size / samples_per_domain_per_batch
+    # This ensures each domain gets roughly equal "epochs" worth of data
+    steps_per_epoch = largest_domain_size // samples_per_domain_per_batch
+    
+    logging.info(f"Balanced training setup:")
+    logging.info(f"  Domain sizes: {domain_sizes}")
+    logging.info(f"  Batch size: {batch_size} ({samples_per_domain_per_batch} per domain)")
+    logging.info(f"  Steps per epoch: {steps_per_epoch}")
+    logging.info(f"  Largest domain: {max(domain_sizes, key=domain_sizes.get)} ({largest_domain_size} samples)")
+    
+    # Create balanced training loader
+    train_loader = build_balanced_multi_domain_loader(
+        domains=domains,
+        split="train", 
+        batch_size=batch_size,
+        num_workers=num_workers,
+        num_steps=steps_per_epoch,
+        seed=seed
+    )
+    
+    # Create separate validation loaders per domain (for detailed evaluation)
+    val_loaders: Dict[str, PyGDataLoader] = {}
+    val_gen = torch.Generator()
+    val_gen.manual_seed(seed + 1)
+    
+    for domain in domains:
+        val_loader, _ = make_domain_loader(domain, "val", batch_size, num_workers, generator=val_gen)
+        val_loaders[domain] = val_loader
+    
+    return train_loader, val_loaders, steps_per_epoch
+
+
 def build_multi_domain_loaders(
     domains: List[str],
     batch_size_per_domain: int,
     num_workers: int,
     seed: int,
 ) -> Tuple[Dict[str, PyGDataLoader], Dict[str, PyGDataLoader], int]:
+    """
+    DEPRECATED: Old approach with separate domain loaders.
+    Use build_balanced_multi_domain_loaders() for fair representation.
+    """
     provisional_lengths: Dict[str, int] = {}
     proto_gen = torch.Generator()
     proto_gen.manual_seed(seed)
@@ -412,9 +789,12 @@ def set_global_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        # For reproducibility - may impact performance
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def move_batch_to_device(batch: Batch, device: torch.device) -> Batch:
@@ -434,6 +814,42 @@ def combine_next_batches(iters: Dict[str, Iterable]) -> Dict[str, Batch]:
 
 def move_batches_to_device(batches_by_domain: Dict[str, Batch], device: torch.device) -> Dict[str, Batch]:
     return {domain: move_batch_to_device(batch, device) for domain, batch in batches_by_domain.items()}
+
+
+def convert_balanced_batch_to_domain_batches(balanced_batch: Batch, device: torch.device) -> Dict[str, Batch]:
+    """
+    Convert a balanced batch with domain_labels to separate domain batches.
+    
+    Args:
+        balanced_batch: A PyG Batch object with domain_labels list indicating which domain each graph belongs to
+        device: Target device for the batches
+        
+    Returns:
+        Dict mapping domain names to their respective batches
+    """
+    domain_labels = balanced_batch.domain_labels
+    unique_domains = list(set(domain_labels))
+    
+    batches_by_domain = {}
+    
+    for domain in unique_domains:
+        # Find indices for this domain
+        domain_indices = [i for i, d in enumerate(domain_labels) if d == domain]
+        
+        # Extract graphs for this domain
+        domain_graphs = []
+        for idx in domain_indices:
+            # Get the individual graph from the batch
+            graph = balanced_batch.get_example(idx)
+            domain_graphs.append(graph)
+        
+        # Create batch for this domain
+        domain_batch = Batch.from_data_list(domain_graphs)
+        
+        # Move to device
+        batches_by_domain[domain] = move_batch_to_device(domain_batch, device)
+    
+    return batches_by_domain
 
 
 @torch.no_grad()
@@ -521,9 +937,10 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
 
     device = torch.device(cfg.device)
 
-    train_loaders, val_loaders, steps_per_epoch = build_multi_domain_loaders(
+    # Use balanced multi-domain loading for fair representation
+    train_loader, val_loaders, steps_per_epoch = build_balanced_multi_domain_loaders(
         domains=cfg.pretrain_domains,
-        batch_size_per_domain=cfg.batch_size_per_domain,
+        batch_size=cfg.batch_size,
         num_workers=cfg.num_workers,
         seed=seed,
     )
@@ -588,15 +1005,14 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
         "model": {
             "gnn_hidden_dim": GNN_HIDDEN_DIM,
             "gnn_num_layers": GNN_NUM_LAYERS,
-            "dropout_rate_backbone": DROPOUT_RATE,  # Constant for downstream consistency
-            "dropout_rate_encoders": DROPOUT_RATE,  # Constant for downstream reusability
+            "dropout_rate_backbone": GNN_DROPOUT_RATE,  # Constant for downstream consistency
+            "dropout_rate_encoders": GNN_DROPOUT_RATE,  # Constant for downstream reusability
             "dropout_rate_task_heads": cfg.dropout_rate,  # Scheme-specific for task heads only
             "contrastive_proj_dim": CONTRASTIVE_PROJ_DIM,
             "graph_prop_head_hidden_dim": GRAPH_PROP_HEAD_HIDDEN_DIM,
             "domain_adv_head_hidden_dim": DOMAIN_ADV_HEAD_HIDDEN_DIM,
             "domain_adv_head_out_dim": DOMAIN_ADV_HEAD_OUT_DIM,
-            "mask_token_init_mean": MASK_TOKEN_INIT_MEAN,
-            "mask_token_init_std": MASK_TOKEN_INIT_STD,
+            
         },
         
         # Task-specific hyperparameters
@@ -624,7 +1040,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
             "grl_gamma": GRL_GAMMA,
             "grl_lambda_min": GRL_LAMBDA_MIN,
             "grl_lambda_max": GRL_LAMBDA_MAX,
-            "lr_warmup_fraction": PRETRAIN_LR_WARMUP_FRACTION,
+            "lr_warmup_fraction": PRETRAIN_WARMUP_FRACTION,
             "lr_min_factor": PRETRAIN_LR_MIN_FACTOR,
         },
         
@@ -691,16 +1107,19 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
         epoch_start_times[epoch] = epoch_start_time
         model.train()
 
-        iterators = {d: iter(l) for d, l in train_loaders.items()}
+        train_iter = iter(train_loader)
 
         for _ in range(steps_per_epoch):
             step_start_time = time.time()
             
-            batches_by_domain = combine_next_batches(iterators)
-            if not batches_by_domain:
+            # Get balanced batch from single loader
+            try:
+                balanced_batch = next(train_iter)
+            except StopIteration:
                 break
-
-            batches_by_domain = move_batches_to_device(batches_by_domain, device)
+            
+            # Convert balanced batch to domain-specific batches for task compatibility
+            batches_by_domain = convert_balanced_batch_to_domain_batches(balanced_batch, device)
 
             raw_losses: Dict[str, torch.Tensor] = {}
             per_task_per_domain_losses: Dict[str, Dict[str, torch.Tensor]] = {}
@@ -756,10 +1175,9 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
 
                 # ENHANCED MONITORING: Add task contribution percentages
                 total_weighted_loss = sum(float(v.detach().cpu()) for v in weighted_components.values())
-                if total_weighted_loss > EPSILON:  # Avoid division by zero
-                    for task_name, weighted_loss in weighted_components.items():
-                        contribution_pct = float(weighted_loss.detach().cpu()) / total_weighted_loss * PERCENTAGE_CONVERSION
-                        log_dict[f"train/contribution_pct/{task_name}"] = contribution_pct
+                for task_name, weighted_loss in weighted_components.items():
+                    contribution_pct = float(weighted_loss.detach().cpu()) / (total_weighted_loss + EPSILON) * 100
+                    log_dict[f"train/contribution_pct/{task_name}"] = contribution_pct
 
                 # ENHANCED MONITORING: Add gradient norms per task head
                 if hasattr(model, 'task_heads'):
@@ -794,8 +1212,12 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 log_dict["timing/cumulative_training_time_hours"] = (current_time - training_start_time) / 3600
                 if len(step_times) >= TIMING_STEPS_WINDOW:  # Only log after some steps for stability
                     recent_step_times = step_times[-TIMING_STEPS_WINDOW:]
-                    log_dict["timing/avg_step_time_seconds"] = float(np.mean(recent_step_times))
-                    log_dict["timing/steps_per_second"] = DEFAULT_TASK_SCALE / float(np.mean(recent_step_times))
+                    mean_step_time = float(np.mean(recent_step_times))
+                    log_dict["timing/avg_step_time_seconds"] = mean_step_time
+                    if mean_step_time > 0:
+                        log_dict["timing/steps_per_second"] = DEFAULT_TASK_SCALE / mean_step_time
+                    else:
+                        log_dict["timing/steps_per_second"] = 0.0
 
                 wandb.log(log_dict, step=global_step)
 
@@ -853,8 +1275,14 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                 # Efficiency metrics
                 cumulative_time = time.time() - training_start_time
                 log_dict["timing/cumulative_training_time_seconds"] = cumulative_time
-                log_dict["timing/average_time_per_step_seconds"] = cumulative_time / step
-                log_dict["timing/steps_per_second"] = step / cumulative_time
+                if step > 0:
+                    log_dict["timing/average_time_per_step_seconds"] = cumulative_time / step
+                else:
+                    log_dict["timing/average_time_per_step_seconds"] = 0.0
+                if cumulative_time > 0:
+                    log_dict["timing/steps_per_second"] = step / cumulative_time
+                else:
+                    log_dict["timing/steps_per_second"] = 0.0
                 
                 # Convergence efficiency
                 if best_epoch > 0:
@@ -922,7 +1350,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                     "model_config": {
                         "gnn_hidden_dim": GNN_HIDDEN_DIM,
                         "gnn_num_layers": GNN_NUM_LAYERS,
-                        "dropout_rate": DROPOUT_RATE,
+                        "dropout_rate": GNN_DROPOUT_RATE,
                         "domain_dimensions": {d: DOMAIN_DIMENSIONS[d] for d in cfg.pretrain_domains},
                         "contrastive_proj_dim": CONTRASTIVE_PROJ_DIM,
                         "graph_prop_head_hidden_dim": GRAPH_PROP_HEAD_HIDDEN_DIM,
@@ -961,7 +1389,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
                         "model_config": {
                             "gnn_hidden_dim": GNN_HIDDEN_DIM,
                             "gnn_num_layers": GNN_NUM_LAYERS,
-                            "dropout_rate": DROPOUT_RATE,
+                            "dropout_rate": GNN_DROPOUT_RATE,
                             "domain_dimensions": {d: DOMAIN_DIMENSIONS[d] for d in cfg.pretrain_domains},
                         },
                         
@@ -1104,11 +1532,11 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
         # Timing and efficiency metrics
         "timing/total_training_time_seconds": total_training_time,
         "timing/total_training_time_hours": total_training_time / 3600,
-        "timing/average_epoch_time_seconds": total_training_time / epoch,
+        "timing/average_epoch_time_seconds": total_training_time / epoch if epoch > 0 else 0.0,
         "timing/convergence_epoch": best_epoch,
         "timing/time_to_convergence_hours": (epoch_start_times.get(best_epoch, training_start_time) - training_start_time) / 3600 if best_epoch > 0 else 0,
         "efficiency/training_efficiency": best_epoch / epoch if epoch > 0 else 0,  # Fraction of epochs needed
-        "efficiency/steps_per_second_avg": len(step_times) / total_training_time if step_times else 0,
+        "efficiency/steps_per_second_avg": len(step_times) / total_training_time if step_times and total_training_time > 0 else 0,
         
         # System information
         "device_used": str(device),

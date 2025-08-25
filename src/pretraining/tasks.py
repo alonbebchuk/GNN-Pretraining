@@ -9,11 +9,10 @@ from torch_geometric.data import Batch
 from torch_geometric.nn import global_mean_pool
 from torch_geometric.utils import batched_negative_sampling
 
-from src.common import (
-    NODE_CONTRASTIVE_TEMPERATURE,
-    CONTRASTIVE_FALLBACK_LOSS,
-    TASK_ZERO_LOSS
-)
+# Task-specific Constants
+TASK_ZERO_LOSS = 0.0                   # Default zero loss value for tasks
+CONTRASTIVE_FALLBACK_LOSS = 1.0        # Fallback loss for contrastive tasks
+NODE_CONTRASTIVE_TEMPERATURE = 0.1     # Temperature for contrastive learning
 from src.pretraining.augmentations import GraphAugmentor
 
 
@@ -50,7 +49,7 @@ class NodeFeatureMaskingTask(BasePretrainTask):
     """
 
     def compute_loss(self, batches_by_domain: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
-        from src.common import DOMAIN_DIMENSIONS
+        from src.data.data_setup import DOMAIN_DIMENSIONS
         
         total_loss = 0.0
         total_size = 0

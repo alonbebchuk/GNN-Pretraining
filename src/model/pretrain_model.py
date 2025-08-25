@@ -1,19 +1,24 @@
+from typing import Optional, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Optional, Tuple
 from torch_geometric.data import Batch
-from src.model.gnn import InputEncoder, GIN_Backbone
-from src.model.heads import MLPHead, DotProductDecoder, BilinearDiscriminator, DomainClassifierHead
-from src.common import (
-    DOMAIN_DIMENSIONS,
-    GNN_HIDDEN_DIM,
-    NODE_FEATURE_MASKING_MASK_RATE,
-    MASK_TOKEN_INIT_MEAN,
-    MASK_TOKEN_INIT_STD,
-    GRAPH_PROPERTY_DIM,
+
+from src.data.data_setup import DOMAIN_DIMENSIONS
+from src.data.graph_properties import GRAPH_PROPERTY_DIM
+from src.model.gnn import GIN_Backbone, GNN_HIDDEN_DIM, InputEncoder
+from src.model.heads import (
     CONTRASTIVE_PROJ_DIM,
     GRAPH_PROP_HEAD_HIDDEN_DIM,
+    BilinearDiscriminator,
+    DomainClassifierHead,
+    DotProductDecoder,
+    MLPHead,
 )
+
+MASK_TOKEN_INIT_MEAN = 0.0
+MASK_TOKEN_INIT_STD = 0.02
+NODE_FEATURE_MASKING_MASK_RATE = 0.15
 
 
 class PretrainableGNN(nn.Module):
@@ -29,7 +34,7 @@ class PretrainableGNN(nn.Module):
             self.input_encoders[domain_name] = InputEncoder(dim_in=dim_in)
 
         self.mask_token = nn.Parameter(torch.zeros(GNN_HIDDEN_DIM))
-        nn.init.normal_(self.mask_token,mean=MASK_TOKEN_INIT_MEAN, std=MASK_TOKEN_INIT_STD)
+        nn.init.normal_(self.mask_token, mean=MASK_TOKEN_INIT_MEAN, std=MASK_TOKEN_INIT_STD)
 
         self.gnn_backbone = GIN_Backbone()
 
@@ -69,14 +74,25 @@ class PretrainableGNN(nn.Module):
         with torch.no_grad():
             original_h0 = encoder(batch.x)
 
-        num_nodes = batch.x.shape[0]
+        all_mask_indices = []
 
-        mask_indices = (torch.rand(num_nodes, device=self.device) < NODE_FEATURE_MASKING_MASK_RATE).nonzero(as_tuple=True)[0]
+        for i in range(batch.num_graphs):
+            start_idx = batch.ptr[i].item()
+            end_idx = batch.ptr[i + 1].item()
+            graph_num_nodes = end_idx - start_idx
 
-        target_h0 = original_h0[mask_indices].clone()
+            num_nodes_to_mask = int(graph_num_nodes * NODE_FEATURE_MASKING_MASK_RATE)
+            if num_nodes_to_mask > 0:
+                graph_mask_indices = torch.randperm(graph_num_nodes, device=self.device)[:num_nodes_to_mask]
+                global_mask_indices = graph_mask_indices + start_idx
+                all_mask_indices.append(global_mask_indices)
+
+        mask_indices = torch.cat(all_mask_indices, dim=0)
 
         masked_h0 = original_h0.clone()
-        masked_h0[mask_indices] = self.mask_token.unsqueeze(0).expand(mask_indices.size(0), -1)
+        masked_h0[mask_indices] = self.mask_token.unsqueeze(0).expand(len(mask_indices), -1)
+
+        target_h0 = original_h0[mask_indices].clone()
 
         return masked_h0, mask_indices, target_h0
 

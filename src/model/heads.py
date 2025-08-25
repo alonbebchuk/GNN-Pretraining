@@ -1,7 +1,13 @@
 import torch
 import torch.nn as nn
+
+from src.model.gnn import GNN_HIDDEN_DIM
 from src.model.layers import GradientReversalLayer
-from src.common import DOMAIN_ADV_HEAD_HIDDEN_DIM, DOMAIN_ADV_HEAD_OUT_DIM, GNN_HIDDEN_DIM
+
+CONTRASTIVE_PROJ_DIM = 128
+GRAPH_PROP_HEAD_HIDDEN_DIM = 512
+DOMAIN_ADV_HEAD_HIDDEN_DIM = 128
+DOMAIN_ADV_HEAD_OUT_DIM = 4
 
 
 class MLPHead(nn.Module):

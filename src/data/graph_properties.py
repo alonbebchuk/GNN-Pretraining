@@ -1,13 +1,16 @@
 import math
+from typing import Iterable
+
 import networkx as nx
 import numpy as np
 import torch
-from typing import Iterable
 from numpy.typing import NDArray
+from sklearn.preprocessing import StandardScaler
 from torch import Tensor
 from torch_geometric.data import Data
-from torch_geometric.utils import to_networkx, to_undirected, remove_self_loops
-from sklearn.preprocessing import StandardScaler
+from torch_geometric.utils import remove_self_loops, to_networkx, to_undirected
+
+GRAPH_PROPERTY_DIM = 15
 
 
 class GraphPropertyCalculator:
@@ -42,10 +45,12 @@ class GraphPropertyCalculator:
 
         num_components = float(nx.number_connected_components(G))
 
-        diameter = 0.0
-        components = [G.subgraph(c).copy() for c in nx.connected_components(G)]
-        H = max(components, key=lambda g: g.number_of_nodes())
-        diameter = float(nx.diameter(H))
+        try:
+            components = [G.subgraph(c).copy() for c in nx.connected_components(G)]
+            H = max(components, key=lambda g: g.number_of_nodes())
+            diameter = float(nx.diameter(H))
+        except (nx.NetworkXError, ValueError):
+            diameter = 0.0
 
         if deg_var == 0.0:
             assortativity = 0.0
@@ -97,14 +102,14 @@ class GraphPropertyCalculator:
 
     def compute_for_dataset(self, dataset: Iterable[Data]) -> Tensor:
         dataset_list = list(dataset)
-        props_tensor = torch.zeros((len(dataset_list), 15), dtype=torch.float32)
+        props_tensor = torch.zeros((len(dataset_list), GRAPH_PROPERTY_DIM), dtype=torch.float32)
 
         for i, g in enumerate(dataset_list):
             props_tensor[i] = self(g)
 
         return props_tensor
 
-    def compute_and_standardize_for_dataset(self, dataset: Iterable[Data], train_idx: NDArray[np.int_]) -> Tensor:
+    def compute_and_standardize_for_dataset(self, dataset: Iterable[Data], train_idx: NDArray[np.int64]) -> Tensor:
         all_props = self.compute_for_dataset(dataset)
 
         scaler = StandardScaler()

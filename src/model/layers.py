@@ -1,6 +1,7 @@
+from typing import Any, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Any, Tuple
 
 
 class GradientReversalFn(torch.autograd.Function):

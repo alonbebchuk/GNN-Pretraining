@@ -1,17 +1,19 @@
 import math
 from dataclasses import dataclass
 from src.common import (
-    GRL_GAMMA, 
-    GRL_LAMBDA_MIN, 
-    GRL_LAMBDA_MAX,
-    PRETRAIN_LR_WARMUP_FRACTION,
+    PRETRAIN_WARMUP_FRACTION,
     PRETRAIN_LR_MIN_FACTOR,
-    SCHEDULER_PROGRESS_CLAMP_MIN,
-    SCHEDULER_PROGRESS_CLAMP_MAX,
-    GRL_CORE_NUMERATOR,
-    COSINE_MULTIPLIER,
-    COSINE_OFFSET
 )
+
+# Scheduler Constants
+GRL_GAMMA = 10.0                  # Gradient reversal layer strength
+GRL_LAMBDA_MIN = 0.0              # Min domain adversarial weight
+GRL_LAMBDA_MAX = 1.0              # Max domain adversarial weight
+SCHEDULER_PROGRESS_CLAMP_MIN = 0.0  # Min progress for schedulers
+SCHEDULER_PROGRESS_CLAMP_MAX = 1.0  # Max progress for schedulers
+GRL_CORE_NUMERATOR = 2.0            # Core numerator for GRL scheduling
+COSINE_MULTIPLIER = 0.5             # Cosine schedule multiplier
+COSINE_OFFSET = 1.0                 # Cosine schedule offset
 
 
 @dataclass
@@ -77,7 +79,7 @@ class CosineWithWarmup:
     """
 
     total_steps: int
-    warmup_fraction: float = PRETRAIN_LR_WARMUP_FRACTION
+    warmup_fraction: float = PRETRAIN_WARMUP_FRACTION
     lr_min_factor: float = PRETRAIN_LR_MIN_FACTOR
 
     def __post_init__(self) -> None:

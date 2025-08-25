@@ -1,39 +1,72 @@
-import os
 import copy
 import logging
-import torch
-import numpy as np
+import os
 from pathlib import Path
+from typing import Dict, List
+
+import numpy as np
+import torch
+from numpy.typing import NDArray
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
+from sklearn.preprocessing import StandardScaler
+from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid, TUDataset
 from torch_geometric.transforms import NormalizeFeatures
-from torch_geometric.data import Data
 from tqdm import tqdm
+
 from src.data.graph_properties import GraphPropertyCalculator
-from typing import List, Dict
-from numpy.typing import NDArray
-from sklearn.preprocessing import StandardScaler
-from src.common import (
-    CONTINUOUS_FEATURE_SCALE_FACTOR,
-    DATA_ROOT_DIR,
-    RANDOM_SEED,
-    PRETRAIN_TUDATASETS,
-    DOWNSTREAM_TUDATASETS,
-    ALL_TUDATASETS,
-    ALL_PLANETOID_DATASETS,
-    FEATURE_TYPES,
-    VAL_TEST_FRACTION,
-    VAL_TEST_SPLIT_RATIO,
-    VAL_FRACTION,
-)
 
+ALL_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
+PRETRAIN_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
+DOWNSTREAM_TUDATASETS = ['ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
+OVERLAP_TUDATASETS = ['ENZYMES']
+ALL_PLANETOID_DATASETS = ['Cora', 'CiteSeer']
 
+FEATURE_TYPES = {
+    'MUTAG': 'categorical',
+    'PROTEINS': 'categorical',
+    'NCI1': 'categorical',
+    'ENZYMES': 'continuous',
+    'FRANKENSTEIN': 'categorical',
+    'PTC_MR': 'categorical',
+    'Cora': 'bow',
+    'CiteSeer': 'bow'
+}
+
+DOMAIN_DIMENSIONS = {
+    'MUTAG': 7,
+    'PROTEINS': 4,
+    'NCI1': 37,
+    'ENZYMES': 21,
+    'FRANKENSTEIN': 780,
+    'PTC_MR': 18,
+    'Cora': 1433,
+    'CiteSeer': 3703
+}
+
+DATASET_SIZES = {
+    'MUTAG': 188,
+    'PROTEINS': 1113,
+    'NCI1': 4110,
+    'ENZYMES': 600,
+    'FRANKENSTEIN': 4337,
+    'PTC_MR': 344,
+    'Cora': 1,
+    'CiteSeer': 1
+}
+
+RANDOM_SEED = 0
+VAL_FRACTION = 0.1
+VAL_TEST_FRACTION = 0.2
+VAL_TEST_SPLIT_RATIO = 0.5
+CONTINUOUS_FEATURE_SCALE_FACTOR = 0.5
+
+DATA_ROOT_DIR = '/kaggle/working/gnn-pretraining/data'
 RAW_DIR = Path(DATA_ROOT_DIR) / 'raw'
 PROCESSED_DIR = Path(DATA_ROOT_DIR) / 'processed'
 
-# --- Helper Functions --------------------------------------------------------
 
-def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_], dataset_name: str) -> None:
+def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int64], dataset_name: str) -> None:
     if FEATURE_TYPES.get(dataset_name) == 'continuous':
         train_X_list = [dataset[i].x.detach().cpu() for i in train_idx]
         train_X = torch.cat(train_X_list, dim=0).numpy()
@@ -51,14 +84,6 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int_]
 
 
 def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, torch.Tensor], graph_properties: torch.Tensor = None) -> None:
-    """Save processed data and splits to disk.
-
-    Args:
-        dataset_name: Name of the dataset
-        data: List of PyG Data objects
-        splits: Dictionary containing train/val/test splits
-        graph_properties: Optional tensor of graph properties [num_graphs, 15]
-    """
     save_dir = PROCESSED_DIR / dataset_name
     os.makedirs(save_dir, exist_ok=True)
 
@@ -69,10 +94,8 @@ def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, t
 
     logging.info(f"Successfully processed and saved '{dataset_name}'.")
 
-# --- Core Processing Functions -----------------------------------------------
 
 def process_tudatasets() -> None:
-    """Download, process, and split TU datasets."""
     logging.info("Processing TU datasets...")
 
     calculator = GraphPropertyCalculator()
@@ -142,7 +165,6 @@ def process_planetoid_datasets() -> None:
         }
         save_processed_data(name, [data], splits)
 
-# --- Main Execution ----------------------------------------------------------
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 from torch_geometric.nn import GINConv
-from src.common import DROPOUT_RATE, GNN_HIDDEN_DIM, GNN_NUM_LAYERS
+
+GNN_HIDDEN_DIM = 256
+GNN_NUM_LAYERS = 5
+GNN_DROPOUT_RATE = 0.2
 
 
 class InputEncoder(nn.Module):
@@ -12,7 +15,7 @@ class InputEncoder(nn.Module):
             nn.Linear(dim_in, GNN_HIDDEN_DIM),
             nn.LayerNorm(GNN_HIDDEN_DIM),
             nn.ReLU(),
-            nn.Dropout(p=DROPOUT_RATE)
+            nn.Dropout(p=GNN_DROPOUT_RATE)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -33,7 +36,7 @@ class GINLayer(nn.Module):
 
         self.layer_norm = nn.LayerNorm(GNN_HIDDEN_DIM)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(p=DROPOUT_RATE)
+        self.dropout = nn.Dropout(p=GNN_DROPOUT_RATE)
 
     def forward(self, h: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         h_conv = self.gin_conv(h, edge_index)

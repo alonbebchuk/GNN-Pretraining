@@ -1,13 +1,17 @@
+# Loss Constants
+UNCERTAINTY_LOSS_COEF = 0.5       # Weight for uncertainty regularization
+LOGSIGMA_TO_SIGMA_SCALE = 0.5     # Scale factor for log(σ) → σ conversion
+
 import torch
 import torch.nn as nn
 from typing import Dict, Tuple, List
-from src.common import (
-    UNCERTAINTY_LOSS_COEF, 
-    LOGSIGMA_TO_SIGMA_SCALE, 
-    TASK_LOSS_SCALES,
-    DEFAULT_TASK_SCALE,
-    TASK_ZERO_LOSS
-)
+
+from src.pretraining.tasks import TASK_ZERO_LOSS
+
+
+def get_default_task_scale():
+    """Get default task scaling factor."""
+    return 1.0
 
 
 class UncertaintyWeighter(nn.Module):
@@ -45,7 +49,16 @@ class UncertaintyWeighter(nn.Module):
             ls = raw_losses[t]
             
             # CRITICAL FIX: Apply task-specific loss scaling BEFORE uncertainty weighting
-            task_scale = TASK_LOSS_SCALES.get(t, DEFAULT_TASK_SCALE)
+            task_loss_scales = {
+                'node_feat_mask': 0.1,
+                'graph_prop': 0.3,
+                'node_contrast': 1.0,
+                'graph_contrast': 2.0,
+                'link_pred': 1.5,
+                'domain_adv': 1.0,
+            }
+            default_scale = 1.0
+            task_scale = task_loss_scales.get(t, default_scale)
             ls_scaled = ls * task_scale
             
             # Apply uncertainty weighting to scaled loss
@@ -54,7 +67,7 @@ class UncertaintyWeighter(nn.Module):
             components[t] = ls_weighted
 
         if self.include_domain_adv:
-            domain_scale = TASK_LOSS_SCALES.get('domain_adv', DEFAULT_TASK_SCALE)
+            domain_scale = 1.0  # Default scale for domain adversarial
             domain_term = -float(lambda_val) * raw_losses['domain_adv'] * domain_scale
             total = total + domain_term
             components['domain_adv'] = domain_term
