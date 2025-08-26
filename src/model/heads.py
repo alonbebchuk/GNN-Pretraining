@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from src.model.gnn import GNN_HIDDEN_DIM
+from src.model.gnn import GNN_DROPOUT_RATE, GNN_HIDDEN_DIM
 from src.model.layers import GradientReversalLayer
 
 CONTRASTIVE_PROJ_DIM = 128
@@ -11,13 +11,13 @@ DOMAIN_ADV_HEAD_OUT_DIM = 4
 
 
 class MLPHead(nn.Module):
-    def __init__(self, dropout_rate: float, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM) -> None:
+    def __init__(self, dim_hidden: int = GNN_HIDDEN_DIM, dim_out: int = GNN_HIDDEN_DIM) -> None:
         super(MLPHead, self).__init__()
 
         self.mlp = nn.Sequential(
             nn.Linear(GNN_HIDDEN_DIM, dim_hidden),
             nn.ReLU(),
-            nn.Dropout(p=dropout_rate),
+            nn.Dropout(p=GNN_DROPOUT_RATE),
             nn.Linear(dim_hidden, dim_out)
         )
 
@@ -39,11 +39,11 @@ class DotProductDecoder(nn.Module):
 
 
 class BilinearDiscriminator(nn.Module):
-    def __init__(self, dropout_rate: float) -> None:
+    def __init__(self) -> None:
         super(BilinearDiscriminator, self).__init__()
 
         self.W = nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, bias=False)
-        self.dropout = nn.Dropout(p=dropout_rate)
+        self.dropout = nn.Dropout(p=GNN_DROPOUT_RATE)
 
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         x = self.dropout(x)

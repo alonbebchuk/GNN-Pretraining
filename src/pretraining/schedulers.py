@@ -23,7 +23,7 @@ class GRLLambdaScheduler:
     def state_dict(self) -> dict:
         return {
             'total_steps': self.total_steps,
-            '_current_step': self._current_step,
+            'current_step': self._current_step,
         }
 
 
@@ -33,7 +33,7 @@ class CosineWithWarmup:
     warmup_steps: int
 
     def __post_init__(self) -> None:
-        self._current_step: int = 0
+        self._current_step = 0
 
     def __call__(self) -> float:
         if self._current_step < self.warmup_steps:
@@ -51,5 +51,5 @@ class CosineWithWarmup:
         return {
             'total_steps': self.total_steps,
             'warmup_steps': self.warmup_steps,
-            '_current_step': self._current_step,
+            'current_step': self._current_step,
         }

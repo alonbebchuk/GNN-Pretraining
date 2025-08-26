@@ -1,5 +1,4 @@
 import copy
-import logging
 import os
 from pathlib import Path
 from typing import Dict, List
@@ -80,8 +79,6 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int64
             X_scaled = scaler.transform(X) * CONTINUOUS_FEATURE_SCALE_FACTOR
             g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
 
-        logging.info(f"Applied z-score standardization to {dataset_name}")
-
 
 def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, torch.Tensor], graph_properties: torch.Tensor = None) -> None:
     save_dir = PROCESSED_DIR / dataset_name
@@ -92,18 +89,12 @@ def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, t
     if graph_properties is not None:
         torch.save(graph_properties, save_dir / 'graph_properties.pt')
 
-    logging.info(f"Successfully processed and saved '{dataset_name}'.")
-
 
 def process_tudatasets() -> None:
-    logging.info("Processing TU datasets...")
-
     calculator = GraphPropertyCalculator()
 
     for name in tqdm(ALL_TUDATASETS, desc="Processing TU datasets"):
-        logging.info(f"Downloading {name}...")
         dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=True)
-        logging.info(f"Downloaded {name}: {len(dataset)} graphs")
 
         needs_pretrain = name in PRETRAIN_TUDATASETS
         needs_downstream = name in DOWNSTREAM_TUDATASETS
@@ -150,13 +141,9 @@ def process_tudatasets() -> None:
 
 
 def process_planetoid_datasets() -> None:
-    logging.info("Processing Planetoid datasets...")
-
     for name in tqdm(ALL_PLANETOID_DATASETS, desc="Processing Planetoid datasets"):
-        logging.info(f"Downloading {name}...")
         dataset = Planetoid(root=RAW_DIR, name=name, transform=NormalizeFeatures())
         data = dataset[0]
-        logging.info(f"Downloaded {name}: {data.num_nodes} nodes, {data.num_edges} edges")
 
         splits = {
             'train': torch.where(data.train_mask)[0],
@@ -167,17 +154,12 @@ def process_planetoid_datasets() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
     os.makedirs(DATA_ROOT_DIR, exist_ok=True)
     os.makedirs(RAW_DIR, exist_ok=True)
     os.makedirs(PROCESSED_DIR, exist_ok=True)
-    logging.info(f"Raw data: {RAW_DIR}")
-    logging.info(f"Processed data: {PROCESSED_DIR}")
 
     process_tudatasets()
     process_planetoid_datasets()
-    logging.info("Data processing completed!")
 
 
 if __name__ == "__main__":

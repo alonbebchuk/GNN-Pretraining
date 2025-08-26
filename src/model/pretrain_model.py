@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -23,11 +23,10 @@ NODE_FEATURE_MASKING_MASK_RATE = 0.15
 
 
 class PretrainableGNN(nn.Module):
-    def __init__(self, device: torch.device, domain_names: list[str], task_names: list[str], dropout_rate: float) -> None:
+    def __init__(self, device: torch.device, domain_names: List[str], task_names: List[str]) -> None:
         super(PretrainableGNN, self).__init__()
 
         self.device = device
-        self.dropout_rate = dropout_rate
 
         self.input_encoders = nn.ModuleDict()
         for domain_name in domain_names:
@@ -44,24 +43,24 @@ class PretrainableGNN(nn.Module):
             if task_name == 'node_feat_mask':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    dom_heads[domain_name] = MLPHead(self.dropout_rate)
+                    dom_heads[domain_name] = MLPHead()
                 self.heads[task_name] = dom_heads
             elif task_name == 'link_pred':
                 self.heads[task_name] = DotProductDecoder()
             elif task_name == 'node_contrast':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    dom_heads[domain_name] = MLPHead(self.dropout_rate, dim_out=CONTRASTIVE_PROJ_DIM)
+                    dom_heads[domain_name] = MLPHead(dim_out=CONTRASTIVE_PROJ_DIM)
                 self.heads[task_name] = dom_heads
             elif task_name == 'graph_contrast':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    dom_heads[domain_name] = BilinearDiscriminator(self.dropout_rate)
+                    dom_heads[domain_name] = BilinearDiscriminator()
                 self.heads[task_name] = dom_heads
             elif task_name == 'graph_prop':
                 dom_heads = nn.ModuleDict()
                 for domain_name in domain_names:
-                    dom_heads[domain_name] = MLPHead(self.dropout_rate, dim_hidden=GRAPH_PROP_HEAD_HIDDEN_DIM, dim_out=GRAPH_PROPERTY_DIM)
+                    dom_heads[domain_name] = MLPHead(dim_hidden=GRAPH_PROP_HEAD_HIDDEN_DIM, dim_out=GRAPH_PROPERTY_DIM)
                 self.heads[task_name] = dom_heads
             elif task_name == 'domain_adv':
                 self.heads[task_name] = DomainClassifierHead()
