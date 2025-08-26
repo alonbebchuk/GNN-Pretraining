@@ -88,14 +88,7 @@ TIMING_STEPS_WINDOW = 10          # Number of recent steps for timing
 DEFAULT_TASK_SCALE = 1.0          # Default scaling factor
 
 # Task Balancing & Monitoring System
-TASK_LOSS_SCALES = {
-    'node_feat_mask': 0.1,     # Scale DOWN - dominating due to high dimensionality
-    'graph_prop': 0.3,         # Scale DOWN - medium complexity task
-    'node_contrast': 1.0,      # Reference task (baseline)
-    'graph_contrast': 2.0,     # Scale UP - needs more signal
-    'link_pred': 1.5,          # Scale UP - important structural task
-    'domain_adv': 1.0,         # Reference task (baseline)
-}
+# TASK_LOSS_SCALES imported from losses.py for consistency
 
 MONITORING_METRICS = {
     # Task Performance Metrics
@@ -365,7 +358,6 @@ class TrainConfig:
         
         # For warmup calculation, we need warmup in steps
         self.lr_warmup_steps = scheme_config['warmup_steps']
-        self.lr_warmup_fraction = self.lr_warmup_steps / self.max_steps  # For compatibility
         
         print(f"✅ Applied scheme '{self.training_scheme}' configuration:")
         print(f"  🎯 Step-based training: {self.max_steps} steps ({self.max_steps // 188:.1f} equiv epochs)")
@@ -971,8 +963,7 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
     grl_sched = GRLLambdaScheduler(total_steps=total_steps)
     lr_multiplier = CosineWithWarmup(
         total_steps=total_steps,
-        warmup_fraction=cfg.lr_warmup_fraction, # Use warmup fraction (calculated from steps)
-        lr_min_factor=cfg.lr_min_factor,        # Use scheme-specific min factor
+        warmup_steps=cfg.lr_warmup_steps,
     )
 
     # Classify experiment for analysis
@@ -1146,8 +1137,8 @@ def train_single_seed(cfg: TrainConfig, seed: int) -> None:
             for pg in opt_uncertainty.param_groups:
                 pg["lr"] = cfg.lr_uncertainty * scale
 
-            grl_sched.step(1)
-            lr_multiplier.step(1)
+            grl_sched.step()
+            lr_multiplier.step()
             
             # Track step timing
             step_duration = time.time() - step_start_time
