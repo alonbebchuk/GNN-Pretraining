@@ -15,10 +15,9 @@ from tqdm import tqdm
 
 from src.data.graph_properties import GraphPropertyCalculator
 
-TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
+TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES', 'PTC_MR']
 PRETRAIN_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
-DOWNSTREAM_TUDATASETS = ['ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
-OVERLAP_TUDATASETS = ['ENZYMES']
+DOWNSTREAM_TUDATASETS = ['ENZYMES', 'PTC_MR']
 PLANETOID_DATASETS = ['Cora', 'CiteSeer']
 
 FEATURE_TYPES = {
@@ -26,7 +25,6 @@ FEATURE_TYPES = {
     'PROTEINS': 'categorical',
     'NCI1': 'categorical',
     'ENZYMES': 'continuous',
-    'FRANKENSTEIN': 'categorical',
     'PTC_MR': 'categorical',
     'Cora': 'bow',
     'CiteSeer': 'bow'
@@ -37,7 +35,6 @@ DOMAIN_DIMENSIONS = {
     'PROTEINS': 4,
     'NCI1': 37,
     'ENZYMES': 21,
-    'FRANKENSTEIN': 780,
     'PTC_MR': 18,
     'Cora': 1433,
     'CiteSeer': 3703
@@ -48,7 +45,6 @@ DATASET_SIZES = {
     'PROTEINS': 1113,
     'NCI1': 4110,
     'ENZYMES': 600,
-    'FRANKENSTEIN': 4337,
     'PTC_MR': 344,
     'Cora': 1,
     'CiteSeer': 1

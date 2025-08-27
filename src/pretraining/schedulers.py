@@ -21,10 +21,7 @@ class GRLLambdaScheduler:
         self._current_step += 1
 
     def state_dict(self) -> dict:
-        return {
-            'total_steps': self.total_steps,
-            'current_step': self._current_step,
-        }
+        return {'lambda_val': self()}
 
 
 @dataclass
@@ -48,8 +45,4 @@ class CosineWithWarmup:
         self._current_step += 1
 
     def state_dict(self) -> dict:
-        return {
-            'total_steps': self.total_steps,
-            'warmup_steps': self.warmup_steps,
-            'current_step': self._current_step,
-        }
+        return {'lr_multiplier': self()}

@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch_geometric.nn import GINConv
 
 GNN_HIDDEN_DIM = 256
-GNN_NUM_LAYERS = 5
+GNN_NUM_LAYERS = 3
 GNN_DROPOUT_RATE = 0.2
 
 
