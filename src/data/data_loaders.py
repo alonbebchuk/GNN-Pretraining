@@ -93,7 +93,7 @@ class BalancedMultiDomainSampler:
 
 def _collate_domain_batches(batch_items: List[Tuple[Data, str]]) -> Dict[str, Batch]:
     domain_graphs = {}
-    
+
     for graph, domain in batch_items:
         if domain not in domain_graphs:
             domain_graphs[domain] = []

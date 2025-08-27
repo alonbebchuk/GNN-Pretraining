@@ -15,11 +15,11 @@ from tqdm import tqdm
 
 from src.data.graph_properties import GraphPropertyCalculator
 
-ALL_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
+TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
 PRETRAIN_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
 DOWNSTREAM_TUDATASETS = ['ENZYMES', 'FRANKENSTEIN', 'PTC_MR']
 OVERLAP_TUDATASETS = ['ENZYMES']
-ALL_PLANETOID_DATASETS = ['Cora', 'CiteSeer']
+PLANETOID_DATASETS = ['Cora', 'CiteSeer']
 
 FEATURE_TYPES = {
     'MUTAG': 'categorical',
@@ -54,11 +54,10 @@ DATASET_SIZES = {
     'CiteSeer': 1
 }
 
-RANDOM_SEED = 0
+RANDOM_SEED = 42
 VAL_FRACTION = 0.1
 VAL_TEST_FRACTION = 0.2
 VAL_TEST_SPLIT_RATIO = 0.5
-CONTINUOUS_FEATURE_SCALE_FACTOR = 0.5
 
 DATA_ROOT_DIR = '/kaggle/working/gnn-pretraining/data'
 RAW_DIR = Path(DATA_ROOT_DIR) / 'raw'
@@ -76,7 +75,7 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int64
 
         for g in dataset:
             X = g.x.detach().cpu().numpy()
-            X_scaled = scaler.transform(X) * CONTINUOUS_FEATURE_SCALE_FACTOR
+            X_scaled = scaler.transform(X)
             g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
 
 
@@ -93,7 +92,7 @@ def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, t
 def process_tudatasets() -> None:
     calculator = GraphPropertyCalculator()
 
-    for name in tqdm(ALL_TUDATASETS, desc="Processing TU datasets"):
+    for name in tqdm(TUDATASETS, desc="Processing TU datasets"):
         dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=True)
 
         needs_pretrain = name in PRETRAIN_TUDATASETS
@@ -141,7 +140,7 @@ def process_tudatasets() -> None:
 
 
 def process_planetoid_datasets() -> None:
-    for name in tqdm(ALL_PLANETOID_DATASETS, desc="Processing Planetoid datasets"):
+    for name in tqdm(PLANETOID_DATASETS, desc="Processing Planetoid datasets"):
         dataset = Planetoid(root=RAW_DIR, name=name, transform=NormalizeFeatures())
         data = dataset[0]
 

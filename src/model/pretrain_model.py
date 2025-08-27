@@ -24,8 +24,7 @@ NODE_FEATURE_MASKING_MASK_RATE = 0.15
 
 class PretrainableGNN(nn.Module):
     def __init__(self, device: torch.device, domain_names: List[str], task_names: List[str]) -> None:
-        super(PretrainableGNN, self).__init__()
-
+        super().__init__()
         self.device = device
 
         self.input_encoders = nn.ModuleDict()
@@ -69,13 +68,12 @@ class PretrainableGNN(nn.Module):
 
     def apply_node_masking(self, batch: Batch, domain_name: str) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         batch = batch.to(self.device)
-
         encoder = self.input_encoders[domain_name]
+
         with torch.no_grad():
             original_h0 = encoder(batch.x)
 
         all_mask_indices = []
-
         for i in range(batch.num_graphs):
             start_idx = batch.ptr[i].item()
             end_idx = batch.ptr[i + 1].item()
@@ -88,24 +86,17 @@ class PretrainableGNN(nn.Module):
                 all_mask_indices.append(global_mask_indices)
 
         mask_indices = torch.cat(all_mask_indices, dim=0)
-
         masked_h0 = original_h0.clone()
         masked_h0[mask_indices] = self.mask_token.unsqueeze(0).expand(len(mask_indices), -1)
-
         target_h0 = original_h0[mask_indices].clone()
 
         return masked_h0, mask_indices, target_h0
 
     def forward(self, batch: Batch, domain_name: str) -> torch.Tensor:
         batch = batch.to(self.device)
-
         encoder = self.input_encoders[domain_name]
-
         h_0 = encoder(batch.x)
-
-        final_node_embeddings = self.gnn_backbone(h_0, batch.edge_index)
-
-        return final_node_embeddings
+        return self.gnn_backbone(h_0, batch.edge_index)
 
     def forward_with_h0(self, h_0: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
         return self.gnn_backbone(h_0, edge_index)
@@ -114,5 +105,4 @@ class PretrainableGNN(nn.Module):
         head = self.heads[task_name]
         if domain_name is not None:
             return head[domain_name]
-        else:
-            return head
+        return head

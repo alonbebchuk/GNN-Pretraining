@@ -6,14 +6,13 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.utils import subgraph
 
 ATTR_MASK_MIN_NUM_FEATURES = 3
-ATTR_MASK_PROB = 0.3
-ATTR_MASK_RATE = 0.3
+ATTR_MASK_PROB = 0.2
+ATTR_MASK_RATE = 0.2
 EDGE_DROP_MIN_NUM_EDGES = 3
-EDGE_DROP_PROB = 0.3
+EDGE_DROP_PROB = 0.2
 EDGE_DROP_RATE = 0.2
 NODE_DROP_MIN_NUM_NODES = 3
-NODE_DROP_PROB = 0.3
-NODE_DROP_RATE = 0.1
+NODE_DROP_RATE = 0.2
 
 
 def _attribute_mask(data: Data) -> Data:
@@ -64,10 +63,8 @@ def _node_drop(data: Data) -> Tuple[Data, torch.Tensor]:
 
 def _create_augmented_view(data: Data) -> Tuple[Data, torch.Tensor]:
     aug_data = data.clone()
-    kept_nodes_indices = torch.arange(data.num_nodes, device=data.x.device)
 
-    if random.random() < NODE_DROP_PROB:
-        aug_data, kept_nodes_indices = _node_drop(aug_data)
+    aug_data, kept_nodes_indices = _node_drop(aug_data)
 
     if random.random() < EDGE_DROP_PROB:
         aug_data = _edge_drop(aug_data)
@@ -103,6 +100,7 @@ class GraphAugmentor:
             view_1, kept_nodes_1 = _create_augmented_view(graph)
             view_2, kept_nodes_2 = _create_augmented_view(graph)
             mask_1, mask_2 = _find_common_nodes_for_contrastive_loss(kept_nodes_1, kept_nodes_2)
+
             view_1_graphs.append(view_1)
             view_2_graphs.append(view_2)
             mask_1_list.append(mask_1)
