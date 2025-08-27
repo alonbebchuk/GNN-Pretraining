@@ -9,10 +9,9 @@ from torch_geometric.data import Batch
 from torch_geometric.nn import global_mean_pool
 from torch_geometric.utils import batched_negative_sampling
 
-from src.data.data_setup import DOMAIN_DIMENSIONS
 from src.pretraining.augmentations import GraphAugmentor
 
-NODE_CONTRASTIVE_TEMPERATURE = 0.1
+NODE_CONTRASTIVE_TEMPERATURE = 0.07
 
 
 class BasePretrainTask(ABC):
@@ -37,11 +36,8 @@ class NodeFeatureMaskingTask(BasePretrainTask):
             h_final = self.model.forward_with_h0(masked_h0.to(device), batch.edge_index.to(device))
             reconstructed_h0 = self.model.get_head('node_feat_mask', domain_name)(h_final[mask_indices])
 
-            raw_loss = F.mse_loss(reconstructed_h0, target_h0, reduction='sum')
-            feature_dim = DOMAIN_DIMENSIONS[domain_name]
-            loss = raw_loss / feature_dim
-
-            size = mask_indices.size(0)
+            loss = F.mse_loss(reconstructed_h0, target_h0, reduction='sum')
+            size = target_h0.size(1) * mask_indices.size(0)
             total_loss += loss
             total_size += size
             per_domain_losses[domain_name] = loss / size
@@ -162,10 +158,36 @@ class GraphContrastiveTask(BasePretrainTask):
             s = global_mean_pool(h, batch_vec)
 
             disc = self.model.get_head('graph_contrast', domain_name)
-            probs = disc(h, s)
 
-            loss = F.cross_entropy(probs, batch_vec, reduction='sum')
-            size = h.size(0)
+            pos_scores = []
+            neg_scores = []
+
+            unique_graphs = torch.unique(batch_vec)
+            for graph_id in unique_graphs:
+                graph_mask = (batch_vec == graph_id)
+                graph_nodes = h[graph_mask]
+                graph_summary = s[graph_id].unsqueeze(0)
+
+                pos_pairs_score = disc(graph_nodes, graph_summary.repeat(graph_nodes.size(0), 1))
+                pos_scores.append(pos_pairs_score.flatten())
+
+                other_graphs = unique_graphs[unique_graphs != graph_id]
+                neg_summaries = s[other_graphs]
+                for neg_summary in neg_summaries:
+                    neg_pairs_score = disc(graph_nodes, neg_summary.unsqueeze(0).repeat(graph_nodes.size(0), 1))
+                    neg_scores.append(neg_pairs_score.flatten())
+
+            pos_scores = torch.cat(pos_scores)
+            neg_scores = torch.cat(neg_scores)
+
+            scores = torch.cat([pos_scores, neg_scores])
+            labels = torch.cat([
+                torch.ones(pos_scores.size(0), device=device, dtype=torch.float32),
+                torch.zeros(neg_scores.size(0), device=device, dtype=torch.float32)
+            ])
+
+            loss = F.binary_cross_entropy(scores, labels, reduction='sum')
+            size = labels.size(0)
             total_loss += loss
             total_size += size
             per_domain_losses[domain_name] = loss / size
@@ -191,9 +213,7 @@ class GraphPropertyPredictionTask(BasePretrainTask):
             labels = batch.graph_properties.to(device).to(torch.float32)
 
             loss = F.mse_loss(preds, labels, reduction='sum')
-            loss /= preds.size(1)
-
-            size = graph_emb.size(0)
+            size = graph_emb.size(0) * preds.size(1)
             total_loss += loss
             total_size += size
             per_domain_losses[domain_name] = loss / size
