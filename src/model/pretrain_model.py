@@ -67,7 +67,6 @@ class PretrainableGNN(nn.Module):
         self.to(self.device)
 
     def apply_node_masking(self, batch: Batch, domain_name: str) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch = batch.to(self.device)
         encoder = self.input_encoders[domain_name]
 
         with torch.no_grad():
@@ -88,12 +87,11 @@ class PretrainableGNN(nn.Module):
         mask_indices = torch.cat(all_mask_indices, dim=0)
         masked_h0 = original_h0.clone()
         masked_h0[mask_indices] = self.mask_token.unsqueeze(0).expand(len(mask_indices), -1)
-        target_h0 = original_h0[mask_indices].clone()
+        target_h0 = original_h0[mask_indices].detach()
 
         return masked_h0, mask_indices, target_h0
 
     def forward(self, batch: Batch, domain_name: str) -> torch.Tensor:
-        batch = batch.to(self.device)
         encoder = self.input_encoders[domain_name]
         h_0 = encoder(batch.x)
         return self.gnn_backbone(h_0, batch.edge_index)

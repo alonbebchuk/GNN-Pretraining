@@ -30,7 +30,7 @@ BATCH_SIZE = 32
 EPOCHS = 50
 LR_MODEL = 3e-4
 LR_UNCERTAINTY = 3e-3
-OUTPUT_DIR = "/kaggle/working/gnn-pretraining/outputs/pretraining"
+OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "pretrain"
 PATIENCE_EPOCHS = 5
 UNCERTAINTY_WEIGHT_DECAY = 0
 WARMUP_FRACTION = 0.15
@@ -132,10 +132,11 @@ def run_validation(
 
     domain_weighted_means = []
     for domain in per_domain_per_task_raw_losses:
-        domain_raw_losses_tensor = {
-            task: torch.tensor(raw_loss, device=device, dtype=torch.float32)
-            for task, raw_loss in per_domain_per_task_raw_losses[domain].items()
-        }
+        tasks_list = list(per_domain_per_task_raw_losses[domain].keys())
+        losses_list = list(per_domain_per_task_raw_losses[domain].values())
+        losses_tensor = torch.tensor(losses_list, device=device, dtype=torch.float32)
+
+        domain_raw_losses_tensor = dict(zip(tasks_list, losses_tensor))
 
         _, domain_weighted_components = weighter(domain_raw_losses_tensor)
 
@@ -150,7 +151,7 @@ def run_validation(
 
 def train(cfg: PretrainConfig, seed: int) -> None:
     set_global_seed(seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda")
 
     wandb.init(
         project="gnn-pretraining",
@@ -189,6 +190,9 @@ def train(cfg: PretrainConfig, seed: int) -> None:
         for batches_by_domain in train_loader:
             step_start_time = time.time()
             global_step += 1
+
+            for domain_name in batches_by_domain:
+                batches_by_domain[domain_name] = batches_by_domain[domain_name].to(device)
 
             raw_losses = {}
             per_domain_per_task_raw_losses = {}
@@ -236,6 +240,10 @@ def train(cfg: PretrainConfig, seed: int) -> None:
 
             step_time_ms = (time.time() - step_start_time) * 1000
             train_metrics['system/time_per_step_ms'] = step_time_ms
+
+            if device.type == "cuda":
+                train_metrics['system/gpu_memory_allocated_gb'] = torch.cuda.memory_allocated() / 1024**3
+                train_metrics['system/gpu_memory_reserved_gb'] = torch.cuda.memory_reserved() / 1024**3
 
             wandb.log(train_metrics, step=global_step)
 

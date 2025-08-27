@@ -55,9 +55,9 @@ VAL_FRACTION = 0.1
 VAL_TEST_FRACTION = 0.2
 VAL_TEST_SPLIT_RATIO = 0.5
 
-DATA_ROOT_DIR = '/kaggle/working/gnn-pretraining/data'
-RAW_DIR = Path(DATA_ROOT_DIR) / 'raw'
-PROCESSED_DIR = Path(DATA_ROOT_DIR) / 'processed'
+DATA_ROOT_DIR = Path(__file__).parent.parent.parent / 'data'
+RAW_DIR = DATA_ROOT_DIR / 'raw'
+PROCESSED_DIR = DATA_ROOT_DIR / 'processed'
 
 
 def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int64], dataset_name: str) -> None:
