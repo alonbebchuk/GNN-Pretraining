@@ -11,7 +11,7 @@ from torch_geometric.utils import batched_negative_sampling
 
 from src.pretraining.augmentations import GraphAugmentor
 
-NODE_CONTRASTIVE_TEMPERATURE = 0.07
+NODE_CONTRASTIVE_TEMPERATURE = 0.1
 
 
 class BasePretrainTask(ABC):

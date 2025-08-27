@@ -6,15 +6,6 @@ import torch.nn as nn
 UNCERTAINTY_LOSS_COEF = 0.5
 LOGSIGMA_TO_SIGMA_SCALE = 0.5
 
-TASK_LOSS_SCALES = {
-    'node_feat_mask': 0.1,
-    'graph_prop': 0.3,
-    'node_contrast': 1.0,
-    'graph_contrast': 1.5,
-    'link_pred': 1.5,
-    'domain_adv': 1.0,
-}
-
 
 class UncertaintyWeighter(nn.Module):
     def __init__(self, task_names: List[str]) -> None:
@@ -32,16 +23,14 @@ class UncertaintyWeighter(nn.Module):
 
         for t, log_sigma_sq in self.log_sigma_sq.items():
             ls = raw_losses[t]
-            task_scale = TASK_LOSS_SCALES[t]
-            ls_scaled = ls * task_scale
 
-            ls_weighted = UNCERTAINTY_LOSS_COEF * torch.exp(-log_sigma_sq) * ls_scaled + UNCERTAINTY_LOSS_COEF * log_sigma_sq
+            ls_weighted = UNCERTAINTY_LOSS_COEF * torch.exp(-log_sigma_sq) * ls + UNCERTAINTY_LOSS_COEF * log_sigma_sq
 
             total += ls_weighted
             components[t] = ls_weighted
 
         if self.domain_adv:
-            domain_term = TASK_LOSS_SCALES['domain_adv'] * -(lambda_val * raw_losses['domain_adv'])
+            domain_term = -(lambda_val * raw_losses['domain_adv'])
 
             total += domain_term
             components['domain_adv'] = domain_term

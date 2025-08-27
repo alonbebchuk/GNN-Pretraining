@@ -10,7 +10,7 @@ from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.utils import remove_self_loops, to_networkx, to_undirected
 
-GRAPH_PROPERTY_DIM = 15
+GRAPH_PROPERTY_DIM = 12
 
 
 class GraphPropertyCalculator:
@@ -37,12 +37,6 @@ class GraphPropertyCalculator:
         clustering_global = float(nx.average_clustering(G))
         transitivity = float(nx.transitivity(G)) if N > 2 else 0.0
 
-        if N > 2:
-            tri_dict = nx.triangles(G)
-            triangles = float(sum(tri_dict.values()) / 3.0)
-        else:
-            triangles = 0.0
-
         num_components = float(nx.number_connected_components(G))
 
         try:
@@ -66,20 +60,6 @@ class GraphPropertyCalculator:
         else:
             degree_centralization = 0.0
 
-        closeness_dict = nx.closeness_centrality(G)
-        closeness = np.array(list(closeness_dict.values()), dtype=float)
-        c_max = closeness.max()
-        closeness_centralization = float((c_max - closeness).sum() / (N - 1))
-
-        if N > 2:
-            betw_dict = nx.betweenness_centrality(G, normalized=True)
-            betw = np.array(list(betw_dict.values()), dtype=float)
-            b_max = betw.max()
-            denom = float((N - 1) * (N - 2) / 2.0)
-            betweenness_centralization = float((b_max - betw).sum() / denom)
-        else:
-            betweenness_centralization = 0.0
-
         props = [
             float(N),
             float(E),
@@ -89,13 +69,10 @@ class GraphPropertyCalculator:
             deg_max,
             clustering_global,
             transitivity,
-            triangles,
             num_components,
             diameter,
             assortativity,
             degree_centralization,
-            closeness_centralization,
-            betweenness_centralization,
         ]
 
         return torch.tensor(props, dtype=torch.float32)
