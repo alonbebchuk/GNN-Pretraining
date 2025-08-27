@@ -15,6 +15,11 @@ from tqdm import tqdm
 
 from src.data.graph_properties import GraphPropertyCalculator
 
+RANDOM_SEED = 42
+VAL_FRACTION = 0.1
+VAL_TEST_FRACTION = 0.2
+VAL_TEST_SPLIT_RATIO = 0.5
+
 TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES', 'PTC_MR']
 PRETRAIN_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
 DOWNSTREAM_TUDATASETS = ['ENZYMES', 'PTC_MR']
@@ -49,11 +54,6 @@ DATASET_SIZES = {
     'Cora': 1,
     'CiteSeer': 1
 }
-
-RANDOM_SEED = 42
-VAL_FRACTION = 0.1
-VAL_TEST_FRACTION = 0.2
-VAL_TEST_SPLIT_RATIO = 0.5
 
 DATA_ROOT_DIR = Path(__file__).parent.parent.parent / 'data'
 RAW_DIR = DATA_ROOT_DIR / 'raw'

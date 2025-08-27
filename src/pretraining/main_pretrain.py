@@ -30,10 +30,11 @@ BATCH_SIZE = 32
 EPOCHS = 50
 LR_MODEL = 3e-4
 LR_UNCERTAINTY = 3e-3
-OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "pretrain"
 PATIENCE_EPOCHS = 5
 UNCERTAINTY_WEIGHT_DECAY = 0
 WARMUP_FRACTION = 0.15
+
+OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "pretrain"
 
 
 @dataclass
