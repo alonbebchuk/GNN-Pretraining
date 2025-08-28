@@ -6,7 +6,7 @@ from torch_geometric.data import Batch
 
 from src.data.data_setup import DOMAIN_DIMENSIONS
 from src.data.graph_properties import GRAPH_PROPERTY_DIM
-from src.model.gnn import GIN_Backbone, GNN_HIDDEN_DIM, InputEncoder
+from src.model.gnn import GINBackbone, GNN_HIDDEN_DIM, InputEncoder
 from src.model.heads import (
     CONTRASTIVE_PROJ_DIM,
     GRAPH_PROP_HEAD_HIDDEN_DIM,
@@ -16,10 +16,9 @@ from src.model.heads import (
     MLPHead,
 )
 
-MASK_TOKEN_INIT_MEAN = 0.0
 MASK_TOKEN_INIT_STD = 0.1
-NODE_FEATURE_MASKING_MIN_NUM_NODES = 3
 NODE_FEATURE_MASKING_MASK_RATE = 0.15
+NODE_FEATURE_MASKING_MIN_NUM_NODES = 3
 
 
 class PretrainableGNN(nn.Module):
@@ -27,73 +26,67 @@ class PretrainableGNN(nn.Module):
         super().__init__()
         self.device = device
 
-        self.input_encoders = nn.ModuleDict()
-        for domain_name in domain_names:
-            dim_in = DOMAIN_DIMENSIONS[domain_name]
-            self.input_encoders[domain_name] = InputEncoder(dim_in=dim_in)
+        self.input_encoders = nn.ModuleDict({
+            domain_name: InputEncoder(dim_in=DOMAIN_DIMENSIONS[domain_name])
+            for domain_name in domain_names
+        })
 
         self.mask_token = nn.Parameter(torch.zeros(GNN_HIDDEN_DIM))
-        nn.init.normal_(self.mask_token, mean=MASK_TOKEN_INIT_MEAN, std=MASK_TOKEN_INIT_STD)
+        nn.init.normal_(self.mask_token, std=MASK_TOKEN_INIT_STD)
 
-        self.gnn_backbone = GIN_Backbone()
+        self.gnn_backbone = GINBackbone()
 
         self.heads = nn.ModuleDict()
         for task_name in task_names:
             if task_name == 'node_feat_mask':
-                dom_heads = nn.ModuleDict()
-                for domain_name in domain_names:
-                    dom_heads[domain_name] = MLPHead()
-                self.heads[task_name] = dom_heads
+                self.heads[task_name] = nn.ModuleDict({
+                    domain_name: MLPHead([GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, GNN_HIDDEN_DIM])
+                    for domain_name in domain_names
+                })
             elif task_name == 'link_pred':
                 self.heads[task_name] = DotProductDecoder()
             elif task_name == 'node_contrast':
-                dom_heads = nn.ModuleDict()
-                for domain_name in domain_names:
-                    dom_heads[domain_name] = MLPHead(dim_out=CONTRASTIVE_PROJ_DIM)
-                self.heads[task_name] = dom_heads
+                self.heads[task_name] = nn.ModuleDict({
+                    domain_name: MLPHead([GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, CONTRASTIVE_PROJ_DIM])
+                    for domain_name in domain_names
+                })
             elif task_name == 'graph_contrast':
-                dom_heads = nn.ModuleDict()
-                for domain_name in domain_names:
-                    dom_heads[domain_name] = BilinearDiscriminator()
-                self.heads[task_name] = dom_heads
+                self.heads[task_name] = nn.ModuleDict({
+                    domain_name: BilinearDiscriminator()
+                    for domain_name in domain_names
+                })
             elif task_name == 'graph_prop':
-                dom_heads = nn.ModuleDict()
-                for domain_name in domain_names:
-                    dom_heads[domain_name] = MLPHead(dim_hidden=GRAPH_PROP_HEAD_HIDDEN_DIM, dim_out=GRAPH_PROPERTY_DIM)
-                self.heads[task_name] = dom_heads
+                self.heads[task_name] = nn.ModuleDict({
+                    domain_name: MLPHead([GNN_HIDDEN_DIM, GRAPH_PROP_HEAD_HIDDEN_DIM, GRAPH_PROPERTY_DIM])
+                    for domain_name in domain_names
+                })
             elif task_name == 'domain_adv':
                 self.heads[task_name] = DomainClassifierHead()
 
         self.to(self.device)
 
     def apply_node_masking(self, batch: Batch, domain_name: str) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        encoder = self.input_encoders[domain_name]
-
         with torch.no_grad():
-            original_h0 = encoder(batch.x)
+            original_h0 = self.input_encoders[domain_name](batch.x)
 
-        all_mask_indices = []
+        mask_indices = []
         for i in range(batch.num_graphs):
             start_idx = batch.ptr[i].item()
             end_idx = batch.ptr[i + 1].item()
-            graph_num_nodes = end_idx - start_idx
+            graph_size = end_idx - start_idx
 
-            if graph_num_nodes >= NODE_FEATURE_MASKING_MIN_NUM_NODES:
-                num_nodes_to_mask = max(1, int(graph_num_nodes * NODE_FEATURE_MASKING_MASK_RATE))
-                graph_mask_indices = torch.randperm(graph_num_nodes, device=self.device)[:num_nodes_to_mask]
-                global_mask_indices = graph_mask_indices + start_idx
-                all_mask_indices.append(global_mask_indices)
+            if graph_size >= NODE_FEATURE_MASKING_MIN_NUM_NODES:
+                num_mask = max(1, int(graph_size * NODE_FEATURE_MASKING_MASK_RATE))
+                graph_indices = torch.randperm(graph_size, device=self.device)[:num_mask]
+                mask_indices.append(graph_indices + start_idx)
 
-        mask_indices = torch.cat(all_mask_indices, dim=0)
+        mask_indices = torch.cat(mask_indices)
         masked_h0 = original_h0.clone()
-        masked_h0[mask_indices] = self.mask_token.unsqueeze(0).expand(len(mask_indices), -1)
-        target_h0 = original_h0[mask_indices].detach()
-
-        return masked_h0, mask_indices, target_h0
+        masked_h0[mask_indices] = self.mask_token.expand(len(mask_indices), -1)
+        return masked_h0, mask_indices, original_h0[mask_indices].detach()
 
     def forward(self, batch: Batch, domain_name: str) -> torch.Tensor:
-        encoder = self.input_encoders[domain_name]
-        h_0 = encoder(batch.x)
+        h_0 = self.input_encoders[domain_name](batch.x)
         return self.gnn_backbone(h_0, batch.edge_index)
 
     def forward_with_h0(self, h_0: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
@@ -101,6 +94,4 @@ class PretrainableGNN(nn.Module):
 
     def get_head(self, task_name: str, domain_name: Optional[str] = None) -> nn.Module:
         head = self.heads[task_name]
-        if domain_name is not None:
-            return head[domain_name]
-        return head
+        return head[domain_name] if domain_name is not None else head
