@@ -6,8 +6,8 @@ from torch_geometric.data import Batch
 
 from src.data.data_setup import DOMAIN_DIMENSIONS
 from src.data.graph_properties import GRAPH_PROPERTY_DIM
-from src.model.gnn import GINBackbone, GNN_HIDDEN_DIM, InputEncoder
-from src.model.heads import (
+from src.models.gnn import GINBackbone, GNN_HIDDEN_DIM, InputEncoder
+from src.models.heads import (
     CONTRASTIVE_PROJ_DIM,
     GRAPH_PROP_HEAD_HIDDEN_DIM,
     BilinearDiscriminator,

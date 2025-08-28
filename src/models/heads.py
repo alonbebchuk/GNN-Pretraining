@@ -5,8 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from src.data.data_setup import PRETRAIN_TUDATASETS
-from src.model.gnn import DROPOUT_RATE, GNN_HIDDEN_DIM
-from src.model.layers import GradientReversalLayer
+from src.models.gnn import DROPOUT_RATE, GNN_HIDDEN_DIM
+from src.models.layers import GradientReversalLayer
 
 CONTRASTIVE_PROJ_DIM = 128
 DOMAIN_ADV_HEAD_HIDDEN_DIM = 128
@@ -42,11 +42,10 @@ class BilinearDiscriminator(nn.Module):
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         x = F.dropout(x, p=DROPOUT_RATE, training=self.training)
         y = F.dropout(y, p=DROPOUT_RATE, training=self.training)
-        x_transformed = self.W(x.unsqueeze(1))
-        return torch.sigmoid((x_transformed * y.unsqueeze(0)).sum(dim=-1))
+        return torch.sigmoid((self.W(x.unsqueeze(1)) * y.unsqueeze(0)).sum(dim=-1))
 
 
-class BilinearLinkPredictor(nn.Module):
+class BilinearPredictor(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.W = nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, bias=False)
