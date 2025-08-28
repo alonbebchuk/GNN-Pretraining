@@ -80,10 +80,13 @@ class PretrainableGNN(nn.Module):
                 graph_indices = torch.randperm(graph_size, device=self.device)[:num_mask]
                 mask_indices.append(graph_indices + start_idx)
 
-        mask_indices = torch.cat(mask_indices)
-        masked_h0 = original_h0.clone()
-        masked_h0[mask_indices] = self.mask_token.expand(len(mask_indices), -1)
-        return masked_h0, mask_indices, original_h0[mask_indices].detach()
+        if mask_indices:
+            mask_indices = torch.cat(mask_indices)
+            masked_h0 = original_h0.clone()
+            masked_h0[mask_indices] = self.mask_token.expand(len(mask_indices), -1)
+            return masked_h0, mask_indices, original_h0[mask_indices].detach()
+        else:
+            return original_h0, torch.empty(0, dtype=torch.long, device=self.device), torch.empty(0, original_h0.size(1), device=self.device)
 
     def forward(self, batch: Batch, domain_name: str) -> torch.Tensor:
         h_0 = self.input_encoders[domain_name](batch.x)

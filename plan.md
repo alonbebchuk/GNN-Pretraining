@@ -26,10 +26,11 @@ Pre-training remains underdeveloped for Graph Neural Networks (GNNs). Most GNNs 
   - Heads are instantiated per domain for parametric tasks so the shared GNN backbone is the primary locus of transfer
 - **Dot Product Decoder:** Non-parametric decoder: `p(edge) = sigmoid(h_u^T * h_v)` (shared across domains)
 - **Bilinear Discriminator:** Scores pairs: `D(x, y) = sigmoid(x^T * W * y)` (instantiated per domain)
+- **Bilinear Predictor:** Link prediction head: `p(edge) = sigmoid((W*h_u)^T * h_v)` (used in fine-tuning)
 
 #### **2.1.2. GNN Model Definition**
-- **Input Encoder:** Domain-specific encoder: `Linear(D_in, 256) -> LayerNorm -> ReLU -> Dropout`
-- **GNN Backbone:** 3-layer GIN architecture with residual connections and layer normalization
+- **Input Encoder:** Domain-specific encoder: `Linear(D_in, 256) -> ReLU`
+- **GNN Backbone:** 3-layer GIN architecture with residual connections and batch normalization
 - **Multi-Head Architecture:** Task-specific and domain-specific heads for different objectives
 
 ### **2.2. Datasets and Experimental Setup**
@@ -52,6 +53,7 @@ Pre-training remains underdeveloped for Graph Neural Networks (GNNs). Most GNNs 
 
 1. **Node Feature Masking (NFM)** - Generative
    - Mask 15% of node embeddings in hidden space, reconstruct original embeddings
+   - **Minimum graph size:** 3 nodes (smaller graphs skip masking)
    - **Loss:** MSE between reconstructed and original embeddings
    - **Literature:** BERT-style masked language modeling (Devlin et al., 2018)
 
@@ -62,6 +64,7 @@ Pre-training remains underdeveloped for Graph Neural Networks (GNNs). Most GNNs 
 
 3. **Node Contrastive (NC)** - Contrastive
    - SimCLR-style contrastive learning on augmented graph views
+   - **Augmentations:** Node dropping (20%), edge dropping (20% prob, 20% rate), attribute masking (20% prob, 20% rate)
    - **Loss:** NT-Xent with temperature τ=0.1
    - **Literature:** Chen et al. (2020), You et al. (2020) GraphCL
 
@@ -77,13 +80,19 @@ Pre-training remains underdeveloped for Graph Neural Networks (GNNs). Most GNNs 
 
 6. **Domain Adversarial (DA)** - Domain Invariant
    - Domain classifier with gradient reversal layer (GRL)
-   - **Loss:** Cross-entropy with adversarial weighting λ
+   - **Loss:** Cross-entropy with adversarial weighting λ (training-only, excluded from validation)
    - **Literature:** Ganin et al. (2016) DANN
 
 **Combined Loss Function (Kendall et al., 2018):**
 $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma_i^2}\mathcal{L}_i + \frac{1}{2}\log\sigma_i^2 \right) - \lambda \mathcal{L}_{\text{domain}}$$
 
 **Implementation Note:** The uncertainty weighting uses a unified formula for all tasks: `0.5 * (L_task/σ² + log(σ²))`, which differs from the standard Kendall formulation that distinguishes regression (1/(2σ²)) from classification (1/σ²) tasks. This implementation choice ensures consistent weighting behavior across all pre-training objectives.
+
+**Robust Implementation Details:**
+- **Edge case handling:** Empty mask scenarios handled gracefully (zero-loss fallback)
+- **Division by zero protection:** All normalization operations include safety checks
+- **Device consistency:** All tensors properly moved to GPU/CPU as needed
+- **Memory efficiency:** Gradient accumulation with `set_to_none=True` for optimal memory usage
 
 **Task Loss Scales:** All tasks use unit scaling (1.0) to rely purely on learned uncertainty weighting, avoiding arbitrary manual balancing
 
@@ -125,6 +134,8 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 - **Epochs:** 50 with cosine annealing + 15% linear warmup
 - **Early Stopping:** Patience = 5 epochs
 - **Scheduling:** Step-based (after each batch) for both learning rate and GRL lambda
+  - **GRL Lambda:** `λ = 2/(1 + exp(-γp)) - 1` where γ=10.0, p=progress
+  - **Learning Rate:** Cosine annealing with linear warmup (min factor: 0.001)
 - **Data Loading:** Epoch-specific seeding (`seed + epoch`) for reproducible shuffling
 
 **Model Selection Metric (Critical):**
@@ -143,19 +154,22 @@ total_balanced_loss = mean_weighted_loss_across_domains([
 ```
 
 **Implementation Details:**
-- **Validation Tasks:** Domain adversarial (`domain_adv`) excluded from validation
+- **Validation Tasks:** Domain adversarial (`domain_adv`) excluded from validation (training-only)
+- **Per-domain Loss Tracking:** Domain adversarial task returns `None` for per-domain losses
 - **Checkpointing:** Model saved only on validation improvement with WandB artifacts
-- **System Monitoring:** Step timing (`system/time_per_step_ms`) tracked for performance analysis
+- **System Monitoring:** Step timing and GPU memory usage tracked for performance analysis
 
 ### **3.4. Fine-tuning Protocol**
 
 **Strategies:**
 1. **Full Fine-tuning:** Backbone lr=1e-4, Head lr=1e-3, discriminative learning rates
-2. **Linear Probing:** Frozen backbone, Head lr=1e-3
+   - In-domain: Freeze input encoder, unfreeze GNN backbone
+   - Out-of-domain: Train both input encoder and GNN backbone
+2. **Linear Probing:** Frozen backbone (GNN + encoder), Head lr=1e-3
 
 **Domain Handling:**
-- **In-domain (ENZYMES):** Use pre-trained encoder
-- **Out-of-domain:** Train new encoder from scratch
+- **In-domain (ENZYMES):** Use pre-trained encoder, freeze encoder during fine-tuning
+- **Out-of-domain (PTC_MR, Cora_NC, CiteSeer_NC, Cora_LP, CiteSeer_LP):** Train new encoder from scratch
 
 ---
 

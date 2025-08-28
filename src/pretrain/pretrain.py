@@ -11,8 +11,8 @@ import wandb
 import yaml
 from torch.optim import AdamW
 
-from src.data.pretrain_data_loaders import create_val_data_loader, create_train_data_loader
-from src.model.pretrain_model import PretrainableGNN
+from src.data.pretrain_data_loaders import create_train_data_loader, create_val_data_loader
+from src.models.pretrain_model import PretrainableGNN
 from src.pretrain.losses import UncertaintyWeighter
 from src.pretrain.metrics import compute_training_metrics, compute_validation_metrics
 from src.pretrain.schedulers import CosineWithWarmup, GRLLambdaScheduler
@@ -202,12 +202,13 @@ def train(cfg: PretrainConfig, seed: int) -> None:
                 per_domain_per_task_raw_losses[domain] = {}
 
             for task_name, task in tasks.items():
-                raw_loss, per_domain_loss = task.compute_loss(domain_batches)
-                raw_losses[task_name] = raw_loss
-
-                if per_domain_loss is not None:
+                if task_name == 'domain_adv':
+                    raw_loss, _ = task.compute_loss(domain_batches, lambda_val=grl_sched())
+                else:
+                    raw_loss, per_domain_loss = task.compute_loss(domain_batches)
                     for domain, domain_loss in per_domain_loss.items():
                         per_domain_per_task_raw_losses[domain][task_name] = float(domain_loss)
+                raw_losses[task_name] = raw_loss
 
             total_weighted_loss, _ = weighter(raw_losses, lambda_val=grl_sched())
 

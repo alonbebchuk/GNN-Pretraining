@@ -140,7 +140,7 @@ def create_link_prediction_splits(data: Data) -> Dict[str, torch.Tensor]:
     torch.manual_seed(RANDOM_SEED)
 
     num_edges = data.num_edges
-    num_val_test = int(VAL_TEST_FRACTION * num_edges)
+    num_val_test = int(num_edges * VAL_TEST_FRACTION)
     perm = torch.randperm(num_edges)
 
     val_test_edges = data.edge_index[:, perm[:num_val_test]]
@@ -152,7 +152,7 @@ def create_link_prediction_splits(data: Data) -> Dict[str, torch.Tensor]:
         num_neg_samples=num_val_test
     )
 
-    num_val = int(VAL_TEST_SPLIT_RATIO * num_val_test)
+    num_val = int(num_val_test * VAL_TEST_SPLIT_RATIO)
     return {
         'train_pos': train_edges,
         'val_pos': val_test_edges[:, :num_val],

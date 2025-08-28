@@ -33,16 +33,20 @@ class NodeFeatureMaskingTask(BasePretrainTask):
         for domain_name, batch in domain_batches.items():
             masked_h0, mask_indices, target_h0 = self.model.apply_node_masking(batch, domain_name)
 
-            h_final = self.model.forward_with_h0(masked_h0, batch.edge_index)
-            reconstructed_h0 = self.model.get_head('node_feat_mask', domain_name)(h_final[mask_indices])
+            if mask_indices.size(0) > 0:
+                h_final = self.model.forward_with_h0(masked_h0, batch.edge_index)
+                reconstructed_h0 = self.model.get_head('node_feat_mask', domain_name)(h_final[mask_indices])
 
-            loss = F.mse_loss(reconstructed_h0, target_h0, reduction='sum')
-            size = target_h0.size(1) * mask_indices.size(0)
-            total_loss += loss
-            total_size += size
-            per_domain_losses[domain_name] = loss / size
+                loss = F.mse_loss(reconstructed_h0, target_h0, reduction='sum')
+                size = target_h0.size(1) * mask_indices.size(0)
+                total_loss += loss
+                total_size += size
+                per_domain_losses[domain_name] = loss / size
+            else:
+                per_domain_losses[domain_name] = torch.tensor(0.0, device=device)
 
-        total_loss /= total_size
+        if total_size > 0:
+            total_loss /= total_size
         return total_loss, per_domain_losses
 
 
