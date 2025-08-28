@@ -1,0 +1,30 @@
+# CiteSeer_LP Link Prediction
+# Link prediction variant of CiteSeer citation network
+# Generated from template: base_link_prediction.yaml
+
+# Base configuration for Link Prediction tasks
+# This template uses sweep variables for task-specific parameters
+
+exp_name: "CiteSeer_LP_linear_probe_s4_all_objectives"
+domain_name: CiteSeer_LP
+pretrained_scheme: s4_all_objectives
+finetune_strategy: linear_probe
+
+# Task-specific hyperparameters (defined in sweep config)
+batch_size: 256
+epochs: 300
+lr_backbone: 0.0
+lr_head: 0.001
+patience: 30
+
+# Fixed parameters for link prediction
+task_type: "link_prediction"
+
+# Logging and output settings
+wandb:
+  project: "gnn-pretraining-finetune"
+  group: "link_prediction"
+  tags:
+    - CiteSeer_LP
+    - s4_all_objectives
+    - linear_probe

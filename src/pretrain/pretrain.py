@@ -11,12 +11,12 @@ import wandb
 import yaml
 from torch.optim import AdamW
 
-from src.data.data_loaders import create_data_loader, create_pretrain_data_loader
+from src.data.pretrain_data_loaders import create_val_data_loader, create_train_data_loader
 from src.model.pretrain_model import PretrainableGNN
-from src.pretraining.losses import UncertaintyWeighter
-from src.pretraining.metrics import compute_training_metrics, compute_validation_metrics
-from src.pretraining.schedulers import CosineWithWarmup, GRLLambdaScheduler
-from src.pretraining.tasks import (
+from src.pretrain.losses import UncertaintyWeighter
+from src.pretrain.metrics import compute_training_metrics, compute_validation_metrics
+from src.pretrain.schedulers import CosineWithWarmup, GRLLambdaScheduler
+from src.pretrain.tasks import (
     BasePretrainTask,
     DomainAdversarialTask,
     GraphContrastiveTask,
@@ -83,7 +83,7 @@ def get_pretraining_train_loader(domains: List[str], seed: int, epoch: int) -> t
     generator = torch.Generator()
     generator.manual_seed(seed + epoch)
 
-    return create_pretrain_data_loader(domains, generator)
+    return create_train_data_loader(domains, generator)
 
 
 def get_pretraining_val_loaders(domains: List[str], seed: int) -> Dict[str, torch.utils.data.DataLoader]:
@@ -92,7 +92,7 @@ def get_pretraining_val_loaders(domains: List[str], seed: int) -> Dict[str, torc
 
     val_loaders = {}
     for domain in domains:
-        val_loaders[domain] = create_data_loader(domain, "val", generator)
+        val_loaders[domain] = create_val_data_loader(domain, generator)
 
     return val_loaders
 
@@ -119,10 +119,10 @@ def run_validation(
 
         for batch in val_loader:
             batch = batch.to(device)
-            batches_by_domain = {domain_name: batch}
+            domain_batches = {domain_name: batch}
 
             for task_name, task in val_tasks.items():
-                raw_loss, _ = task.compute_loss(batches_by_domain)
+                raw_loss, _ = task.compute_loss(domain_batches)
                 raw_val = float(raw_loss.detach().cpu())
                 per_domain_per_task_raw_losses[domain_name][task_name].append(raw_val)
 
@@ -188,12 +188,12 @@ def train(cfg: PretrainConfig, seed: int) -> None:
 
         train_loader = get_pretraining_train_loader(cfg.pretrain_domains, seed, epoch)
 
-        for batches_by_domain in train_loader:
+        for domain_batches in train_loader:
             step_start_time = time.time()
             global_step += 1
 
-            for domain_name in batches_by_domain:
-                batches_by_domain[domain_name] = batches_by_domain[domain_name].to(device)
+            for domain_name in domain_batches:
+                domain_batches[domain_name] = domain_batches[domain_name].to(device)
 
             raw_losses = {}
             per_domain_per_task_raw_losses = {}
@@ -202,7 +202,7 @@ def train(cfg: PretrainConfig, seed: int) -> None:
                 per_domain_per_task_raw_losses[domain] = {}
 
             for task_name, task in tasks.items():
-                raw_loss, per_domain_loss = task.compute_loss(batches_by_domain)
+                raw_loss, per_domain_loss = task.compute_loss(domain_batches)
                 raw_losses[task_name] = raw_loss
 
                 if per_domain_loss is not None:

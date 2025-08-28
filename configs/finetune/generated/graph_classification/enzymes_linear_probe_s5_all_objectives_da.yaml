@@ -1,0 +1,30 @@
+# ENZYMES Graph Classification
+# In-domain graph classification: ENZYMES used in pretraining
+# Generated from template: base_graph_classification.yaml
+
+# Base configuration for Graph Classification tasks
+# This template uses sweep variables for task-specific parameters
+
+exp_name: "ENZYMES_linear_probe_s5_all_objectives_da"
+domain_name: ENZYMES
+pretrained_scheme: s5_all_objectives_da
+finetune_strategy: linear_probe
+
+# Task-specific hyperparameters (defined in sweep config)
+batch_size: 32
+epochs: 100
+lr_backbone: 0.0
+lr_head: 0.001
+patience: 10
+
+# Fixed parameters for graph classification
+task_type: "graph_classification"
+
+# Logging and output settings
+wandb:
+  project: "gnn-pretraining-finetune"
+  group: "graph_classification"
+  tags:
+    - ENZYMES
+    - s5_all_objectives_da
+    - linear_probe

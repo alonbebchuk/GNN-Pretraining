@@ -1,0 +1,30 @@
+# PTC_MR Graph Classification
+# Out-domain graph classification: PTC_MR NOT used in pretraining
+# Generated from template: base_graph_classification.yaml
+
+# Base configuration for Graph Classification tasks
+# This template uses sweep variables for task-specific parameters
+
+exp_name: "PTC_MR_linear_probe_b2_nfm"
+domain_name: PTC_MR
+pretrained_scheme: b2_nfm
+finetune_strategy: linear_probe
+
+# Task-specific hyperparameters (defined in sweep config)
+batch_size: 32
+epochs: 100
+lr_backbone: 0.0
+lr_head: 0.001
+patience: 10
+
+# Fixed parameters for graph classification
+task_type: "graph_classification"
+
+# Logging and output settings
+wandb:
+  project: "gnn-pretraining-finetune"
+  group: "graph_classification"
+  tags:
+    - PTC_MR
+    - b2_nfm
+    - linear_probe

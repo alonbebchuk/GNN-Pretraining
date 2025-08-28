@@ -4,9 +4,9 @@ import numpy as np
 import torch
 from torch.optim import AdamW
 
-from src.model.pretrain_model import PretrainableGNN
-from src.pretraining.losses import UncertaintyWeighter
-from src.pretraining.schedulers import GRLLambdaScheduler
+from src.models.pretrain_model import PretrainableGNN
+from src.pretrain.losses import UncertaintyWeighter
+from src.pretrain.schedulers import GRLLambdaScheduler
 
 
 def compute_training_metrics(

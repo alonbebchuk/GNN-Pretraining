@@ -1,0 +1,65 @@
+# Sweep configuration for Node Classification finetuning experiments
+method: grid
+
+# Base config template
+program: "src/finetuning/main_finetune.py"
+config_template: "configs/finetune/base_node_classification.yaml"
+
+# Sweep parameters
+parameters:
+  # Task and scheme combinations
+  domain_name:
+    values: ["Cora_NC", "CiteSeer_NC"]
+  
+  pretrained_scheme:
+    values: 
+      # Baselines
+      - "b1_from_scratch"
+      - "b2_nfm"
+      - "b3_nc"
+      - "b4_single_domain_all"
+      # Schemes
+      - "s1_multi_task_generative"
+      - "s2_multi_task_contrastive"
+      - "s3_all_self_supervised"
+      - "s4_all_objectives"
+      - "s5_all_objectives_da"
+  
+  finetune_strategy:
+    values: ["full_finetune", "linear_probe"]
+  
+  # Task-specific hyperparameters
+  batch_size:
+    values: [512]  # Larger batch for node classification
+  
+  epochs:
+    values: [200]  # More epochs for node classification
+  
+  lr_backbone:
+    # Conditional based on finetune_strategy
+    distribution: categorical
+    values:
+      - 5e-4  # for full_finetune (slightly higher for node tasks)
+      - 0.0   # for linear_probe (frozen backbone)
+  
+  lr_head:
+    values: [1e-3]  # Standard head learning rate
+  
+  patience:
+    values: [20]  # More patience for node classification
+  
+  # Seeds for statistical robustness
+  seed:
+    values: [42, 84, 126]
+
+# Special parameter combinations for conditional logic
+parameter_combinations:
+  # Full finetuning combinations
+  - parameters:
+      finetune_strategy: "full_finetune"
+      lr_backbone: 5e-4
+  
+  # Linear probe combinations
+  - parameters:
+      finetune_strategy: "linear_probe" 
+      lr_backbone: 0.0

@@ -1,0 +1,30 @@
+# CiteSeer_NC Node Classification
+# Node classification variant of CiteSeer citation network
+# Generated from template: base_node_classification.yaml
+
+# Base configuration for Node Classification tasks
+# This template uses sweep variables for task-specific parameters
+
+exp_name: "CiteSeer_NC_linear_probe_b2_nfm"
+domain_name: CiteSeer_NC
+pretrained_scheme: b2_nfm
+finetune_strategy: linear_probe
+
+# Task-specific hyperparameters (defined in sweep config)
+batch_size: 512
+epochs: 200
+lr_backbone: 0.0
+lr_head: 0.001
+patience: 20
+
+# Fixed parameters for node classification
+task_type: "node_classification"
+
+# Logging and output settings
+wandb:
+  project: "gnn-pretraining-finetune"
+  group: "node_classification"
+  tags:
+    - CiteSeer_NC
+    - b2_nfm
+    - linear_probe

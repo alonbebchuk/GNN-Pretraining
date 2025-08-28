@@ -1,7 +1,7 @@
 import copy
 import os
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import torch
@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid, TUDataset
 from torch_geometric.transforms import NormalizeFeatures
+from torch_geometric.utils import negative_sampling, to_undirected
 from tqdm import tqdm
 
 from src.data.graph_properties import GraphPropertyCalculator
@@ -25,34 +26,34 @@ PRETRAIN_TUDATASETS = ['MUTAG', 'PROTEINS', 'NCI1', 'ENZYMES']
 DOWNSTREAM_TUDATASETS = ['ENZYMES', 'PTC_MR']
 PLANETOID_DATASETS = ['Cora', 'CiteSeer']
 
-FEATURE_TYPES = {
-    'MUTAG': 'categorical',
-    'PROTEINS': 'categorical',
-    'NCI1': 'categorical',
-    'ENZYMES': 'continuous',
-    'PTC_MR': 'categorical',
-    'Cora': 'bow',
-    'CiteSeer': 'bow'
-}
-
 DOMAIN_DIMENSIONS = {
     'MUTAG': 7,
     'PROTEINS': 4,
     'NCI1': 37,
     'ENZYMES': 21,
     'PTC_MR': 18,
-    'Cora': 1433,
-    'CiteSeer': 3703
+    'Cora_NC': 1433,
+    'CiteSeer_NC': 3703,
+    'Cora_LP': 1433,
+    'CiteSeer_LP': 3703
 }
 
-DATASET_SIZES = {
-    'MUTAG': 188,
-    'PROTEINS': 1113,
-    'NCI1': 4110,
-    'ENZYMES': 600,
-    'PTC_MR': 344,
-    'Cora': 1,
-    'CiteSeer': 1
+NUM_CLASSES = {
+    'ENZYMES': 6,
+    'PTC_MR': 2,
+    'Cora_NC': 7,
+    'CiteSeer_NC': 6,
+    'Cora_LP': 2,
+    'CiteSeer_LP': 2
+}
+
+TASK_TYPES = {
+    'ENZYMES': 'graph_classification',
+    'PTC_MR': 'graph_classification',
+    'Cora_NC': 'node_classification',
+    'CiteSeer_NC': 'node_classification',
+    'Cora_LP': 'link_prediction',
+    'CiteSeer_LP': 'link_prediction'
 }
 
 DATA_ROOT_DIR = Path(__file__).parent.parent.parent / 'data'
@@ -61,7 +62,7 @@ PROCESSED_DIR = DATA_ROOT_DIR / 'processed'
 
 
 def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int64], dataset_name: str) -> None:
-    if FEATURE_TYPES.get(dataset_name) == 'continuous':
+    if dataset_name == 'ENZYMES':
         train_X_list = [dataset[i].x.detach().cpu() for i in train_idx]
         train_X = torch.cat(train_X_list, dim=0).numpy()
 
@@ -75,7 +76,7 @@ def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int64
             g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
 
 
-def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, torch.Tensor], graph_properties: torch.Tensor = None) -> None:
+def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, torch.Tensor], graph_properties: Optional[torch.Tensor] = None) -> None:
     save_dir = PROCESSED_DIR / dataset_name
     os.makedirs(save_dir, exist_ok=True)
 
@@ -87,25 +88,26 @@ def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, t
 
 def process_tudatasets() -> None:
     calculator = GraphPropertyCalculator()
-
     for name in tqdm(TUDATASETS, desc="Processing TU datasets"):
         dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=True)
+        dataset_list = list(dataset)
 
         needs_pretrain = name in PRETRAIN_TUDATASETS
         needs_downstream = name in DOWNSTREAM_TUDATASETS
 
         if needs_downstream:
-            processed_dataset = copy.deepcopy(dataset)
-            num_graphs = len(processed_dataset)
-            labels = processed_dataset.y.numpy()
+            num_graphs = len(dataset_list)
+            labels = dataset.y.numpy()
+
             sss_train_val = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_FRACTION, random_state=RANDOM_SEED)
             train_idx, val_test_idx = next(sss_train_val.split(np.arange(num_graphs), labels))
+
             val_test_labels = labels[val_test_idx]
             sss_val_test = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
             val_idx_rel, test_idx_rel = next(sss_val_test.split(np.arange(len(val_test_idx)), val_test_labels))
             val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
 
-            apply_feature_preprocessing(processed_dataset, train_idx, name)
+            apply_feature_preprocessing(dataset_list, train_idx, name)
 
             splits = {
                 'train': torch.tensor(train_idx, dtype=torch.long),
@@ -113,26 +115,51 @@ def process_tudatasets() -> None:
                 'test': torch.tensor(test_idx, dtype=torch.long)
             }
 
-            if needs_pretrain:
-                graph_properties = calculator.compute_and_standardize_for_dataset(processed_dataset, train_idx)
-                save_processed_data(name, list(processed_dataset), splits, graph_properties)
-            else:
-                save_processed_data(name, list(processed_dataset), splits)
+            graph_properties = calculator.compute_and_standardize_for_dataset(dataset_list, train_idx) if needs_pretrain else None
+            save_processed_data(name, dataset_list, splits, graph_properties)
 
         elif needs_pretrain:
-            processed_dataset = copy.deepcopy(dataset)
-            num_graphs = len(processed_dataset)
+            num_graphs = len(dataset_list)
+
             ss_train_val = ShuffleSplit(n_splits=1, test_size=VAL_FRACTION, random_state=RANDOM_SEED)
             train_idx, val_idx = next(ss_train_val.split(np.arange(num_graphs)))
 
-            apply_feature_preprocessing(processed_dataset, train_idx, name)
+            apply_feature_preprocessing(dataset_list, train_idx, name)
 
             splits = {
                 'train': torch.tensor(train_idx, dtype=torch.long),
                 'val': torch.tensor(val_idx, dtype=torch.long),
             }
-            graph_properties = calculator.compute_and_standardize_for_dataset(processed_dataset, train_idx)
-            save_processed_data(name, list(processed_dataset), splits, graph_properties)
+
+            graph_properties = calculator.compute_and_standardize_for_dataset(dataset_list, train_idx)
+            save_processed_data(name, dataset_list, splits, graph_properties)
+
+
+def create_link_prediction_splits(data: Data) -> Dict[str, torch.Tensor]:
+    np.random.seed(RANDOM_SEED)
+    torch.manual_seed(RANDOM_SEED)
+
+    num_edges = data.num_edges
+    num_val_test = int(VAL_TEST_FRACTION * num_edges)
+    perm = torch.randperm(num_edges)
+
+    val_test_edges = data.edge_index[:, perm[:num_val_test]]
+    train_edges = data.edge_index[:, perm[num_val_test:]]
+
+    val_test_neg_edges = negative_sampling(
+        edge_index=to_undirected(train_edges),
+        num_nodes=data.num_nodes,
+        num_neg_samples=num_val_test
+    )
+
+    num_val = int(VAL_TEST_SPLIT_RATIO * num_val_test)
+    return {
+        'train_pos': train_edges,
+        'val_pos': val_test_edges[:, :num_val],
+        'val_neg': val_test_neg_edges[:, :num_val],
+        'test_pos': val_test_edges[:, num_val:],
+        'test_neg': val_test_neg_edges[:, num_val:]
+    }
 
 
 def process_planetoid_datasets() -> None:
@@ -140,12 +167,15 @@ def process_planetoid_datasets() -> None:
         dataset = Planetoid(root=RAW_DIR, name=name, transform=NormalizeFeatures())
         data = dataset[0]
 
-        splits = {
+        nc_splits = {
             'train': torch.where(data.train_mask)[0],
             'val': torch.where(data.val_mask)[0],
             'test': torch.where(data.test_mask)[0]
         }
-        save_processed_data(name, [data], splits)
+        save_processed_data(f"{name}_NC", [data], nc_splits)
+
+        lp_splits = create_link_prediction_splits(data)
+        save_processed_data(f"{name}_LP", [data], lp_splits)
 
 
 def main() -> None:
