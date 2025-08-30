@@ -1,4 +1,0 @@
-exp_name: "s1_multi_task_generative"
-pretrain_domains: ["MUTAG", "PROTEINS", "NCI1", "ENZYMES"]
-active_tasks: ["node_feat_mask", "link_pred"]
-

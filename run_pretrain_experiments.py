@@ -14,14 +14,14 @@ PRETRAIN_SWEEP_CONFIG = "configs/sweeps/pretrain.yaml"
 
 # Map absolute paths to local paths
 CONFIG_MAPPING = {
-    "/kaggle/working/gnn-pretraining/configs/pretrain/b2_nfm.yaml": "configs/pretrain/b2_nfm.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/b3_nc.yaml": "configs/pretrain/b3_nc.yaml", 
-    "/kaggle/working/gnn-pretraining/configs/pretrain/b4_single_domain_all.yaml": "configs/pretrain/b4_single_domain_all.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s1_multi_task_generative.yaml": "configs/pretrain/s1_multi_task_generative.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s2_multi_task_contrastive.yaml": "configs/pretrain/s2_multi_task_contrastive.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s3_all_self_supervised.yaml": "configs/pretrain/s3_all_self_supervised.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s4_all_objectives.yaml": "configs/pretrain/s4_all_objectives.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s5_all_objectives_da.yaml": "configs/pretrain/s5_all_objectives_da.yaml"
+    "/kaggle/working/gnn-pretraining/configs/pretrain/b2.yaml": "configs/pretrain/b2.yaml",
+    "/kaggle/working/gnn-pretraining/configs/pretrain/b3.yaml": "configs/pretrain/b3.yaml", 
+    "/kaggle/working/gnn-pretraining/configs/pretrain/b4.yaml": "configs/pretrain/b4.yaml",
+    "/kaggle/working/gnn-pretraining/configs/pretrain/s1.yaml": "configs/pretrain/s1.yaml",
+    "/kaggle/working/gnn-pretraining/configs/pretrain/s2.yaml": "configs/pretrain/s2.yaml",
+    "/kaggle/working/gnn-pretraining/configs/pretrain/s3.yaml": "configs/pretrain/s3.yaml",
+    "/kaggle/working/gnn-pretraining/configs/pretrain/s4.yaml": "configs/pretrain/s4.yaml",
+    "/kaggle/working/gnn-pretraining/configs/pretrain/s5.yaml": "configs/pretrain/s5.yaml"
 }
 
 def load_pretrain_sweep_config() -> Dict[str, Any]:

@@ -1,4 +1,0 @@
-exp_name: "b3_nc"
-pretrain_domains: ["MUTAG", "PROTEINS", "NCI1", "ENZYMES"]
-active_tasks: ["node_contrast"]
-

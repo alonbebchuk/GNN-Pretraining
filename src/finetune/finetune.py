@@ -24,19 +24,60 @@ import torch.nn.functional as F
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "finetune"
 WARMUP_FRACTION = 0.15
 
+TASK_TYPE = {
+    'ENZYMES': 'graph_classification',
+    'PTC_MR': 'graph_classification',
+    'Cora_NC': 'node_classification',
+    'CiteSeer_NC': 'node_classification',
+    'Cora_LP': 'link_prediction',
+    'CiteSeer_LP': 'link_prediction',
+}
+LR_BACKBONE = {
+    'full_finetune': 1e-4,
+    'linear_probe': 0.0,
+}
+LR_HEAD = 1e-3
+BATCH_SIZE = {
+    'ENZYMES': 32,
+    'PTC_MR': 32,
+    'Cora_NC': 512,
+    'CiteSeer_NC': 512,
+    'Cora_LP': 256,
+    'CiteSeer_LP': 256,
+}
+EPOCHS = {
+    'ENZYMES': 100,
+    'PTC_MR': 100,
+    'Cora_NC': 200,
+    'CiteSeer_NC': 200,
+    'Cora_LP': 300,
+    'CiteSeer_LP': 300,
+}
+PATIENCE_FRACTION = 0.1
 
 @dataclass
 class FinetuneConfig:
-    exp_name: str
     domain_name: str
     pretrained_scheme: str
     finetune_strategy: str
+    seed: int
+
+    exp_name: str
     task_type: str
     batch_size: int
     epochs: int
     lr_backbone: float
     lr_head: float
     patience: int
+
+    def __post_init__(self):
+        self.exp_name = f"{self.domain_name}_{self.finetune_strategy}_{self.pretrained_scheme}"
+        self.task_type = TASK_TYPE[self.domain_name]
+        self.lr_backbone = LR_BACKBONE[self.finetune_strategy]
+        self.lr_head = LR_HEAD
+        self.batch_size = BATCH_SIZE[self.domain_name]
+        self.epochs = EPOCHS[self.domain_name]
+        self.patience = int(self.epochs * PATIENCE_FRACTION)
 
 
 def build_config(args: argparse.Namespace) -> FinetuneConfig:
@@ -269,7 +310,7 @@ def finetune(cfg: FinetuneConfig, seed: int) -> None:
         domain_name=cfg.domain_name,
         finetune_strategy=cfg.finetune_strategy,
         task_type=cfg.task_type,
-        pretrained_path=get_pretrained_model_path(cfg.pretrained_scheme, seed) if cfg.pretrained_scheme != 'b1_from_scratch' else None,
+        pretrained_path=get_pretrained_model_path(cfg.pretrained_scheme, seed) if cfg.pretrained_scheme != 'b1' else None,
     )
 
     param_groups = model.get_optimizer_param_groups(
@@ -347,7 +388,7 @@ def finetune(cfg: FinetuneConfig, seed: int) -> None:
     strategy_metrics = {
         'strategy/finetune_method': cfg.finetune_strategy,
         'strategy/pretrain_method': cfg.pretrained_scheme,
-        'strategy/is_from_scratch': cfg.pretrained_scheme == 'b1_from_scratch',
+        'strategy/is_from_scratch': cfg.pretrained_scheme == 'b1',
         'strategy/selection_metric_used': 'val/auc' if cfg.task_type == 'link_prediction' else 'val/accuracy',
         'strategy/final_selection_score': best_selection_metric
     }

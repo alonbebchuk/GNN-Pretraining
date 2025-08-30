@@ -1,4 +1,0 @@
-exp_name: "b4_single_domain_all"
-pretrain_domains: ["ENZYMES"]
-active_tasks: ["node_feat_mask", "link_pred", "node_contrast", "graph_contrast", "graph_prop"]
-

@@ -1,18 +1,12 @@
 method: grid
 
-program: "/kaggle/working/gnn-pretraining/src/pretraining/main_pretrain.py"
+program: "/kaggle/working/gnn-pretraining/src/pretrain/pretrain.py"
+
+config_template: "/kaggle/working/gnn-pretraining/configs/templates/pretrain.yaml"
 
 parameters:
-  config:
-    values:
-      - "/kaggle/working/gnn-pretraining/configs/pretrain/b2_nfm.yaml"
-      - "/kaggle/working/gnn-pretraining/configs/pretrain/b3_nc.yaml"
-      - "/kaggle/working/gnn-pretraining/configs/pretrain/b4_single_domain_all.yaml"
-      - "/kaggle/working/gnn-pretraining/configs/pretrain/s1_multi_task_generative.yaml"
-      - "/kaggle/working/gnn-pretraining/configs/pretrain/s2_multi_task_contrastive.yaml"
-      - "/kaggle/working/gnn-pretraining/configs/pretrain/s3_all_self_supervised.yaml"
-      - "/kaggle/working/gnn-pretraining/configs/pretrain/s4_all_objectives.yaml"
-      - "/kaggle/working/gnn-pretraining/configs/pretrain/s5_all_objectives_da.yaml"
+  exp_name:
+    values: ["b2", "b3", "b4", "s1", "s2", "s3", "s4", "s5"]
 
   seed:
     values: [42, 84, 126]

@@ -1,0 +1,4 @@
+domain_name: ${domain_name}
+finetune_strategy: ${finetune_strategy}
+pretrained_scheme: ${pretrained_scheme}
+seed: ${seed}

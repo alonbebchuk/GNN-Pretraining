@@ -11,6 +11,7 @@ import wandb
 import yaml
 from torch.optim import AdamW
 
+from src.data.data_setup import PRETRAIN_TUDATASETS
 from src.data.pretrain_data_loaders import create_train_data_loader, create_val_data_loader
 from src.models.pretrain_model import PretrainableGNN
 from src.pretrain.losses import UncertaintyWeighter
@@ -34,14 +35,34 @@ PATIENCE_EPOCHS = 5
 UNCERTAINTY_WEIGHT_DECAY = 0
 WARMUP_FRACTION = 0.15
 
+PRETRAIN_DOMAINS = {
+    'b4': ['ENZYMES'],
+}
+
+ACTIVE_TASKS = {
+    'b2': ['node_feat_mask'],
+    'b3': ['node_contrast'],
+    'b4': ['node_feat_mask', 'link_pred', 'node_contrast', 'graph_contrast', 'graph_prop'],
+    's1': ['node_feat_mask', 'link_pred'],
+    's2': ['node_contrast', 'graph_contrast'],
+    's3': ['node_feat_mask', 'link_pred', 'node_contrast', 'graph_contrast'],
+    's4': ['node_feat_mask', 'link_pred', 'node_contrast', 'graph_contrast', 'graph_prop'],
+    's5': ['node_feat_mask', 'link_pred', 'node_contrast', 'graph_contrast', 'graph_prop', 'domain_adv'],
+}
+
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "pretrain"
 
 
 @dataclass
 class PretrainConfig:
     exp_name: str
+    seed: int
     pretrain_domains: List[str]
     active_tasks: List[str]
+
+    def __post_init__(self):
+        self.pretrain_domains = PRETRAIN_DOMAINS.get(self.exp_name, PRETRAIN_TUDATASETS)
+        self.active_tasks = ACTIVE_TASKS[self.exp_name]
 
 
 def build_config(args: argparse.Namespace) -> PretrainConfig:
