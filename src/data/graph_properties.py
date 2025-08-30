@@ -90,6 +90,7 @@ class GraphPropertyCalculator:
 
         scaler = StandardScaler()
         scaler.fit(all_props[train_idx].numpy())
+        scaler.scale_[scaler.scale_ == 0] = 1.0
 
         all_props_scaled = scaler.transform(all_props.numpy())
         return torch.from_numpy(all_props_scaled).float()

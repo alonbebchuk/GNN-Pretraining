@@ -88,7 +88,7 @@ def process_tudatasets() -> None:
             if name in CONTINUOUS_TUDATASETS:
                 train_X_list = [dataset_list[i].x.detach().cpu() for i in train_idx]
                 train_X = torch.cat(train_X_list, dim=0).numpy()
-                scaler = StandardScaler(with_mean=True, with_std=True)
+                scaler = StandardScaler()
                 scaler.fit(train_X)
                 scaler.scale_[scaler.scale_ == 0] = 1.0
                 for g in dataset_list:
