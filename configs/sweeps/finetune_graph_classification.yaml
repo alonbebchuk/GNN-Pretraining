@@ -1,11 +1,15 @@
 method: grid
 
-program: "src/finetune/finetune.py"
-config_template: "configs/finetune/graph_classification_template.yaml"
+program: "/kaggle/working/gnn-pretraining/src/finetune/finetune.py"
+
+config_template: "/kaggle/working/gnn-pretraining/configs/finetune/template.yaml"
 
 parameters:
   domain_name:
     values: ["ENZYMES", "PTC_MR"]
+  
+  finetune_strategy:
+    values: ["full_finetune", "linear_probe"]
   
   pretrained_scheme:
     values: 
@@ -19,8 +23,8 @@ parameters:
       - "s4_all_objectives"
       - "s5_all_objectives_da"
   
-  finetune_strategy:
-    values: ["full_finetune", "linear_probe"]
+  task_type:
+    values: ["graph_classification"]
   
   batch_size:
     values: [32]

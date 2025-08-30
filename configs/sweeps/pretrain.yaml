@@ -1,4 +1,7 @@
 method: grid
+
+program: "/kaggle/working/gnn-pretraining/src/pretraining/main_pretrain.py"
+
 parameters:
   config:
     values:
@@ -10,6 +13,6 @@ parameters:
       - "/kaggle/working/gnn-pretraining/configs/pretrain/s3_all_self_supervised.yaml"
       - "/kaggle/working/gnn-pretraining/configs/pretrain/s4_all_objectives.yaml"
       - "/kaggle/working/gnn-pretraining/configs/pretrain/s5_all_objectives_da.yaml"
+
   seed:
     values: [42, 84, 126]
-program: "/kaggle/working/gnn-pretraining/src/pretraining/main_pretrain.py"

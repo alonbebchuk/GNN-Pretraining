@@ -1,65 +1,57 @@
-# Sweep configuration for Link Prediction finetuning experiments
 method: grid
 
-# Base config template
-program: "src/finetune/finetune.py"
-config_template: "configs/finetune/link_prediction_template.yaml"
+program: "/kaggle/working/gnn-pretraining/src/finetune/finetune.py"
 
-# Sweep parameters
+config_template: "/kaggle/working/gnn-pretraining/configs/finetune/template.yaml"
+
 parameters:
-  # Task and scheme combinations
   domain_name:
     values: ["Cora_LP", "CiteSeer_LP"]
   
+  finetune_strategy:
+    values: ["full_finetune", "linear_probe"]
+  
   pretrained_scheme:
     values: 
-      # Baselines
       - "b1_from_scratch"
       - "b2_nfm"
       - "b3_nc"
       - "b4_single_domain_all"
-      # Schemes
       - "s1_multi_task_generative"
       - "s2_multi_task_contrastive"
       - "s3_all_self_supervised"
       - "s4_all_objectives"
       - "s5_all_objectives_da"
   
-  finetune_strategy:
-    values: ["full_finetune", "linear_probe"]
+  task_type:
+    values: ["link_prediction"]
   
-  # Task-specific hyperparameters
   batch_size:
-    values: [256]  # Medium batch size for link prediction
+    values: [256]
   
   epochs:
-    values: [300]  # Most epochs for link prediction
+    values: [300]
   
   lr_backbone:
-    # Conditional based on finetune_strategy
     distribution: categorical
     values:
-      - 5e-4  # for full_finetune
-      - 0.0   # for linear_probe (frozen backbone)
+      - 5e-4
+      - 0.0
   
   lr_head:
-    values: [1e-3]  # Standard head learning rate
+    values: [1e-3]
   
   patience:
-    values: [30]  # Most patience for link prediction
+    values: [30]
   
-  # Seeds for statistical robustness
   seed:
     values: [42, 84, 126]
 
-# Special parameter combinations for conditional logic
 parameter_combinations:
-  # Full finetuning combinations
   - parameters:
       finetune_strategy: "full_finetune"
       lr_backbone: 5e-4
   
-  # Linear probe combinations
   - parameters:
       finetune_strategy: "linear_probe" 
       lr_backbone: 0.0
