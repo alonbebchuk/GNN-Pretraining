@@ -31,7 +31,7 @@ class LinkPredictionDataset(Dataset):
 
         if split == 'train':
             self.edges = split_edges['train_pos']
-            self.labels = None
+            self.labels = torch.ones(self.edges.size(1))
         else:
             self.pos_edges = split_edges[f'{split}_pos']
             self.neg_edges = split_edges[f'{split}_neg']
@@ -46,7 +46,7 @@ class LinkPredictionDataset(Dataset):
 
     def __getitem__(self, idx: int) -> tuple:
         edge = self.edges[:, idx]
-        label = self.labels[idx] if self.labels is not None else None
+        label = self.labels[idx]
         return self.data, edge, label
 
 
@@ -60,7 +60,7 @@ def _collate_node_batch(batch: List[tuple]) -> tuple:
 def _collate_link_batch(batch: List[tuple]) -> tuple:
     data = batch[0][0]
     edges = torch.stack([item[1] for item in batch], dim=1)
-    labels = torch.tensor([item[2] for item in batch], dtype=torch.float) if batch[0][2] is not None else None
+    labels = torch.tensor([item[2] for item in batch], dtype=torch.float)
     return data, edges, labels
 
 
@@ -80,8 +80,10 @@ def create_node_classification_loader(domain_name: str, split: str, batch_size: 
 
     graphs = torch.load(domain_dir / "data.pt")
     splits = torch.load(domain_dir / "splits.pt")
+    data = graphs[0]
+    split_indices = splits[split]
 
-    dataset = NodeDataset(graphs[0], splits[split])
+    dataset = NodeDataset(data, split_indices)
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, generator=generator, collate_fn=_collate_node_batch)
 
 
@@ -90,8 +92,10 @@ def create_link_prediction_loader(domain_name: str, split: str, batch_size: int,
 
     graphs = torch.load(domain_dir / "data.pt")
     splits = torch.load(domain_dir / "splits.pt")
+    data = graphs[0]
+    split_indices = splits[split]
 
-    dataset = LinkPredictionDataset(graphs[0], splits, split)
+    dataset = LinkPredictionDataset(data, split_indices, split)
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, generator=generator, collate_fn=_collate_link_batch)
 
 
