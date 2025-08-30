@@ -13,9 +13,8 @@ from torch.optim import AdamW
 from torch_geometric.utils import negative_sampling
 
 from src.data.finetune_data_loaders import create_finetune_data_loader
-from src.finetune.artifacts import get_pretrained_model_path
 from src.finetune.metrics import aggregate_metrics, compute_evaluation_metrics, compute_training_metrics
-from src.models.finetune_model import FinetuneGNN, create_finetune_model
+from src.models.finetune_model import FinetuneGNN, create_finetune_model, LR_BACKBONE, LR_FINETUNE
 from src.pretrain.schedulers import CosineWithWarmup
 
 from src.data.data_setup import NUM_CLASSES, TASK_TYPES
@@ -24,11 +23,6 @@ import torch.nn.functional as F
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "finetune"
 WARMUP_FRACTION = 0.15
 
-LR_BACKBONES = {
-    'full_finetune': 1e-4,
-    'linear_probe': 0.0,
-}
-LR_HEAD = 1e-3
 BATCH_SIZES = {
     'ENZYMES': 32,
     'PTC_MR': 32,
@@ -58,15 +52,11 @@ class FinetuneConfig:
     task_type: str
     batch_size: int
     epochs: int
-    lr_backbone: float
-    lr_head: float
     patience: int
 
     def __post_init__(self):
         self.exp_name = f"{self.domain_name}_{self.finetune_strategy}_{self.pretrained_scheme}"
         self.task_type = TASK_TYPES[self.domain_name]
-        self.lr_backbone = LR_BACKBONES[self.finetune_strategy]
-        self.lr_head = LR_HEAD
         self.batch_size = BATCH_SIZES[self.domain_name]
         self.epochs = EPOCHS[self.domain_name]
         self.patience = int(self.epochs * PATIENCE_FRACTION)
@@ -260,9 +250,9 @@ def run_training(
         scale = lr_multiplier()
         for pg in optimizer.param_groups:
             if pg['name'] == 'backbone':
-                pg['lr'] = cfg.lr_backbone * scale
+                pg['lr'] = LR_BACKBONE[cfg.finetune_strategy] * scale
             else:
-                pg['lr'] = cfg.lr_head * scale
+                pg['lr'] = LR_FINETUNE * scale
         lr_multiplier.step()
 
         # Log core training metrics every iteration
@@ -301,13 +291,11 @@ def finetune(cfg: FinetuneConfig, seed: int) -> None:
         device=device,
         domain_name=cfg.domain_name,
         finetune_strategy=cfg.finetune_strategy,
-        task_type=cfg.task_type,
-        pretrained_path=get_pretrained_model_path(cfg.pretrained_scheme, seed) if cfg.pretrained_scheme != 'b1' else None,
+        pretrained_scheme=cfg.pretrained_scheme,
+        seed=seed,
     )
 
-    param_groups = model.get_optimizer_param_groups(
-        cfg.lr_backbone, cfg.lr_head)
-    optimizer = AdamW(param_groups)
+    optimizer = AdamW(model.param_groups)
 
     train_loader = get_finetune_train_loader(
         cfg.domain_name, seed, cfg.batch_size, 0)

@@ -51,6 +51,7 @@ ACTIVE_TASKS = {
 }
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "pretrain"
+PROJECT_NAME = "gnn-pretraining-pretrain"
 
 
 @dataclass
@@ -396,7 +397,7 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
     set_global_seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    wandb.init(project="gnn-pretraining-pretrain", name=f"{cfg.exp_name}_{seed}")
+    wandb.init(project=PROJECT_NAME, name=f"{cfg.exp_name}_{seed}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
