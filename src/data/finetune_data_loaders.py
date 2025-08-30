@@ -10,8 +10,6 @@ from torch_geometric.loader import DataLoader as PyGDataLoader
 from src.data.data_setup import PROCESSED_DIR, TASK_TYPES
 from src.data.pretrain_data_loaders import GraphDataset
 
-BATCH_SIZE = 32
-
 
 class NodeDataset(Dataset):
     def __init__(self, data: Data, indices: NDArray[np.int64]) -> None:
@@ -66,7 +64,7 @@ def _collate_link_batch(batch: List[tuple]) -> tuple:
     return data, edges, labels
 
 
-def create_graph_classification_loader(domain_name: str, split: str, generator: torch.Generator) -> PyGDataLoader:
+def create_graph_classification_loader(domain_name: str, split: str, batch_size: int, generator: torch.Generator) -> PyGDataLoader:
     domain_dir = PROCESSED_DIR / domain_name
 
     graphs = torch.load(domain_dir / "data.pt")
@@ -74,35 +72,35 @@ def create_graph_classification_loader(domain_name: str, split: str, generator: 
     split_indices = splits[split]
 
     dataset = GraphDataset(graphs, split_indices)
-    return PyGDataLoader(dataset, batch_size=BATCH_SIZE, generator=generator)
+    return PyGDataLoader(dataset, batch_size=batch_size, generator=generator)
 
 
-def create_node_classification_loader(domain_name: str, split: str, generator: torch.Generator) -> torch.utils.data.DataLoader:
+def create_node_classification_loader(domain_name: str, split: str, batch_size: int, generator: torch.Generator) -> torch.utils.data.DataLoader:
     domain_dir = PROCESSED_DIR / domain_name
 
     graphs = torch.load(domain_dir / "data.pt")
     splits = torch.load(domain_dir / "splits.pt")
 
     dataset = NodeDataset(graphs[0], splits[split])
-    return torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, generator=generator, collate_fn=_collate_node_batch)
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, generator=generator, collate_fn=_collate_node_batch)
 
 
-def create_link_prediction_loader(domain_name: str, split: str, generator: torch.Generator) -> torch.utils.data.DataLoader:
+def create_link_prediction_loader(domain_name: str, split: str, batch_size: int, generator: torch.Generator) -> torch.utils.data.DataLoader:
     domain_dir = PROCESSED_DIR / domain_name
 
     graphs = torch.load(domain_dir / "data.pt")
     splits = torch.load(domain_dir / "splits.pt")
 
     dataset = LinkPredictionDataset(graphs[0], splits, split)
-    return torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, generator=generator, collate_fn=_collate_link_batch)
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, generator=generator, collate_fn=_collate_link_batch)
 
 
-def create_finetune_data_loader(domain_name: str, split: str, generator: torch.Generator) -> Union[PyGDataLoader, torch.utils.data.DataLoader]:
+def create_finetune_data_loader(domain_name: str, split: str, batch_size: int, generator: torch.Generator) -> Union[PyGDataLoader, torch.utils.data.DataLoader]:
     task_type = TASK_TYPES[domain_name]
 
     if task_type == 'graph_classification':
-        return create_graph_classification_loader(domain_name, split, generator)
+        return create_graph_classification_loader(domain_name, split, batch_size, generator)
     elif task_type == 'node_classification':
-        return create_node_classification_loader(domain_name, split, generator)
+        return create_node_classification_loader(domain_name, split, batch_size, generator)
     elif task_type == 'link_prediction':
-        return create_link_prediction_loader(domain_name, split, generator)
+        return create_link_prediction_loader(domain_name, split, batch_size, generator)

@@ -1,24 +1,18 @@
-# Sweep configuration for Graph Classification finetuning experiments
 method: grid
 
-# Base config template
-program: "src/finetuning/main_finetune.py"
-config_template: "configs/finetune/base_graph_classification.yaml"
+program: "src/finetune/finetune.py"
+config_template: "configs/finetune/graph_classification_template.yaml"
 
-# Sweep parameters
 parameters:
-  # Task and scheme combinations
   domain_name:
     values: ["ENZYMES", "PTC_MR"]
   
   pretrained_scheme:
     values: 
-      # Baselines
       - "b1_from_scratch"
       - "b2_nfm"
       - "b3_nc"
       - "b4_single_domain_all"
-      # Schemes
       - "s1_multi_task_generative"
       - "s2_multi_task_contrastive"
       - "s3_all_self_supervised"
@@ -28,38 +22,32 @@ parameters:
   finetune_strategy:
     values: ["full_finetune", "linear_probe"]
   
-  # Task-specific hyperparameters
   batch_size:
-    values: [32]  # Standard for graph classification
+    values: [32]
   
   epochs:
-    values: [100]  # Standard for graph classification
+    values: [100]
   
   lr_backbone:
-    # Conditional based on finetune_strategy
     distribution: categorical
     values:
-      - 1e-4  # for full_finetune
-      - 0.0   # for linear_probe (frozen backbone)
+      - 1e-4
+      - 0.0
   
   lr_head:
-    values: [1e-3]  # Standard head learning rate
+    values: [1e-3]
   
   patience:
-    values: [10]  # Early stopping patience for graph classification
+    values: [10]
   
-  # Seeds for statistical robustness
   seed:
     values: [42, 84, 126]
 
-# Special parameter combinations for conditional logic
 parameter_combinations:
-  # Full finetuning combinations
   - parameters:
       finetune_strategy: "full_finetune"
       lr_backbone: 1e-4
   
-  # Linear probe combinations
   - parameters:
       finetune_strategy: "linear_probe" 
       lr_backbone: 0.0

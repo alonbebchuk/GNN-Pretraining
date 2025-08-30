@@ -1,5 +1,5 @@
 import math
-from typing import Iterable
+from typing import List
 
 import networkx as nx
 import numpy as np
@@ -77,8 +77,7 @@ class GraphPropertyCalculator:
 
         return torch.tensor(props, dtype=torch.float32)
 
-    def compute_for_dataset(self, dataset: Iterable[Data]) -> Tensor:
-        dataset_list = list(dataset)
+    def compute_for_dataset(self, dataset_list: List[Data]) -> Tensor:
         props_tensor = torch.zeros((len(dataset_list), GRAPH_PROPERTY_DIM), dtype=torch.float32)
 
         for i, g in enumerate(dataset_list):
@@ -86,8 +85,8 @@ class GraphPropertyCalculator:
 
         return props_tensor
 
-    def compute_and_standardize_for_dataset(self, dataset: Iterable[Data], train_idx: NDArray[np.int64]) -> Tensor:
-        all_props = self.compute_for_dataset(dataset)
+    def compute_and_standardize_for_dataset(self, dataset_list: List[Data], train_idx: NDArray[np.int64]) -> Tensor:
+        all_props = self.compute_for_dataset(dataset_list)
 
         scaler = StandardScaler()
         scaler.fit(all_props[train_idx].numpy())

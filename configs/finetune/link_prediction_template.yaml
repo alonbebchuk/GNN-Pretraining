@@ -1,0 +1,11 @@
+exp_name: "${domain_name}_${finetune_strategy}_${pretrained_scheme}"
+domain_name: ${domain_name}
+pretrained_scheme: ${pretrained_scheme}
+finetune_strategy: ${finetune_strategy}
+task_type: link_prediction
+
+batch_size: ${batch_size}
+epochs: ${epochs}
+lr_backbone: ${lr_backbone}
+lr_head: ${lr_head}
+patience: ${patience}

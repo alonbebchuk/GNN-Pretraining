@@ -2,8 +2,8 @@
 method: grid
 
 # Base config template
-program: "src/finetuning/main_finetune.py"
-config_template: "configs/finetune/base_link_prediction.yaml"
+program: "src/finetune/finetune.py"
+config_template: "configs/finetune/link_prediction_template.yaml"
 
 # Sweep parameters
 parameters:

@@ -2,8 +2,8 @@
 method: grid
 
 # Base config template
-program: "src/finetuning/main_finetune.py"
-config_template: "configs/finetune/base_node_classification.yaml"
+program: "src/finetune/finetune.py"
+config_template: "configs/finetune/node_classification_template.yaml"
 
 # Sweep parameters
 parameters:

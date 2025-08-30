@@ -13,13 +13,13 @@ FINETUNE_HIDDEN_DIM = 128
 
 
 class FinetuneGNN(nn.Module):
-    def __init__(self, device: torch.device, domain_name: str, freeze_backbone: bool) -> None:
+    def __init__(self, device: torch.device, domain_name: str, finetune_strategy: str, task_type: str) -> None:
         super().__init__()
 
         self.device = device
-        self.freeze_backbone = freeze_backbone
-        self.task_type = TASK_TYPES[domain_name]
-        self.is_in_domain = domain_name == 'ENZYMES'
+        self.freeze_backbone = (finetune_strategy == 'linear_probe')
+        self.task_type = task_type
+        self.is_in_domain = (domain_name == 'ENZYMES')
 
         self.input_encoder = InputEncoder(DOMAIN_DIMENSIONS[domain_name])
         self.gnn_backbone = GINBackbone()
@@ -79,8 +79,8 @@ class FinetuneGNN(nn.Module):
         return param_groups
 
 
-def load_pretrained_weights(finetune_model: FinetuneGNN, pretrained_checkpoint_path: str) -> None:
-    checkpoint = torch.load(pretrained_checkpoint_path, map_location=finetune_model.device)
+def load_pretrained_weights(finetune_model: FinetuneGNN, pretrained_path: str) -> None:
+    checkpoint = torch.load(pretrained_path, map_location=finetune_model.device)
     pretrained_state_dict = checkpoint['model_state_dict']
     finetune_state_dict = finetune_model.state_dict()
 
@@ -99,8 +99,8 @@ def load_pretrained_weights(finetune_model: FinetuneGNN, pretrained_checkpoint_p
     finetune_model.load_state_dict(finetune_state_dict, strict=False)
 
 
-def create_finetune_model(device: torch.device, domain_name: str, freeze_backbone: bool, pretrained_checkpoint_path: Optional[str] = None) -> FinetuneGNN:
-    model = FinetuneGNN(device, domain_name, freeze_backbone)
-    if pretrained_checkpoint_path is not None:
-        load_pretrained_weights(model, pretrained_checkpoint_path)
+def create_finetune_model(device: torch.device, domain_name: str, finetune_strategy: str, task_type: str, pretrained_path: Optional[str] = None) -> FinetuneGNN:
+    model = FinetuneGNN(device, domain_name, finetune_strategy, task_type)
+    if pretrained_path is not None:
+        load_pretrained_weights(model, pretrained_path)
     return model

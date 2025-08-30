@@ -1,11 +1,9 @@
-import copy
 import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
 import torch
-from numpy.typing import NDArray
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 from sklearn.preprocessing import StandardScaler
 from torch_geometric.data import Data
@@ -61,21 +59,6 @@ RAW_DIR = DATA_ROOT_DIR / 'raw'
 PROCESSED_DIR = DATA_ROOT_DIR / 'processed'
 
 
-def apply_feature_preprocessing(dataset: List[Data], train_idx: NDArray[np.int64], dataset_name: str) -> None:
-    if dataset_name == 'ENZYMES':
-        train_X_list = [dataset[i].x.detach().cpu() for i in train_idx]
-        train_X = torch.cat(train_X_list, dim=0).numpy()
-
-        scaler = StandardScaler(with_mean=True, with_std=True)
-        scaler.fit(train_X)
-        scaler.scale_[scaler.scale_ == 0] = 1.0
-
-        for g in dataset:
-            X = g.x.detach().cpu().numpy()
-            X_scaled = scaler.transform(X)
-            g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
-
-
 def save_processed_data(dataset_name: str, data: List[Data], splits: Dict[str, torch.Tensor], graph_properties: Optional[torch.Tensor] = None) -> None:
     save_dir = PROCESSED_DIR / dataset_name
     os.makedirs(save_dir, exist_ok=True)
@@ -91,23 +74,34 @@ def process_tudatasets() -> None:
     for name in tqdm(TUDATASETS, desc="Processing TU datasets"):
         dataset = TUDataset(root=RAW_DIR, name=name, use_node_attr=True)
         dataset_list = list(dataset)
+        num_graphs = len(dataset_list)
 
         needs_pretrain = name in PRETRAIN_TUDATASETS
         needs_downstream = name in DOWNSTREAM_TUDATASETS
 
         if needs_downstream:
-            num_graphs = len(dataset_list)
             labels = dataset.y.numpy()
 
             sss_train_val = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_FRACTION, random_state=RANDOM_SEED)
             train_idx, val_test_idx = next(sss_train_val.split(np.arange(num_graphs), labels))
-
             val_test_labels = labels[val_test_idx]
+
+            if name == 'ENZYMES':
+                train_X_list = [dataset_list[i].x.detach().cpu() for i in train_idx]
+                train_X = torch.cat(train_X_list, dim=0).numpy()
+
+                scaler = StandardScaler(with_mean=True, with_std=True)
+                scaler.fit(train_X)
+                scaler.scale_[scaler.scale_ == 0] = 1.0
+
+                for g in dataset_list:
+                    X = g.x.detach().cpu().numpy()
+                    X_scaled = scaler.transform(X)
+                    g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
+
             sss_val_test = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
             val_idx_rel, test_idx_rel = next(sss_val_test.split(np.arange(len(val_test_idx)), val_test_labels))
             val_idx, test_idx = val_test_idx[val_idx_rel], val_test_idx[test_idx_rel]
-
-            apply_feature_preprocessing(dataset_list, train_idx, name)
 
             splits = {
                 'train': torch.tensor(train_idx, dtype=torch.long),
@@ -119,12 +113,8 @@ def process_tudatasets() -> None:
             save_processed_data(name, dataset_list, splits, graph_properties)
 
         elif needs_pretrain:
-            num_graphs = len(dataset_list)
-
             ss_train_val = ShuffleSplit(n_splits=1, test_size=VAL_FRACTION, random_state=RANDOM_SEED)
             train_idx, val_idx = next(ss_train_val.split(np.arange(num_graphs)))
-
-            apply_feature_preprocessing(dataset_list, train_idx, name)
 
             splits = {
                 'train': torch.tensor(train_idx, dtype=torch.long),
@@ -141,10 +131,12 @@ def create_link_prediction_splits(data: Data) -> Dict[str, torch.Tensor]:
 
     num_edges = data.num_edges
     num_val_test = int(num_edges * VAL_TEST_FRACTION)
+    num_val = int(num_val_test * VAL_TEST_SPLIT_RATIO)
+
     perm = torch.randperm(num_edges)
 
-    val_test_edges = data.edge_index[:, perm[:num_val_test]]
     train_edges = data.edge_index[:, perm[num_val_test:]]
+    val_test_edges = data.edge_index[:, perm[:num_val_test]]
 
     val_test_neg_edges = negative_sampling(
         edge_index=to_undirected(train_edges),
@@ -152,7 +144,6 @@ def create_link_prediction_splits(data: Data) -> Dict[str, torch.Tensor]:
         num_neg_samples=num_val_test
     )
 
-    num_val = int(num_val_test * VAL_TEST_SPLIT_RATIO)
     return {
         'train_pos': train_edges,
         'val_pos': val_test_edges[:, :num_val],
