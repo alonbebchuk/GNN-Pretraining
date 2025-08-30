@@ -18,26 +18,18 @@ from src.finetune.metrics import aggregate_metrics, compute_evaluation_metrics, 
 from src.models.finetune_model import FinetuneGNN, create_finetune_model
 from src.pretrain.schedulers import CosineWithWarmup
 
-from src.data.data_setup import NUM_CLASSES
+from src.data.data_setup import NUM_CLASSES, TASK_TYPES
 import torch.nn.functional as F
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "finetune"
 WARMUP_FRACTION = 0.15
 
-TASK_TYPE = {
-    'ENZYMES': 'graph_classification',
-    'PTC_MR': 'graph_classification',
-    'Cora_NC': 'node_classification',
-    'CiteSeer_NC': 'node_classification',
-    'Cora_LP': 'link_prediction',
-    'CiteSeer_LP': 'link_prediction',
-}
-LR_BACKBONE = {
+LR_BACKBONES = {
     'full_finetune': 1e-4,
     'linear_probe': 0.0,
 }
 LR_HEAD = 1e-3
-BATCH_SIZE = {
+BATCH_SIZES = {
     'ENZYMES': 32,
     'PTC_MR': 32,
     'Cora_NC': 512,
@@ -72,10 +64,10 @@ class FinetuneConfig:
 
     def __post_init__(self):
         self.exp_name = f"{self.domain_name}_{self.finetune_strategy}_{self.pretrained_scheme}"
-        self.task_type = TASK_TYPE[self.domain_name]
-        self.lr_backbone = LR_BACKBONE[self.finetune_strategy]
+        self.task_type = TASK_TYPES[self.domain_name]
+        self.lr_backbone = LR_BACKBONES[self.finetune_strategy]
         self.lr_head = LR_HEAD
-        self.batch_size = BATCH_SIZE[self.domain_name]
+        self.batch_size = BATCH_SIZES[self.domain_name]
         self.epochs = EPOCHS[self.domain_name]
         self.patience = int(self.epochs * PATIENCE_FRACTION)
 
