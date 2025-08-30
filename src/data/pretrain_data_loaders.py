@@ -48,10 +48,9 @@ class BalancedMultiDomainSampler:
 
 def _load_graph_properties_for_split(domain_dir: Path, graphs: List[Data], split_indices: NDArray[np.int64]) -> None:
     properties_path = domain_dir / "graph_properties.pt"
-    if properties_path.exists():
-        graph_properties = torch.load(properties_path)
-        for idx in split_indices:
-            graphs[idx].graph_properties = graph_properties[idx]
+    graph_properties = torch.load(properties_path)
+    for idx in split_indices:
+        graphs[idx].graph_properties = graph_properties[idx]
 
 
 def create_val_data_loader(domain_name: str, generator: torch.Generator) -> PyGDataLoader:
