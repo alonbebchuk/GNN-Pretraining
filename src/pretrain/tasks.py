@@ -9,13 +9,16 @@ from torch_geometric.data import Batch
 from torch_geometric.nn import global_mean_pool
 from torch_geometric.utils import batched_negative_sampling, to_undirected
 
+from src.data.graph_properties import GRAPH_PROPERTY_DIM
+from src.models.gnn import GNN_HIDDEN_DIM
+from src.models.pretrain_model import PretrainableGNN
 from src.pretrain.augmentations import GraphAugmentor
 
 NODE_CONTRASTIVE_TEMPERATURE = 0.1
 
 
 class BasePretrainTask(ABC):
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(self, model: PretrainableGNN) -> None:
         self.model = model
 
     @abstractmethod
@@ -27,7 +30,7 @@ class NodeFeatureMaskingTask(BasePretrainTask):
     def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
-        total_size = 0
+        total_size = torch.tensor(0, device=device, dtype=torch.long)
         per_domain_losses = {}
 
         for domain_name, batch in domain_batches.items():
@@ -38,7 +41,7 @@ class NodeFeatureMaskingTask(BasePretrainTask):
                 reconstructed_h0 = self.model.get_head('node_feat_mask', domain_name)(h_final[mask_indices])
 
                 loss = F.mse_loss(reconstructed_h0, target_h0, reduction='sum')
-                size = target_h0.size(1) * mask_indices.size(0)
+                size = torch.tensor(mask_indices.size(0) * GNN_HIDDEN_DIM, device=device, dtype=torch.long)
                 total_loss += loss
                 total_size += size
                 per_domain_losses[domain_name] = loss / size
@@ -54,7 +57,7 @@ class LinkPredictionTask(BasePretrainTask):
     def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
-        total_size = 0
+        total_size = torch.tensor(0, device=device, dtype=torch.long)
         per_domain_losses = {}
         decoder = self.model.get_head('link_pred')
 
@@ -75,7 +78,7 @@ class LinkPredictionTask(BasePretrainTask):
             h_final = self.model(batch, domain_name)
             probs = decoder(h_final, combined_edges)
             loss = F.binary_cross_entropy(probs, labels, reduction='sum')
-            size = labels.size(0)
+            size = torch.tensor(labels.size(0), device=device, dtype=torch.long)
             total_loss += loss
             total_size += size
             per_domain_losses[domain_name] = loss / size
@@ -85,7 +88,7 @@ class LinkPredictionTask(BasePretrainTask):
 
 
 class NodeContrastiveTask(BasePretrainTask):
-    def _simclr_nt_xent(self, z1: Tensor, z2: Tensor) -> Tuple[Tensor, int]:
+    def _simclr_nt_xent(self, z1: Tensor, z2: Tensor) -> Tuple[Tensor, torch.Tensor]:
         device = z1.device
         N = z1.size(0)
 
@@ -105,13 +108,13 @@ class NodeContrastiveTask(BasePretrainTask):
         ])
 
         loss = F.cross_entropy(sim_matrix, pos_indices, reduction='sum')
-        size = 2 * N
+        size = torch.tensor(2 * N, device=device, dtype=torch.long)
         return loss, size
 
     def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
-        total_size = 0
+        total_size = torch.tensor(0, device=device, dtype=torch.long)
         per_domain_losses = {}
 
         for domain_name, batch in domain_batches.items():
@@ -156,26 +159,25 @@ class GraphContrastiveTask(BasePretrainTask):
     def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
-        total_size = 0
+        total_size = torch.tensor(0, device=device, dtype=torch.long)
         per_domain_losses = {}
 
         for domain_name, batch in domain_batches.items():
             h = self.model(batch, domain_name)
-            batch_vec = batch.batch
-            s = global_mean_pool(h, batch_vec)
+            s = global_mean_pool(h, batch.batch)
 
             disc = self.model.get_head('graph_contrast', domain_name)
 
             pos_scores = []
             neg_scores = []
 
-            unique_graphs = torch.unique(batch_vec)
+            unique_graphs = torch.unique(batch.batch)
             for graph_id in unique_graphs:
-                graph_mask = (batch_vec == graph_id)
+                graph_mask = (batch.batch == graph_id)
                 graph_nodes = h[graph_mask]
-                graph_summary = s[graph_id].unsqueeze(0)
 
-                pos_pairs_score = disc(graph_nodes, graph_summary.repeat(graph_nodes.size(0), 1))
+                pos_summary = s[graph_id]
+                pos_pairs_score = disc(graph_nodes, pos_summary.unsqueeze(0).repeat(graph_nodes.size(0), 1))
                 pos_scores.append(pos_pairs_score.flatten())
 
                 other_graphs = unique_graphs[unique_graphs != graph_id]
@@ -194,7 +196,7 @@ class GraphContrastiveTask(BasePretrainTask):
             ])
 
             loss = F.binary_cross_entropy(scores, labels, reduction='sum')
-            size = labels.size(0)
+            size = torch.tensor(labels.size(0), device=device, dtype=torch.long)
             total_loss += loss
             total_size += size
             per_domain_losses[domain_name] = loss / size
@@ -207,20 +209,18 @@ class GraphPropertyPredictionTask(BasePretrainTask):
     def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
-        total_size = 0
+        total_size = torch.tensor(0, device=device, dtype=torch.long)
         per_domain_losses = {}
 
         for domain_name, batch in domain_batches.items():
             h = self.model(batch, domain_name)
-            batch_vec = batch.batch
-            graph_emb = global_mean_pool(h, batch_vec)
+            graph_emb = global_mean_pool(h, batch.batch)
 
             preds = self.model.get_head('graph_prop', domain_name)(graph_emb)
-
             labels = batch.graph_properties.to(torch.float32).to(device)
 
             loss = F.mse_loss(preds, labels, reduction='sum')
-            size = graph_emb.size(0) * preds.size(1)
+            size = torch.tensor(graph_emb.size(0) * GRAPH_PROPERTY_DIM, device=device, dtype=torch.long)
             total_loss += loss
             total_size += size
             per_domain_losses[domain_name] = loss / size
@@ -230,7 +230,7 @@ class GraphPropertyPredictionTask(BasePretrainTask):
 
 
 class DomainAdversarialTask(BasePretrainTask):
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(self, model: PretrainableGNN) -> None:
         super().__init__(model)
         self.domain_to_idx = {name: i for i, name in enumerate(self.model.input_encoders.keys())}
 
@@ -242,8 +242,7 @@ class DomainAdversarialTask(BasePretrainTask):
 
         for domain_name, batch in domain_batches.items():
             h = self.model(batch, domain_name)
-            batch_vec = batch.batch
-            graph_emb = global_mean_pool(h, batch_vec)
+            graph_emb = global_mean_pool(h, batch.batch)
 
             domain_idx = self.domain_to_idx[domain_name]
             domain_labels = torch.full((graph_emb.size(0),), domain_idx, device=device, dtype=torch.long)
