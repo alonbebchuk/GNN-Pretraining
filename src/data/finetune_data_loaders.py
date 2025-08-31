@@ -31,14 +31,14 @@ class LinkPredictionDataset(Dataset):
 
         if split == 'train':
             self.edges = split_edges['train_pos']
-            self.labels = torch.ones(self.edges.size(1))
+            self.labels = torch.ones(self.edges.size(1), device=self.edges.device)
         else:
             self.pos_edges = split_edges[f'{split}_pos']
             self.neg_edges = split_edges[f'{split}_neg']
             self.edges = torch.cat([self.pos_edges, self.neg_edges], dim=1)
             self.labels = torch.cat([
-                torch.ones(self.pos_edges.size(1)),
-                torch.zeros(self.neg_edges.size(1))
+                torch.ones(self.pos_edges.size(1), device=self.pos_edges.device),
+                torch.zeros(self.neg_edges.size(1), device=self.neg_edges.device)
             ])
 
     def __len__(self) -> int:
@@ -52,15 +52,15 @@ class LinkPredictionDataset(Dataset):
 
 def _collate_node_batch(batch: List[tuple]) -> tuple:
     data = batch[0][0]
-    node_indices = torch.tensor([item[1] for item in batch], dtype=torch.long)
-    labels = torch.tensor([item[2] for item in batch], dtype=torch.long)
+    node_indices = torch.tensor([item[1] for item in batch], dtype=torch.long, device=data.x.device)
+    labels = torch.tensor([item[2] for item in batch], dtype=torch.long, device=data.x.device)
     return data, node_indices, labels
 
 
 def _collate_link_batch(batch: List[tuple]) -> tuple:
     data = batch[0][0]
     edges = torch.stack([item[1] for item in batch], dim=1)
-    labels = torch.tensor([item[2] for item in batch], dtype=torch.float)
+    labels = torch.tensor([item[2] for item in batch], dtype=torch.float, device=data.x.device)
     return data, edges, labels
 
 
