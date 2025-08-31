@@ -33,7 +33,6 @@ LR_MODEL = 3e-4
 LR_UNCERTAINTY = 3e-3
 PATIENCE_EPOCHS = 5
 UNCERTAINTY_WEIGHT_DECAY = 0
-WARMUP_FRACTION = 0.15
 
 PRETRAIN_DOMAINS = {
     'b4': ['ENZYMES'],
@@ -226,7 +225,7 @@ def run_training(
                         domain_loss)
             raw_losses[task_name] = raw_loss
 
-        total_weighted_loss, _ = weighter(raw_losses, lambda_val=grl_sched())
+        total_weighted_loss = weighter(raw_losses, lambda_val=grl_sched())
 
         opt_model.zero_grad(set_to_none=True)
         opt_uncertainty.zero_grad(set_to_none=True)
@@ -319,11 +318,8 @@ def run_evaluation(
 
         domain_raw_losses_tensor = dict(zip(tasks_list, losses_tensor))
 
-        _, domain_weighted_components = weighter(domain_raw_losses_tensor)
-
-        domain_weighted_losses = [loss.detach().cpu().item()
-                                  for loss in domain_weighted_components.values()]
-        domain_weighted_mean = float(np.mean(domain_weighted_losses))
+        domain_weighted_total = weighter(domain_raw_losses_tensor)
+        domain_weighted_mean = domain_weighted_total.detach().cpu().item()
         domain_weighted_means.append(domain_weighted_mean)
 
     total_balanced_loss = float(np.mean(domain_weighted_means))
@@ -407,10 +403,9 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
 
     train_loader = create_train_data_loader(cfg.pretrain_domains, generator)
     total_steps = len(train_loader) * EPOCHS
-    warmup_steps = int(total_steps * WARMUP_FRACTION)
 
     grl_sched = GRLLambdaScheduler(total_steps=total_steps)
-    lr_multiplier = CosineWithWarmup(total_steps=total_steps, warmup_steps=warmup_steps)
+    lr_multiplier = CosineWithWarmup(total_steps=total_steps)
 
     best_total_balanced_loss = float("inf")
     epochs_since_improvement = 0

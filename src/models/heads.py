@@ -59,11 +59,13 @@ class BilinearPredictor(nn.Module):
 class DomainClassifierHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.grl = GradientReversalLayer()
+        self.grl_start = GradientReversalLayer()
         self.linear1 = nn.Linear(GNN_HIDDEN_DIM, DOMAIN_ADV_HEAD_HIDDEN_DIM)
         self.linear2 = nn.Linear(DOMAIN_ADV_HEAD_HIDDEN_DIM, DOMAIN_ADV_HEAD_OUT_DIM)
+        self.grl_end = GradientReversalLayer()
 
-    def forward(self, x: torch.Tensor, lambda_val: float) -> torch.Tensor:
-        x = self.grl(x, lambda_val)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.grl_start(x)
         x = F.relu(self.linear1(x))
-        return self.linear2(x)
+        x = self.linear2(x)
+        return self.grl_end(x)

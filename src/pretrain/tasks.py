@@ -236,7 +236,6 @@ class DomainAdversarialTask(BasePretrainTask):
 
     def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
-        lambda_val = kwargs['lambda_val']
         embeddings = []
         labels = []
 
@@ -253,7 +252,7 @@ class DomainAdversarialTask(BasePretrainTask):
         all_embeddings = torch.cat(embeddings, dim=0)
         all_labels = torch.cat(labels, dim=0)
 
-        logits = self.model.get_head('domain_adv')(all_embeddings, lambda_val)
+        logits = self.model.get_head('domain_adv')(all_embeddings)
 
         total_loss = F.cross_entropy(logits, all_labels)
         return total_loss, None

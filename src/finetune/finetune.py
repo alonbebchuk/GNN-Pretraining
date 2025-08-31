@@ -21,7 +21,6 @@ from src.data.data_setup import NUM_CLASSES, TASK_TYPES
 import torch.nn.functional as F
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "finetune"
-WARMUP_FRACTION = 0.15
 
 BATCH_SIZES = {
     'ENZYMES': 32,
@@ -282,10 +281,8 @@ def finetune(cfg: FinetuneConfig, seed: int) -> None:
 
     train_loader = create_finetune_data_loader(cfg.domain_name, 'train', cfg.batch_size, generator)
     total_steps = len(train_loader) * cfg.epochs
-    warmup_steps = int(total_steps * WARMUP_FRACTION)
 
-    lr_multiplier = CosineWithWarmup(
-        total_steps=total_steps, warmup_steps=warmup_steps)
+    lr_multiplier = CosineWithWarmup(total_steps=total_steps)
 
     best_selection_metric = -float('inf')
     epochs_since_improvement = 0

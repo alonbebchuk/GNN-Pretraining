@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 GRL_GAMMA = 10.0
 PRETRAIN_LR_MIN_FACTOR = 0.001
+WARMUP_FRACTION = 0.15
 
 
 @dataclass
@@ -27,17 +28,17 @@ class GRLLambdaScheduler:
 @dataclass
 class CosineWithWarmup:
     total_steps: int
-    warmup_steps: int
 
     def __post_init__(self) -> None:
         self._current_step = 0
+        self._warmup_steps = int(self.total_steps * WARMUP_FRACTION)
 
     def __call__(self) -> float:
-        if self._current_step < self.warmup_steps:
-            warmup_progress = self._current_step / float(self.warmup_steps)
+        if self._current_step < self._warmup_steps:
+            warmup_progress = self._current_step / float(self._warmup_steps)
             return float(PRETRAIN_LR_MIN_FACTOR + (1.0 - PRETRAIN_LR_MIN_FACTOR) * warmup_progress)
         else:
-            progress = (self._current_step - self.warmup_steps) / float(self.total_steps - self.warmup_steps)
+            progress = (self._current_step - self._warmup_steps) / float(self.total_steps - self._warmup_steps)
             cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
             return float(PRETRAIN_LR_MIN_FACTOR + (1.0 - PRETRAIN_LR_MIN_FACTOR) * cosine)
 
