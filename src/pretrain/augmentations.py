@@ -1,4 +1,3 @@
-import random
 from typing import List, Tuple
 
 import torch
@@ -15,20 +14,20 @@ NODE_DROP_MIN_NUM_NODES = 3
 NODE_DROP_RATE = 0.2
 
 
-def _attribute_mask(data: Data) -> Data:
+def _attribute_mask(data: Data, generator: torch.Generator) -> Data:
     num_features = data.num_node_features
 
     if num_features < ATTR_MASK_MIN_NUM_FEATURES:
         return data
 
     num_features_to_mask = max(1, int(num_features * ATTR_MASK_RATE))
-    mask_indices = torch.randperm(num_features, device=data.x.device)[:num_features_to_mask]
+    mask_indices = torch.randperm(num_features, device=data.x.device, generator=generator)[:num_features_to_mask]
 
     data.x[:, mask_indices] = 0.0
     return data
 
 
-def _edge_drop(data: Data) -> Data:
+def _edge_drop(data: Data, generator: torch.Generator) -> Data:
     num_edges = data.num_edges
 
     if num_edges < EDGE_DROP_MIN_NUM_EDGES:
@@ -37,12 +36,12 @@ def _edge_drop(data: Data) -> Data:
     num_edges_to_drop = max(1, int(num_edges * EDGE_DROP_RATE))
     num_edges_to_keep = num_edges - num_edges_to_drop
 
-    keep_indices = torch.randperm(num_edges, device=data.edge_index.device)[:num_edges_to_keep]
+    keep_indices = torch.randperm(num_edges, device=data.edge_index.device, generator=generator)[:num_edges_to_keep]
     data.edge_index = data.edge_index[:, keep_indices]
     return data
 
 
-def _node_drop(data: Data) -> Tuple[Data, torch.Tensor]:
+def _node_drop(data: Data, generator: torch.Generator) -> Tuple[Data, torch.Tensor]:
     num_nodes = data.num_nodes
 
     if num_nodes < NODE_DROP_MIN_NUM_NODES:
@@ -51,7 +50,7 @@ def _node_drop(data: Data) -> Tuple[Data, torch.Tensor]:
     num_nodes_to_drop = max(1, int(num_nodes * NODE_DROP_RATE))
     num_nodes_to_keep = num_nodes - num_nodes_to_drop
 
-    kept_nodes_indices = torch.randperm(num_nodes, device=data.x.device)[:num_nodes_to_keep]
+    kept_nodes_indices = torch.randperm(num_nodes, device=data.x.device, generator=generator)[:num_nodes_to_keep]
     kept_nodes_indices = kept_nodes_indices.sort()[0]
 
     edge_index, _ = subgraph(kept_nodes_indices, data.edge_index, relabel_nodes=True, num_nodes=num_nodes)
@@ -61,16 +60,16 @@ def _node_drop(data: Data) -> Tuple[Data, torch.Tensor]:
     return data, kept_nodes_indices
 
 
-def _create_augmented_view(data: Data) -> Tuple[Data, torch.Tensor]:
+def _create_augmented_view(data: Data, generator: torch.Generator) -> Tuple[Data, torch.Tensor]:
     aug_data = data.clone()
 
-    aug_data, kept_nodes_indices = _node_drop(aug_data)
+    aug_data, kept_nodes_indices = _node_drop(aug_data, generator)
 
-    if random.random() < EDGE_DROP_PROB:
-        aug_data = _edge_drop(aug_data)
+    if torch.rand(1, generator=generator).item() < EDGE_DROP_PROB:
+        aug_data = _edge_drop(aug_data, generator)
 
-    if random.random() < ATTR_MASK_PROB:
-        aug_data = _attribute_mask(aug_data)
+    if torch.rand(1, generator=generator).item() < ATTR_MASK_PROB:
+        aug_data = _attribute_mask(aug_data, generator)
 
     return aug_data, kept_nodes_indices
 
@@ -88,7 +87,7 @@ def _find_common_nodes_for_contrastive_loss(kept_nodes_1: torch.Tensor, kept_nod
 
 class GraphAugmentor:
     @staticmethod
-    def create_two_views(batch: Batch) -> Tuple[Batch, Batch, List[torch.Tensor], List[torch.Tensor]]:
+    def create_two_views(batch: Batch, generator: torch.Generator) -> Tuple[Batch, Batch, List[torch.Tensor], List[torch.Tensor]]:
         graphs = batch.to_data_list()
 
         view_1_graphs = []
@@ -97,8 +96,8 @@ class GraphAugmentor:
         mask_2_list = []
 
         for graph in graphs:
-            view_1, kept_nodes_1 = _create_augmented_view(graph)
-            view_2, kept_nodes_2 = _create_augmented_view(graph)
+            view_1, kept_nodes_1 = _create_augmented_view(graph, generator)
+            view_2, kept_nodes_2 = _create_augmented_view(graph, generator)
             mask_1, mask_2 = _find_common_nodes_for_contrastive_loss(kept_nodes_1, kept_nodes_2)
 
             view_1_graphs.append(view_1)

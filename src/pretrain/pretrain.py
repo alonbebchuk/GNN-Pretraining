@@ -185,23 +185,6 @@ def compute_domain_analysis_metrics(
     return metrics
 
 
-def get_pretrain_train_loader(domains: List[str], seed: int, epoch: int) -> torch.utils.data.DataLoader:
-    generator = torch.Generator()
-    generator.manual_seed(seed + epoch)
-    return create_train_data_loader(domains, generator)
-
-
-def get_pretrain_val_loaders(domains: List[str], seed: int) -> Dict[str, torch.utils.data.DataLoader]:
-    generator = torch.Generator()
-    generator.manual_seed(seed)
-
-    val_loaders = {}
-    for domain in domains:
-        val_loaders[domain] = create_val_data_loader(domain, generator)
-
-    return val_loaders
-
-
 def run_training(
     model: PretrainableGNN,
     tasks: Dict[str, BasePretrainTask],
@@ -209,6 +192,7 @@ def run_training(
     opt_model: AdamW,
     opt_uncertainty: AdamW,
     train_loader: torch.utils.data.DataLoader,
+    generator: torch.Generator,
     grl_sched: GRLLambdaScheduler,
     lr_multiplier: CosineWithWarmup,
     device: torch.device,
@@ -234,10 +218,9 @@ def run_training(
 
         for task_name, task in tasks.items():
             if task_name == 'domain_adv':
-                raw_loss, _ = task.compute_loss(
-                    domain_batches, lambda_val=grl_sched())
+                raw_loss, _ = task.compute_loss(domain_batches, generator, lambda_val=grl_sched())
             else:
-                raw_loss, per_domain_loss = task.compute_loss(domain_batches)
+                raw_loss, per_domain_loss = task.compute_loss(domain_batches, generator)
                 for domain, domain_loss in per_domain_loss.items():
                     per_domain_per_task_raw_losses[domain][task_name] = float(
                         domain_loss)
@@ -289,6 +272,7 @@ def run_evaluation(
     model: PretrainableGNN,
     tasks: Dict[str, BasePretrainTask],
     val_loaders: Dict[str, torch.utils.data.DataLoader],
+    generator: torch.Generator,
     weighter: UncertaintyWeighter,
     device: torch.device,
     epoch: int,
@@ -315,7 +299,7 @@ def run_evaluation(
             domain_batches = {domain_name: batch}
 
             for task_name, task in val_tasks.items():
-                raw_loss, _ = task.compute_loss(domain_batches)
+                raw_loss, _ = task.compute_loss(domain_batches, generator)
                 raw_val = float(raw_loss.detach().cpu())
                 per_domain_per_task_raw_losses[domain_name][task_name].append(
                     raw_val)
@@ -395,13 +379,18 @@ def run_evaluation(
 
 def pretrain(cfg: PretrainConfig, seed: int) -> None:
     set_global_seed(seed)
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     wandb.init(project=PROJECT_NAME, name=f"{cfg.exp_name}_{seed}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    val_loaders = get_pretrain_val_loaders(domains=cfg.pretrain_domains, seed=seed)
+    val_loaders = {}
+    for domain in cfg.pretrain_domains:
+        val_loaders[domain] = create_val_data_loader(domain, generator)
 
     model = PretrainableGNN(
         device=device,
@@ -416,7 +405,7 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
     opt_model = AdamW(model.parameters(), lr=LR_MODEL)
     opt_uncertainty = AdamW(weighter.parameters(), lr=LR_UNCERTAINTY, weight_decay=UNCERTAINTY_WEIGHT_DECAY)
 
-    train_loader = get_pretrain_train_loader(cfg.pretrain_domains, seed, 0)
+    train_loader = create_train_data_loader(cfg.pretrain_domains, generator)
     total_steps = len(train_loader) * EPOCHS
     warmup_steps = int(total_steps * WARMUP_FRACTION)
 
@@ -429,8 +418,6 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
     global_step = [0]
 
     for epoch in range(1, EPOCHS + 1):
-        train_loader = get_pretrain_train_loader(cfg.pretrain_domains, seed, epoch)
-
         run_training(
             model,
             tasks,
@@ -438,6 +425,7 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
             opt_model,
             opt_uncertainty,
             train_loader,
+            generator,
             grl_sched,
             lr_multiplier,
             device,
@@ -447,7 +435,7 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
         )
 
         is_best, val_metrics, best_total_balanced_loss, epochs_since_improvement = run_evaluation(
-            model, tasks, val_loaders, weighter, device, 
+            model, tasks, val_loaders, generator, weighter, device, 
             epoch, best_total_balanced_loss, epochs_since_improvement, 
             cfg, seed, global_step
         )

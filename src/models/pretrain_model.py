@@ -65,7 +65,7 @@ class PretrainableGNN(nn.Module):
 
         self.to(self.device)
 
-    def apply_node_masking(self, batch: Batch, domain_name: str) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def apply_node_masking(self, batch: Batch, domain_name: str, generator: torch.Generator) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         with torch.no_grad():
             original_h0 = self.input_encoders[domain_name](batch.x)
 
@@ -77,7 +77,7 @@ class PretrainableGNN(nn.Module):
 
             if graph_size >= NODE_FEATURE_MASKING_MIN_NUM_NODES:
                 num_mask = max(1, int(graph_size * NODE_FEATURE_MASKING_MASK_RATE))
-                graph_indices = torch.randperm(graph_size, device=self.device)[:num_mask]
+                graph_indices = torch.randperm(graph_size, device=self.device, generator=generator)[:num_mask]
                 mask_indices.append(graph_indices + start_idx)
 
         if mask_indices:

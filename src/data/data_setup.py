@@ -121,20 +121,21 @@ def process_tudatasets() -> None:
 
 
 def create_link_prediction_splits(data: Data) -> Dict[str, torch.Tensor]:
-    np.random.seed(RANDOM_SEED)
-    torch.manual_seed(RANDOM_SEED)
+    generator = torch.Generator()
+    generator.manual_seed(RANDOM_SEED)
 
     num_edges = data.num_edges
     num_val_test = int(num_edges * VAL_TEST_FRACTION)
     num_val = int(num_val_test * VAL_TEST_SPLIT_RATIO)
 
-    perm = torch.randperm(num_edges)
+    perm = torch.randperm(num_edges, generator=generator)
     train_edges = data.edge_index[:, perm[num_val_test:]]
     val_test_edges = data.edge_index[:, perm[:num_val_test]]
     val_test_neg_edges = negative_sampling(
         edge_index=to_undirected(train_edges),
         num_nodes=data.num_nodes,
-        num_neg_samples=num_val_test
+        num_neg_samples=num_val_test,
+        generator=generator
     )
 
     return {

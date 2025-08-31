@@ -79,24 +79,6 @@ def set_global_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def get_finetune_train_loader(domain_name: str, seed: int, batch_size: int, epoch: int) -> torch.utils.data.DataLoader:
-    generator = torch.Generator()
-    generator.manual_seed(seed + epoch)
-    return create_finetune_data_loader(domain_name, 'train', batch_size, generator)
-
-
-def get_finetune_evaluation_loaders(domain_name: str, seed: int, batch_size: int) -> Dict[str, torch.utils.data.DataLoader]:
-    generator = torch.Generator()
-    generator.manual_seed(seed)
-
-    evaluation_loaders = {
-        'val': create_finetune_data_loader(domain_name, 'val', batch_size, generator),
-        'test': create_finetune_data_loader(domain_name, 'test', batch_size, generator)
-    }
-
-    return evaluation_loaders
-
-
 def compute_loss_and_metrics(model: torch.nn.Module, batch, device: torch.device, task_type: str, domain_name: str) -> Dict[str, float]:
     model.eval()
 
@@ -212,7 +194,8 @@ def run_training(
     device: torch.device,
     epoch: int,
     global_step_ref: List[int],
-    cfg: FinetuneConfig
+    cfg: FinetuneConfig,
+    generator: torch.Generator
 ) -> None:
     model.train()
 
@@ -234,8 +217,7 @@ def run_training(
         elif cfg.task_type == 'link_prediction':
             data, pos_edges, _ = batch_or_data
             data, pos_edges = data.to(device), pos_edges.to(device)
-            neg_edges = negative_sampling(
-                data.edge_index, data.num_nodes, pos_edges.size(1)).to(device)
+            neg_edges = negative_sampling(data.edge_index, data.num_nodes, pos_edges.size(1), generator=generator).to(device)
             all_edges = torch.cat([pos_edges, neg_edges], dim=1)
             edge_labels = torch.cat([torch.ones(pos_edges.size(
                 1), device=device), torch.zeros(neg_edges.size(1), device=device)])
@@ -276,16 +258,17 @@ def run_training(
 
 def finetune(cfg: FinetuneConfig, seed: int) -> None:
     set_global_seed(seed)
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    wandb.init(project="gnn-pretraining-finetune",
-               name=f"{cfg.exp_name}_{seed}")
+    wandb.init(project="gnn-pretraining-finetune", name=f"{cfg.exp_name}_{seed}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    evaluation_loaders = get_finetune_evaluation_loaders(cfg.domain_name, seed, cfg.batch_size)
-    val_loader = evaluation_loaders['val']
-    test_loader = evaluation_loaders['test']
+    val_loader = create_finetune_data_loader(cfg.domain_name, 'val', cfg.batch_size, generator)
+    test_loader = create_finetune_data_loader(cfg.domain_name, 'test', cfg.batch_size, generator)
 
     model = create_finetune_model(
         device=device,
@@ -297,8 +280,7 @@ def finetune(cfg: FinetuneConfig, seed: int) -> None:
 
     optimizer = AdamW(model.param_groups)
 
-    train_loader = get_finetune_train_loader(
-        cfg.domain_name, seed, cfg.batch_size, 0)
+    train_loader = create_finetune_data_loader(cfg.domain_name, 'train', cfg.batch_size, generator)
     total_steps = len(train_loader) * cfg.epochs
     warmup_steps = int(total_steps * WARMUP_FRACTION)
 
@@ -311,9 +293,6 @@ def finetune(cfg: FinetuneConfig, seed: int) -> None:
     global_step = [0]
 
     for epoch in range(1, cfg.epochs + 1):
-        train_loader = get_finetune_train_loader(
-            cfg.domain_name, seed, cfg.batch_size, epoch)
-
         run_training(
             model,
             optimizer,
@@ -322,7 +301,8 @@ def finetune(cfg: FinetuneConfig, seed: int) -> None:
             device,
             epoch,
             global_step,
-            cfg
+            cfg,
+            generator
         )
 
         is_best, formatted_val_metrics, best_selection_metric, epochs_since_improvement = run_evaluation(

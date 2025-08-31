@@ -19,19 +19,19 @@ class BasePretrainTask(ABC):
         self.model = model
 
     @abstractmethod
-    def compute_loss(self, domain_batches: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
+    def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         raise NotImplementedError
 
 
 class NodeFeatureMaskingTask(BasePretrainTask):
-    def compute_loss(self, domain_batches: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
+    def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
         total_size = 0
         per_domain_losses = {}
 
         for domain_name, batch in domain_batches.items():
-            masked_h0, mask_indices, target_h0 = self.model.apply_node_masking(batch, domain_name)
+            masked_h0, mask_indices, target_h0 = self.model.apply_node_masking(batch, domain_name, generator)
 
             if mask_indices.size(0) > 0:
                 h_final = self.model.forward_with_h0(masked_h0, batch.edge_index)
@@ -51,7 +51,7 @@ class NodeFeatureMaskingTask(BasePretrainTask):
 
 
 class LinkPredictionTask(BasePretrainTask):
-    def compute_loss(self, domain_batches: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
+    def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
         total_size = 0
@@ -63,7 +63,8 @@ class LinkPredictionTask(BasePretrainTask):
             neg_edges = batched_negative_sampling(
                 edge_index=to_undirected(pos_edges),
                 batch=batch.batch,
-                num_neg_samples=pos_edges.size(1)
+                num_neg_samples=pos_edges.size(1),
+                generator=generator
             )
             combined_edges = torch.cat([pos_edges, neg_edges], dim=1)
             labels = torch.cat([
@@ -107,14 +108,14 @@ class NodeContrastiveTask(BasePretrainTask):
         size = 2 * N
         return loss, size
 
-    def compute_loss(self, domain_batches: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
+    def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
         total_size = 0
         per_domain_losses = {}
 
         for domain_name, batch in domain_batches.items():
-            batch_v1, batch_v2, mask_1_list, mask_2_list = GraphAugmentor.create_two_views(batch)
+            batch_v1, batch_v2, mask_1_list, mask_2_list = GraphAugmentor.create_two_views(batch, generator)
 
             h1 = self.model(batch_v1, domain_name)
             h2 = self.model(batch_v2, domain_name)
@@ -152,7 +153,7 @@ class NodeContrastiveTask(BasePretrainTask):
 
 
 class GraphContrastiveTask(BasePretrainTask):
-    def compute_loss(self, domain_batches: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
+    def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
         total_size = 0
@@ -203,7 +204,7 @@ class GraphContrastiveTask(BasePretrainTask):
 
 
 class GraphPropertyPredictionTask(BasePretrainTask):
-    def compute_loss(self, domain_batches: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
+    def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         total_loss = torch.tensor(0.0, device=device)
         total_size = 0
@@ -233,7 +234,7 @@ class DomainAdversarialTask(BasePretrainTask):
         super().__init__(model)
         self.domain_to_idx = {name: i for i, name in enumerate(self.model.input_encoders.keys())}
 
-    def compute_loss(self, domain_batches: Dict[str, Batch], **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
+    def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator, **kwargs: Any) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
         lambda_val = kwargs['lambda_val']
         embeddings = []
