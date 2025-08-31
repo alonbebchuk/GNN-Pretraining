@@ -13,7 +13,7 @@ class UncertaintyWeighter(nn.Module):
         })
         self.domain_adv = 'domain_adv' in task_names
 
-    def forward(self, raw_losses: Dict[str, torch.Tensor], lambda_val: float = None) -> torch.Tensor:
+    def forward(self, raw_losses: Dict[str, torch.Tensor], lambda_val: float) -> torch.Tensor:
         device = next(iter(raw_losses.values())).device
         total_weighted_loss = torch.tensor(0.0, device=device)
 
@@ -22,7 +22,7 @@ class UncertaintyWeighter(nn.Module):
             weighted_loss = 0.5 * (raw_loss * torch.exp(-log_sigma_sq) + log_sigma_sq)
             total_weighted_loss += weighted_loss
 
-        if self.domain_adv and lambda_val is not None:
+        if self.domain_adv:
             domain_adv_loss = -(lambda_val * raw_losses['domain_adv'])
             total_weighted_loss += domain_adv_loss
 

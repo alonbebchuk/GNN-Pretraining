@@ -273,6 +273,7 @@ def run_evaluation(
     val_loaders: Dict[str, torch.utils.data.DataLoader],
     generator: torch.Generator,
     weighter: UncertaintyWeighter,
+    grl_sched: GRLLambdaScheduler,
     device: torch.device,
     epoch: int,
     best_total_balanced_loss: float,
@@ -283,7 +284,7 @@ def run_evaluation(
 ) -> Tuple[bool, Dict[str, float], float, int]:
     model.eval()
 
-    val_tasks = {k: v for k, v in tasks.items() if k != 'domain_adv'}
+    val_tasks = tasks  # Include ALL tasks in validation
 
     per_domain_per_task_raw_losses = {}
 
@@ -291,34 +292,62 @@ def run_evaluation(
         per_domain_per_task_raw_losses[domain_name] = {}
 
         for task_name in val_tasks.keys():
-            per_domain_per_task_raw_losses[domain_name][task_name] = []
+            if task_name != 'domain_adv':  # domain_adv handled separately
+                per_domain_per_task_raw_losses[domain_name][task_name] = []
 
         for batch in val_loader:
             batch = batch.to(device)
             domain_batches = {domain_name: batch}
 
             for task_name, task in val_tasks.items():
-                raw_loss, _ = task.compute_loss(domain_batches, generator)
-                raw_val = float(raw_loss.detach().cpu())
-                per_domain_per_task_raw_losses[domain_name][task_name].append(
-                    raw_val)
+                if task_name == 'domain_adv':
+                    continue  # domain_adv handled after all domains processed
+                else:
+                    raw_loss, _ = task.compute_loss(domain_batches, generator)
+                    raw_val = float(raw_loss.detach().cpu())
+                    per_domain_per_task_raw_losses[domain_name][task_name].append(
+                        raw_val)
 
+    # Compute domain adversarial loss if present (operates on all domains)
+    domain_adv_loss = None
+    if 'domain_adv' in val_tasks:
+        # Collect batches from all domains for domain_adv computation
+        all_domain_batches = {}
+        for domain_name, val_loader in val_loaders.items():
+            for batch in val_loader:
+                all_domain_batches[domain_name] = batch.to(device)
+                break  # Take first batch for domain_adv computation
+        
+        domain_adv_task = val_tasks['domain_adv']
+        domain_adv_loss_tensor, _ = domain_adv_task.compute_loss(
+            all_domain_batches, generator, lambda_val=grl_sched()
+        )
+        domain_adv_loss = float(domain_adv_loss_tensor.detach().cpu())
+
+    # Average losses for regular tasks
     for domain_name in val_loaders.keys():
         for task_name in val_tasks.keys():
-            raw_losses = per_domain_per_task_raw_losses[domain_name][task_name]
-            per_domain_per_task_raw_losses[domain_name][task_name] = float(
-                np.mean(raw_losses))
+            if task_name != 'domain_adv':
+                raw_losses = per_domain_per_task_raw_losses[domain_name][task_name]
+                per_domain_per_task_raw_losses[domain_name][task_name] = float(
+                    np.mean(raw_losses))
 
     domain_weighted_means = []
     for domain in per_domain_per_task_raw_losses:
         tasks_list = list(per_domain_per_task_raw_losses[domain].keys())
         losses_list = list(per_domain_per_task_raw_losses[domain].values())
+        
+        # Add domain_adv_loss if present
+        if domain_adv_loss is not None:
+            tasks_list.append('domain_adv')
+            losses_list.append(domain_adv_loss)
+        
         losses_tensor = torch.tensor(
             losses_list, device=device, dtype=torch.float32)
 
         domain_raw_losses_tensor = dict(zip(tasks_list, losses_tensor))
 
-        domain_weighted_total = weighter(domain_raw_losses_tensor)
+        domain_weighted_total = weighter(domain_raw_losses_tensor, lambda_val=grl_sched())
         domain_weighted_mean = domain_weighted_total.detach().cpu().item()
         domain_weighted_means.append(domain_weighted_mean)
 
@@ -430,7 +459,7 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
         )
 
         is_best, val_metrics, best_total_balanced_loss, epochs_since_improvement = run_evaluation(
-            model, tasks, val_loaders, generator, weighter, device, 
+            model, tasks, val_loaders, generator, weighter, grl_sched, device, 
             epoch, best_total_balanced_loss, epochs_since_improvement, 
             cfg, seed, global_step
         )
