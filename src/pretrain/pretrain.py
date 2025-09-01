@@ -25,10 +25,11 @@ from src.pretrain.tasks import (
 )
 
 BATCH_SIZE = 32
-EPOCHS = 5
-LR_MODEL = 3e-4
-LR_UNCERTAINTY = 3e-3
-PATIENCE_FRACTION = 1
+EPOCHS = 50
+LR_MODEL = 1e-4
+LR_UNCERTAINTY = 1e-3
+PATIENCE_FRACTION = 0.1
+MODEL_WEIGHT_DECAY = 1e-4
 UNCERTAINTY_WEIGHT_DECAY = 0
 
 PRETRAIN_DOMAINS = {
@@ -139,6 +140,10 @@ def run_training(
         opt_model.zero_grad(set_to_none=True)
         opt_uncertainty.zero_grad(set_to_none=True)
         total_weighted_loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(weighter.parameters(), max_norm=1.0)
+
         opt_model.step()
         opt_uncertainty.step()
 
@@ -279,7 +284,7 @@ def pretrain(cfg: PretrainConfig) -> None:
 
     weighter = UncertaintyWeighter(task_names=cfg.active_tasks).to(device)
 
-    opt_model = AdamW(model.parameters(), lr=LR_MODEL)
+    opt_model = AdamW(model.parameters(), lr=LR_MODEL, weight_decay=MODEL_WEIGHT_DECAY)
     opt_uncertainty = AdamW(weighter.parameters(), lr=LR_UNCERTAINTY, weight_decay=UNCERTAINTY_WEIGHT_DECAY)
 
     train_loader = create_train_data_loader(cfg.pretrain_domains, generator)

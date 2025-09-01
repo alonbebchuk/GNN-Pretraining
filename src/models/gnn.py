@@ -5,7 +5,7 @@ from torch_geometric.nn import GINConv
 
 DROPOUT_RATE = 0.2
 GNN_HIDDEN_DIM = 256
-GNN_NUM_LAYERS = 3
+GNN_NUM_LAYERS = 5
 
 
 class InputEncoder(nn.Module):
