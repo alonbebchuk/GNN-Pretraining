@@ -24,11 +24,11 @@ from src.pretrain.tasks import (
     NodeFeatureMaskingTask,
 )
 
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 EPOCHS = 50
-LR_MODEL = 1e-4
-LR_UNCERTAINTY = 1e-3
-PATIENCE_FRACTION = 0.1
+LR_MODEL = 5e-5
+LR_UNCERTAINTY = 5e-4
+PATIENCE_FRACTION = 0.3
 MODEL_WEIGHT_DECAY = 1e-4
 UNCERTAINTY_WEIGHT_DECAY = 0
 
@@ -141,20 +141,21 @@ def run_training(
         opt_uncertainty.zero_grad(set_to_none=True)
         total_weighted_loss.backward()
 
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        torch.nn.utils.clip_grad_norm_(weighter.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+        torch.nn.utils.clip_grad_norm_(weighter.parameters(), max_norm=0.5)
 
         opt_model.step()
         opt_uncertainty.step()
 
-        scale = lr_multiplier()
-        for pg in opt_model.param_groups:
-            pg["lr"] = LR_MODEL * scale
-        for pg in opt_uncertainty.param_groups:
-            pg["lr"] = LR_UNCERTAINTY * scale
+        # Disable learning rate scheduling for stability
+        # scale = lr_multiplier()
+        # for pg in opt_model.param_groups:
+        #     pg["lr"] = LR_MODEL * scale
+        # for pg in opt_uncertainty.param_groups:
+        #     pg["lr"] = LR_UNCERTAINTY * scale
 
         grl_sched.step()
-        lr_multiplier.step()
+        # lr_multiplier.step()
 
         train_metrics = compute_training_metrics(
             per_domain_per_task_raw_losses,
