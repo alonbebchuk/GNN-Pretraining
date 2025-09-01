@@ -65,7 +65,7 @@ def create_val_data_loader(domain_name: str, generator: torch.Generator) -> PyGD
     return PyGDataLoader(dataset, batch_size=BATCH_SIZE, generator=generator)
 
 
-def create_train_data_loader(domains: List[str], generator: torch.Generator) -> torch.utils.data.DataLoader:
+def create_train_data_loader(domains: List[str], generator: torch.Generator) -> BalancedMultiDomainSampler:
     domain_datasets = {}
 
     for domain in domains:
@@ -79,4 +79,4 @@ def create_train_data_loader(domains: List[str], generator: torch.Generator) -> 
         domain_datasets[domain] = GraphDataset(graphs, split_indices)
 
     sampler = BalancedMultiDomainSampler(domain_datasets, generator)
-    return torch.utils.data.DataLoader(sampler)
+    return sampler
