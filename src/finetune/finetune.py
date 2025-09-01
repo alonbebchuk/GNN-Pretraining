@@ -48,11 +48,11 @@ class FinetuneConfig:
     pretrained_scheme: str
     seed: int
 
-    exp_name: str
-    task_type: str
-    batch_size: int
-    epochs: int
-    patience: int
+    exp_name: str = None
+    task_type: str = None
+    batch_size: int = None
+    epochs: int = None
+    patience: int = None
 
     def __post_init__(self):
         self.exp_name = f"{self.domain_name}_{self.finetune_strategy}_{self.pretrained_scheme}"

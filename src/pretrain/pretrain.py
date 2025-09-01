@@ -25,7 +25,7 @@ from src.pretrain.tasks import (
 )
 
 BATCH_SIZE = 32
-EPOCHS = 50
+EPOCHS = 5
 LR_MODEL = 3e-4
 LR_UNCERTAINTY = 3e-3
 PATIENCE_FRACTION = 0.1
@@ -62,8 +62,8 @@ class PretrainConfig:
     exp_name: str
     seed: int
 
-    pretrain_domains: List[str]
-    active_tasks: List[str]
+    pretrain_domains: List[str] = None
+    active_tasks: List[str] = None
 
     def __post_init__(self):
         self.pretrain_domains = PRETRAIN_DOMAINS[self.exp_name]
