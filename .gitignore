@@ -4,3 +4,17 @@ __pycache__/
 # Data folders
 data/raw/
 data/processed/
+
+.conda/
+
+# VSCode
+.vscode/
+
+# Wandb
+wandb/
+
+# Checkpoints
+checkpoints/
+
+# Artifacts
+artifacts/
