@@ -35,7 +35,14 @@ PATIENCE_EPOCHS = 5
 UNCERTAINTY_WEIGHT_DECAY = 0
 
 PRETRAIN_DOMAINS = {
+    'b2': PRETRAIN_TUDATASETS,
+    'b3': PRETRAIN_TUDATASETS,
     'b4': ['ENZYMES'],
+    's1': PRETRAIN_TUDATASETS,
+    's2': PRETRAIN_TUDATASETS,
+    's3': PRETRAIN_TUDATASETS,
+    's4': PRETRAIN_TUDATASETS,
+    's5': PRETRAIN_TUDATASETS,
 }
 
 ACTIVE_TASKS = {
@@ -100,90 +107,6 @@ def instantiate_tasks(model: PretrainableGNN, active_tasks: List[str]) -> Dict[s
     return tasks
 
 
-def compute_task_synergy_metrics(
-    per_domain_per_task_raw_losses: Dict[str, Dict[str, float]],
-    total_balanced_loss: float,
-    weighter: UncertaintyWeighter,
-    active_tasks: List[str]
-) -> Dict[str, float]:
-    """Compute task synergy and contribution analysis metrics."""
-
-    metrics = {}
-
-    # Task contribution analysis
-    for task_name in active_tasks:
-        if task_name == 'domain_adv':
-            continue
-
-        # Compute average loss for this task across domains
-        task_losses = []
-        for domain_losses in per_domain_per_task_raw_losses.values():
-            if task_name in domain_losses:
-                task_losses.append(domain_losses[task_name])
-
-        if task_losses:
-            avg_task_loss = np.mean(task_losses)
-            metrics[f'task_analysis/{task_name}_avg_loss'] = avg_task_loss
-            metrics[f'task_analysis/{task_name}_loss_std'] = np.std(
-                task_losses)
-
-    # Task balance analysis using uncertainty weights
-    if hasattr(weighter, 'log_sigma'):
-        for i, task_name in enumerate(active_tasks):
-            if task_name != 'domain_adv' and i < len(weighter.log_sigma):
-                sigma = torch.exp(weighter.log_sigma[i]).item()
-                metrics[f'task_balance/{task_name}_uncertainty_weight'] = 1.0 / (
-                    sigma ** 2)
-                metrics[f'task_balance/{task_name}_sigma'] = sigma
-
-    # Overall task diversity
-    task_losses_flat = []
-    for domain_losses in per_domain_per_task_raw_losses.values():
-        task_losses_flat.extend(domain_losses.values())
-
-    if len(task_losses_flat) > 1:
-        metrics['task_analysis/task_loss_diversity'] = np.std(task_losses_flat)
-        metrics['task_analysis/task_loss_mean'] = np.mean(task_losses_flat)
-
-    return metrics
-
-
-def compute_domain_analysis_metrics(
-    per_domain_per_task_raw_losses: Dict[str, Dict[str, float]],
-    pretrain_domains: List[str]
-) -> Dict[str, float]:
-    """Compute cross-domain transfer and similarity metrics."""
-
-    metrics = {}
-
-    # Per-domain performance
-    for domain in pretrain_domains:
-        if domain in per_domain_per_task_raw_losses:
-            domain_losses = list(
-                per_domain_per_task_raw_losses[domain].values())
-            if domain_losses:
-                metrics[f'domain/{domain}_avg_loss'] = np.mean(domain_losses)
-                metrics[f'domain/{domain}_loss_std'] = np.std(domain_losses)
-
-    # Cross-domain consistency
-    if len(pretrain_domains) > 1:
-        domain_avg_losses = []
-        for domain in pretrain_domains:
-            if domain in per_domain_per_task_raw_losses:
-                domain_losses = list(
-                    per_domain_per_task_raw_losses[domain].values())
-                if domain_losses:
-                    domain_avg_losses.append(np.mean(domain_losses))
-
-        if len(domain_avg_losses) > 1:
-            metrics['domain/cross_domain_consistency'] = 1.0 / \
-                (1.0 + np.std(domain_avg_losses))
-            metrics['domain/domain_performance_gap'] = max(
-                domain_avg_losses) - min(domain_avg_losses)
-
-    return metrics
-
-
 def run_training(
     model: PretrainableGNN,
     tasks: Dict[str, BasePretrainTask],
@@ -206,8 +129,7 @@ def run_training(
         global_step_ref[0] += 1
 
         for domain_name in domain_batches:
-            domain_batches[domain_name] = domain_batches[domain_name].to(
-                device)
+            domain_batches[domain_name] = domain_batches[domain_name].to(device)
 
         raw_losses = {}
         per_domain_per_task_raw_losses = {}
@@ -221,11 +143,29 @@ def run_training(
             else:
                 raw_loss, per_domain_loss = task.compute_loss(domain_batches, generator)
                 for domain, domain_loss in per_domain_loss.items():
-                    per_domain_per_task_raw_losses[domain][task_name] = float(
-                        domain_loss)
+                    per_domain_per_task_raw_losses[domain][task_name] = float(domain_loss)
             raw_losses[task_name] = raw_loss
 
         total_weighted_loss = weighter(raw_losses, lambda_val=grl_sched())
+
+        # Compute per-domain weighted losses for analysis
+        per_domain_weighted_losses = {}
+        for domain in per_domain_per_task_raw_losses.keys():
+            # Create domain-specific raw losses dict
+            domain_raw_losses = {}
+            for task_name in per_domain_per_task_raw_losses[domain].keys():
+                domain_raw_losses[task_name] = torch.tensor(
+                    per_domain_per_task_raw_losses[domain][task_name], 
+                    device=device
+                )
+            
+            # Add domain_adv if present (shared across all domains)
+            if 'domain_adv' in raw_losses:
+                domain_raw_losses['domain_adv'] = raw_losses['domain_adv']
+            
+            # Compute weighted loss for this domain
+            domain_weighted_loss = weighter(domain_raw_losses, lambda_val=grl_sched())
+            per_domain_weighted_losses[domain] = float(domain_weighted_loss.detach().cpu())
 
         opt_model.zero_grad(set_to_none=True)
         opt_uncertainty.zero_grad(set_to_none=True)
@@ -253,15 +193,9 @@ def run_training(
             model,
             epoch,
             global_step_ref[0],
+            step_start_time,
+            per_domain_weighted_losses
         )
-
-        # Streamlined system metrics
-        step_time_ms = (time.time() - step_start_time) * 1000
-        train_metrics['system/avg_step_time_ms'] = step_time_ms
-
-        if device.type == "cuda":
-            train_metrics['system/gpu_memory_gb'] = torch.cuda.memory_allocated() / \
-                1024**3
 
         wandb.log(train_metrics, step=global_step_ref[0])
 
@@ -276,7 +210,7 @@ def run_evaluation(
     grl_sched: GRLLambdaScheduler,
     device: torch.device,
     epoch: int,
-    best_total_balanced_loss: float,
+    best_total_weighted_loss: float,
     epochs_since_improvement: int,
     cfg: PretrainConfig,
     seed: int,
@@ -284,98 +218,106 @@ def run_evaluation(
 ) -> Tuple[bool, Dict[str, float], float, int]:
     model.eval()
 
-    val_tasks = tasks  # Include ALL tasks in validation
+    val_tasks = tasks
 
+    # Collect all validation batches first
+    all_val_batches = {}
+    for domain_name, val_loader in val_loaders.items():
+        domain_batches = []
+        for batch in val_loader:
+            domain_batches.append(batch.to(device))
+        all_val_batches[domain_name] = domain_batches
+
+    # Compute raw losses and per-domain losses like in training
+    raw_losses = {}
     per_domain_per_task_raw_losses = {}
 
-    for domain_name, val_loader in val_loaders.items():
+    for domain_name in val_loaders.keys():
         per_domain_per_task_raw_losses[domain_name] = {}
 
-        for task_name in val_tasks.keys():
-            if task_name != 'domain_adv':  # domain_adv handled separately
-                per_domain_per_task_raw_losses[domain_name][task_name] = []
+    # Process each task like in run_training
+    for task_name, task in val_tasks.items():
+        if task_name == 'domain_adv':
+            # Domain adversarial uses first batch from all domains
+            domain_batches = {domain: batches[0] for domain, batches in all_val_batches.items()}
+            raw_loss, _ = task.compute_loss(domain_batches, generator, lambda_val=grl_sched())
+            raw_losses[task_name] = raw_loss
+        else:
+            # Regular tasks: compute per domain and aggregate
+            task_losses = []
+            for domain_name, domain_batches in all_val_batches.items():
+                domain_task_losses = []
+                for batch in domain_batches:
+                    single_batch_dict = {domain_name: batch}
+                    raw_loss, _ = task.compute_loss(single_batch_dict, generator)
+                    domain_task_losses.append(raw_loss)
+                
+                # Average across batches for this domain-task
+                domain_avg_loss = torch.stack(domain_task_losses).mean()
+                per_domain_per_task_raw_losses[domain_name][task_name] = float(domain_avg_loss.detach().cpu())
+                task_losses.append(domain_avg_loss)
+            
+            # Average across domains for this task  
+            raw_losses[task_name] = torch.stack(task_losses).mean()
 
-        for batch in val_loader:
-            batch = batch.to(device)
-            domain_batches = {domain_name: batch}
+    # Compute total weighted loss like in training (not per-domain)
+    # Average per-domain losses for each task
+    task_domain_averages = {}
+    for task_name in set().union(*[domain_tasks.keys() for domain_tasks in per_domain_per_task_raw_losses.values()]):
+        task_losses = [per_domain_per_task_raw_losses[domain][task_name] 
+                      for domain in per_domain_per_task_raw_losses.keys() 
+                      if task_name in per_domain_per_task_raw_losses[domain]]
+        task_domain_averages[task_name] = float(np.mean(task_losses))
 
-            for task_name, task in val_tasks.items():
-                if task_name == 'domain_adv':
-                    continue  # domain_adv handled after all domains processed
-                else:
-                    raw_loss, _ = task.compute_loss(domain_batches, generator)
-                    raw_val = float(raw_loss.detach().cpu())
-                    per_domain_per_task_raw_losses[domain_name][task_name].append(
-                        raw_val)
+    # Add domain_adv if present (computed once across all domains)
+    if 'domain_adv' in raw_losses:
+        task_domain_averages['domain_adv'] = float(raw_losses['domain_adv'].detach().cpu())
 
-    # Compute domain adversarial loss if present (operates on all domains)
-    domain_adv_loss = None
-    if 'domain_adv' in val_tasks:
-        # Collect batches from all domains for domain_adv computation
-        all_domain_batches = {}
-        for domain_name, val_loader in val_loaders.items():
-            for batch in val_loader:
-                all_domain_batches[domain_name] = batch.to(device)
-                break  # Take first batch for domain_adv computation
+    # Convert to tensor dict for weighter (like training)
+    domain_averaged_raw_losses = {
+        task: torch.tensor(loss, device=device) 
+        for task, loss in task_domain_averages.items()
+    }
+    
+    # Compute total weighted loss once (like training)
+    total_weighted_loss_tensor = weighter(domain_averaged_raw_losses, lambda_val=grl_sched())
+    total_weighted_loss = float(total_weighted_loss_tensor.detach().cpu())
+
+    # Compute per-domain weighted losses for validation analysis
+    per_domain_weighted_losses_val = {}
+    for domain in per_domain_per_task_raw_losses.keys():
+        # Create domain-specific raw losses dict
+        domain_raw_losses = {}
+        for task_name in per_domain_per_task_raw_losses[domain].keys():
+            domain_raw_losses[task_name] = torch.tensor(
+                per_domain_per_task_raw_losses[domain][task_name], 
+                device=device
+            )
         
-        domain_adv_task = val_tasks['domain_adv']
-        domain_adv_loss_tensor, _ = domain_adv_task.compute_loss(
-            all_domain_batches, generator, lambda_val=grl_sched()
-        )
-        domain_adv_loss = float(domain_adv_loss_tensor.detach().cpu())
-
-    # Average losses for regular tasks
-    for domain_name in val_loaders.keys():
-        for task_name in val_tasks.keys():
-            if task_name != 'domain_adv':
-                raw_losses = per_domain_per_task_raw_losses[domain_name][task_name]
-                per_domain_per_task_raw_losses[domain_name][task_name] = float(
-                    np.mean(raw_losses))
-
-    domain_weighted_means = []
-    for domain in per_domain_per_task_raw_losses:
-        tasks_list = list(per_domain_per_task_raw_losses[domain].keys())
-        losses_list = list(per_domain_per_task_raw_losses[domain].values())
+        # Add domain_adv if present (shared across all domains)
+        if 'domain_adv' in raw_losses:
+            domain_raw_losses['domain_adv'] = raw_losses['domain_adv']
         
-        # Add domain_adv_loss if present
-        if domain_adv_loss is not None:
-            tasks_list.append('domain_adv')
-            losses_list.append(domain_adv_loss)
-        
-        losses_tensor = torch.tensor(
-            losses_list, device=device, dtype=torch.float32)
+        # Compute weighted loss for this domain
+        domain_weighted_loss = weighter(domain_raw_losses, lambda_val=grl_sched())
+        per_domain_weighted_losses_val[domain] = float(domain_weighted_loss.detach().cpu())
 
-        domain_raw_losses_tensor = dict(zip(tasks_list, losses_tensor))
-
-        domain_weighted_total = weighter(domain_raw_losses_tensor, lambda_val=grl_sched())
-        domain_weighted_mean = domain_weighted_total.detach().cpu().item()
-        domain_weighted_means.append(domain_weighted_mean)
-
-    total_balanced_loss = float(np.mean(domain_weighted_means))
-
-    # Compute all validation metrics
     val_metrics = compute_validation_metrics(
         per_domain_per_task_raw_losses,
-        total_balanced_loss,
+        raw_losses,
+        total_weighted_loss,
         weighter,
+        grl_sched,
+        epoch,
+        global_step[0],
+        per_domain_weighted_losses_val
     )
-    
-    # Add advanced analysis metrics
-    task_synergy_metrics = compute_task_synergy_metrics(
-        per_domain_per_task_raw_losses, total_balanced_loss, weighter, cfg.active_tasks
-    )
-    domain_analysis_metrics = compute_domain_analysis_metrics(
-        per_domain_per_task_raw_losses, cfg.pretrain_domains
-    )
-    
-    val_metrics.update(task_synergy_metrics)
-    val_metrics.update(domain_analysis_metrics)
 
-    current_total_balanced_loss = val_metrics['val/loss/total_balanced']
-    is_best = current_total_balanced_loss < best_total_balanced_loss
+    current_total_weighted_loss = val_metrics['val/loss/total_weighted']
+    is_best = current_total_weighted_loss < best_total_weighted_loss
     
     if is_best:
-        new_best_loss = current_total_balanced_loss
+        new_best_loss = current_total_weighted_loss
         new_epochs_since_improvement = 0
 
         checkpoint = {
@@ -394,7 +336,7 @@ def run_evaluation(
         artifact.add_file(str(best_model_path))
         wandb.log_artifact(artifact)
     else:
-        new_best_loss = best_total_balanced_loss
+        new_best_loss = best_total_weighted_loss
         new_epochs_since_improvement = epochs_since_improvement + 1
 
     wandb.log(val_metrics, step=global_step[0])
@@ -436,7 +378,7 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
     grl_sched = GRLLambdaScheduler(total_steps=total_steps)
     lr_multiplier = CosineWithWarmup(total_steps=total_steps)
 
-    best_total_balanced_loss = float("inf")
+    best_total_weighted_loss = float("inf")
     epochs_since_improvement = 0
 
     global_step = [0]
@@ -458,34 +400,14 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
             cfg
         )
 
-        is_best, val_metrics, best_total_balanced_loss, epochs_since_improvement = run_evaluation(
+        is_best, val_metrics, best_total_weighted_loss, epochs_since_improvement = run_evaluation(
             model, tasks, val_loaders, generator, weighter, grl_sched, device, 
-            epoch, best_total_balanced_loss, epochs_since_improvement, 
+            epoch, best_total_weighted_loss, epochs_since_improvement, 
             cfg, seed, global_step
         )
 
         if epochs_since_improvement >= PATIENCE_EPOCHS:
             break
-
-    final_metrics = {
-        'convergence/total_epochs': epoch,
-        'convergence/early_stopped': epochs_since_improvement >= PATIENCE_EPOCHS,
-        'convergence/epochs_to_best': epoch - epochs_since_improvement,
-        'convergence/training_efficiency': 1.0 / max(best_total_balanced_loss, 1e-6),
-        'convergence/patience_utilization': epochs_since_improvement / PATIENCE_EPOCHS,
-        'performance/best_total_balanced_loss': best_total_balanced_loss,
-        'performance/final_loss': val_metrics.get('val/loss/total_balanced', best_total_balanced_loss),
-        'performance/loss_improvement': abs(best_total_balanced_loss - val_metrics.get('val/loss/total_balanced', best_total_balanced_loss)),
-        'experiment/scheme_name': cfg.exp_name,
-        'experiment/num_domains': len(cfg.pretrain_domains),
-        'experiment/num_active_tasks': len(cfg.active_tasks),
-        'experiment/multitask_complexity': len(cfg.active_tasks) * len(cfg.pretrain_domains),
-        'training/total_steps': global_step[0],
-        'training/steps_per_epoch': global_step[0] / max(epoch, 1),
-        'training/convergence_rate': (epoch - epochs_since_improvement) / max(epoch, 1),
-    }
-
-    wandb.log(final_metrics)
 
     wandb.finish()
 

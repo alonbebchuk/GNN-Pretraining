@@ -1,8 +1,8 @@
 method: grid
 
-program: "/kaggle/working/gnn-pretraining/src/finetune/finetune.py"
+program: "../../src/finetune/finetune.py"
 
-config_template: "/kaggle/working/gnn-pretraining/configs/templates/finetune.yaml"
+config_template: "../templates/finetune.yaml"
 
 parameters:
   domain_name:

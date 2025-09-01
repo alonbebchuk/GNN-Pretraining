@@ -1,8 +1,8 @@
 method: grid
 
-program: "/kaggle/working/gnn-pretraining/src/pretrain/pretrain.py"
+program: "../../src/pretrain/pretrain.py"
 
-config_template: "/kaggle/working/gnn-pretraining/configs/templates/pretrain.yaml"
+config_template: "../templates/pretrain.yaml"
 
 parameters:
   exp_name:

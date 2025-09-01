@@ -12,17 +12,7 @@ from typing import Dict, Any, List
 
 PRETRAIN_SWEEP_CONFIG = "configs/sweeps/pretrain.yaml"
 
-# Map absolute paths to local paths
-CONFIG_MAPPING = {
-    "/kaggle/working/gnn-pretraining/configs/pretrain/b2.yaml": "configs/pretrain/b2.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/b3.yaml": "configs/pretrain/b3.yaml", 
-    "/kaggle/working/gnn-pretraining/configs/pretrain/b4.yaml": "configs/pretrain/b4.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s1.yaml": "configs/pretrain/s1.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s2.yaml": "configs/pretrain/s2.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s3.yaml": "configs/pretrain/s3.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s4.yaml": "configs/pretrain/s4.yaml",
-    "/kaggle/working/gnn-pretraining/configs/pretrain/s5.yaml": "configs/pretrain/s5.yaml"
-}
+
 
 def load_pretrain_sweep_config() -> Dict[str, Any]:
     """Load pretraining sweep configuration."""
@@ -35,10 +25,9 @@ def generate_pretrain_combinations(sweep_config: Dict[str, Any]) -> List[Dict[st
     
     combinations = []
     for config_path in params['config']['values']:
-        local_config = CONFIG_MAPPING.get(config_path, config_path)
         for seed in params['seed']['values']:
             combinations.append({
-                'config': local_config,
+                'config': config_path,
                 'seed': seed
             })
     

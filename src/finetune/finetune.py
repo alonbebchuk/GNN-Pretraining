@@ -13,11 +13,11 @@ from torch.optim import AdamW
 from torch_geometric.utils import negative_sampling
 
 from src.data.finetune_data_loaders import create_finetune_data_loader
-from src.finetune.metrics import aggregate_metrics, compute_evaluation_metrics, compute_training_metrics
+from src.finetune.metrics import compute_batch_metrics, compute_training_metrics, compute_validation_metrics, compute_test_metrics
 from src.models.finetune_model import FinetuneGNN, create_finetune_model, LR_BACKBONE, LR_FINETUNE
 from src.pretrain.schedulers import CosineWithWarmup
 
-from src.data.data_setup import NUM_CLASSES, TASK_TYPES
+from src.data.data_setup import TASK_TYPES
 import torch.nn.functional as F
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "finetune"
@@ -78,51 +78,80 @@ def set_global_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
+def process_batch_by_task_type(
+    model: torch.nn.Module, 
+    batch, 
+    device: torch.device, 
+    task_type: str,
+    generator: torch.Generator = None
+) -> tuple:
+    """Process a batch based on task type and return logits, loss, targets, predictions, probabilities."""
+    
+    if task_type == 'graph_classification':
+        batch = batch.to(device)
+        logits = model(batch)
+        targets = batch.y
+        
+        loss = F.cross_entropy(logits, targets)
+        
+        probabilities = F.softmax(logits, dim=1)
+        predictions = torch.argmax(logits, dim=1)
+        
+        return logits, loss, targets, predictions, probabilities, None, None
+        
+    elif task_type == 'node_classification':
+        data, node_indices, targets = batch
+        data, node_indices, targets = data.to(device), node_indices.to(device), targets.to(device)
+        
+        full_logits = model(data)
+        logits = full_logits[node_indices]
+        
+        loss = F.cross_entropy(logits, targets)
+        
+        probabilities = F.softmax(logits, dim=1)
+        predictions = torch.argmax(logits, dim=1)
+        
+        return logits, loss, targets, predictions, probabilities, None, None
+        
+    elif task_type == 'link_prediction':
+        # For training, generate negative samples; for evaluation, edges are pre-provided
+        if model.training and generator is not None:
+            data, pos_edges, _ = batch
+            data, pos_edges = data.to(device), pos_edges.to(device)
+            
+            neg_edges = negative_sampling(data.edge_index, data.num_nodes, pos_edges.size(1), generator=generator).to(device)
+            all_edges = torch.cat([pos_edges, neg_edges], dim=1)
+            edge_labels = torch.cat([torch.ones(pos_edges.size(1), device=device), torch.zeros(neg_edges.size(1), device=device)])
+            edge_probs = model(data, edge_index=all_edges)
+        else:
+            # Evaluation case - edges and targets provided in batch
+            data, all_edges, edge_labels = batch
+            data, all_edges, edge_labels = data.to(device), all_edges.to(device), edge_labels.to(device)
+            edge_probs = model(data, edge_index=all_edges)
+        
+        loss = F.binary_cross_entropy(edge_probs, edge_labels)
+        
+        predictions = (edge_probs > 0.5).float()
+        probabilities = torch.stack([1 - edge_probs, edge_probs], dim=1)
+        targets = edge_labels.long()
+        predictions = predictions.long()
+        
+        return None, loss, targets, predictions, probabilities, edge_probs, edge_labels
+    
+    else:
+        raise ValueError(f"Unsupported task_type: {task_type}")
+
+
 def compute_loss_and_metrics(model: torch.nn.Module, batch, device: torch.device, task_type: str, domain_name: str) -> Dict[str, float]:
+    """Compute loss and metrics for evaluation (with torch.no_grad())."""
     model.eval()
-
+    
     with torch.no_grad():
-        if task_type == 'graph_classification':
-            batch = batch.to(device)
-            logits = model(batch)
-            targets = batch.y
-
-            loss = F.cross_entropy(logits, targets)
-
-            probabilities = F.softmax(logits, dim=1)
-            predictions = torch.argmax(logits, dim=1)
-        elif task_type == 'node_classification':
-            data, node_indices, targets = batch
-            data, node_indices, targets = data.to(device), node_indices.to(device), targets.to(device)
-
-            full_logits = model(data)
-            logits = full_logits[node_indices]
-
-            loss = F.cross_entropy(logits, targets)
-
-            probabilities = F.softmax(logits, dim=1)
-            predictions = torch.argmax(logits, dim=1)
-        elif task_type == 'link_prediction':
-            data, edges, targets = batch
-            data, edges, targets = data.to(device), edges.to(device), targets.to(device)
-
-            edge_probs = model(data, edge_index=edges)
-
-            loss = F.binary_cross_entropy(edge_probs, targets)
-
-            predictions = (edge_probs > 0.5).float()
-
-            probabilities = torch.stack([1 - edge_probs, edge_probs], dim=1)
-            targets = targets.long()
-            predictions = predictions.long()
-
-        num_classes = NUM_CLASSES[domain_name]
-        task_classification_type = 'binary' if num_classes == 2 else 'multiclass'
-        metrics = compute_evaluation_metrics(targets, predictions, probabilities, task_classification_type)
-
-        metrics['loss'] = float(loss.item())
-        metrics['num_samples'] = len(targets)
-
+        logits, loss, targets, predictions, probabilities, edge_probs, edge_labels = process_batch_by_task_type(
+            model, batch, device, task_type
+        )
+        metrics = compute_batch_metrics(domain_name, targets, predictions, probabilities, loss)
+    
     return metrics
 
 
@@ -147,10 +176,10 @@ def run_evaluation(
             model, batch_or_data, device, cfg.task_type, cfg.domain_name)
         batch_metrics.append(metrics)
 
-    val_metrics = aggregate_metrics(batch_metrics, 'val')
+    val_metrics = compute_validation_metrics(batch_metrics, epoch)
 
     # Determine selection metric
-    selection_metric_name = 'val/auc' if cfg.task_type == 'link_prediction' else 'val/accuracy'
+    selection_metric_name = 'finetune/val/auc' if cfg.task_type == 'link_prediction' else 'finetune/val/accuracy'
     current_val_metric = val_metrics[selection_metric_name]
     is_best = current_val_metric > best_selection_metric
 
@@ -174,13 +203,8 @@ def run_evaluation(
         new_best_metric = best_selection_metric
         new_epochs_since_improvement = epochs_since_improvement + 1
 
-    # Log epoch metrics
-    epoch_metrics = {
-        **val_metrics,
-        'train/epochs_since_improvement': new_epochs_since_improvement,
-        selection_metric_name: current_val_metric,
-    }
-    wandb.log(epoch_metrics, step=global_step[0])
+    # Log validation metrics
+    wandb.log(val_metrics, step=global_step[0])
 
     return is_best, val_metrics, new_best_metric, new_epochs_since_improvement
 
@@ -198,31 +222,14 @@ def run_training(
 ) -> None:
     model.train()
 
-    for batch_or_data in train_loader:
+    for batch in train_loader:
         step_start_time = time.time()
         global_step_ref[0] += 1
 
-        if cfg.task_type == 'graph_classification':
-            batch = batch_or_data.to(device)
-            logits = model(batch)
-            loss = torch.nn.functional.cross_entropy(logits, batch.y)
-        elif cfg.task_type == 'node_classification':
-            data, node_indices, targets = batch_or_data
-            data, node_indices, targets = data.to(
-                device), node_indices.to(device), targets.to(device)
-            full_logits = model(data)
-            loss = torch.nn.functional.cross_entropy(
-                full_logits[node_indices], targets)
-        elif cfg.task_type == 'link_prediction':
-            data, pos_edges, _ = batch_or_data
-            data, pos_edges = data.to(device), pos_edges.to(device)
-            neg_edges = negative_sampling(data.edge_index, data.num_nodes, pos_edges.size(1), generator=generator).to(device)
-            all_edges = torch.cat([pos_edges, neg_edges], dim=1)
-            edge_labels = torch.cat([torch.ones(pos_edges.size(
-                1), device=device), torch.zeros(neg_edges.size(1), device=device)])
-            edge_probs = model(data, edge_index=all_edges)
-            loss = torch.nn.functional.binary_cross_entropy(
-                edge_probs, edge_labels)
+        # Use shared batch processing function
+        logits, loss, targets, predictions, probabilities, edge_probs, edge_labels = process_batch_by_task_type(
+            model, batch, device, cfg.task_type, generator
+        )
 
         optimizer.zero_grad()
         loss.backward()
@@ -236,26 +243,25 @@ def run_training(
                 pg['lr'] = LR_FINETUNE * scale
         lr_multiplier.step()
 
-        # Log core training metrics every iteration
-        current_lr_backbone = optimizer.param_groups[0]['lr'] if len(
-            optimizer.param_groups) > 1 else 0.0
-        current_lr_head = optimizer.param_groups[-1]['lr']
+        # Compute and log training metrics (all logic moved to metrics.py)
         train_metrics = compute_training_metrics(
-            epoch, global_step_ref[0], loss.item(), current_lr_backbone, current_lr_head, model)
-
-        # Add system metrics less frequently to reduce overhead
-        if global_step_ref[0] % 10 == 0:
-            step_time_ms = (time.time() - step_start_time) * 1000
-            train_metrics['system/avg_step_time_ms'] = step_time_ms
-
-            if device.type == "cuda":
-                train_metrics['system/gpu_memory_gb'] = torch.cuda.memory_allocated() / \
-                    1024**3
-
+            epoch=epoch,
+            step=global_step_ref[0],
+            loss=loss,
+            optimizer=optimizer,
+            domain_name=cfg.domain_name,
+            targets=targets,
+            predictions=predictions,
+            probabilities=probabilities,
+            step_start_time=step_start_time
+        )
+        
         wandb.log(train_metrics, step=global_step_ref[0])
 
 
 def finetune(cfg: FinetuneConfig, seed: int) -> None:
+    training_start_time = time.time()  # Track total training time
+    
     set_global_seed(seed)
     generator = torch.Generator()
     generator.manual_seed(seed)
@@ -314,48 +320,21 @@ def finetune(cfg: FinetuneConfig, seed: int) -> None:
     best_checkpoint = torch.load(best_checkpoint_path, map_location=device)
     model.load_state_dict(best_checkpoint['model_state_dict'])
 
-    # Test evaluation using simpler function
+    # Test evaluation
     batch_metrics = []
     for batch_or_data in test_loader:
         metrics = compute_loss_and_metrics(
             model, batch_or_data, device, cfg.task_type, cfg.domain_name)
         batch_metrics.append(metrics)
 
-    test_metrics = aggregate_metrics(batch_metrics, 'test')
-
-    # Convergence analysis
-    convergence_metrics = {
-        'convergence/total_epochs': epoch,
-        'convergence/early_stopped': epochs_since_improvement >= cfg.patience,
-        'convergence/epochs_to_best': epoch - epochs_since_improvement,
-        'convergence/training_efficiency': best_selection_metric / max(epoch, 1),
-        'convergence/patience_utilization': epochs_since_improvement / cfg.patience
-    }
-
-    # Model analysis
-    param_info = count_parameters(model)
-    model_metrics = {
-        'model/param_count_total': param_info['total'],
-        'model/param_count_trainable': param_info['trainable'],
-        'model/param_efficiency': best_selection_metric / max(param_info['trainable'], 1),
-        'model/freeze_ratio': 1.0 - (param_info['trainable'] / max(param_info['total'], 1))
-    }
-
-    # Strategy analysis
-    strategy_metrics = {
-        'strategy/finetune_method': cfg.finetune_strategy,
-        'strategy/pretrain_method': cfg.pretrained_scheme,
-        'strategy/is_from_scratch': cfg.pretrained_scheme == 'b1',
-        'strategy/selection_metric_used': 'val/auc' if cfg.task_type == 'link_prediction' else 'val/accuracy',
-        'strategy/final_selection_score': best_selection_metric
-    }
-
-    final_metrics = {
-        **test_metrics,
-        **convergence_metrics,
-        **model_metrics,
-        **strategy_metrics
-    }
+    # Compute final test metrics with all required information
+    final_metrics = compute_test_metrics(
+        batch_metrics=batch_metrics,
+        epoch=epoch,
+        epochs_since_improvement=epochs_since_improvement,
+        training_start_time=training_start_time,
+        model=model
+    )
 
     wandb.log(final_metrics, step=global_step[0])
     wandb.finish()
