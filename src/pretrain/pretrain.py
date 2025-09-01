@@ -119,6 +119,7 @@ def run_training(
             domain_batches[domain_name] = domain_batches[domain_name].to(device)
 
         per_task_raw_losses = {}
+        per_domain_per_task_raw_losses_tensors = {domain: {} for domain in cfg.pretrain_domains}
         per_domain_per_task_raw_losses = {domain: {} for domain in cfg.pretrain_domains}
         per_domain_weighted_losses = {}
 
@@ -126,10 +127,11 @@ def run_training(
             task_raw_loss, task_per_domain_raw_loss = task.compute_loss(domain_batches, generator)
             per_task_raw_losses[task_name] = task_raw_loss
             for domain, per_domain_per_task_raw_loss in task_per_domain_raw_loss.items():
-                per_domain_per_task_raw_losses[domain][task_name] = float(per_domain_per_task_raw_loss)
+                per_domain_per_task_raw_losses_tensors[domain][task_name] = per_domain_per_task_raw_loss
+                per_domain_per_task_raw_losses[domain][task_name] = float(per_domain_per_task_raw_loss.detach())
 
-        for domain in per_domain_per_task_raw_losses.keys():
-            domain_weighted_loss = weighter(per_domain_per_task_raw_losses[domain], lambda_val=grl_sched())
+        for domain in per_domain_per_task_raw_losses_tensors.keys():
+            domain_weighted_loss = weighter(per_domain_per_task_raw_losses_tensors[domain], lambda_val=grl_sched())
             per_domain_weighted_losses[domain] = float(domain_weighted_loss.detach().cpu())
 
         total_weighted_loss = weighter(per_task_raw_losses, lambda_val=grl_sched())
