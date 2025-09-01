@@ -66,8 +66,7 @@ class LinkPredictionTask(BasePretrainTask):
             neg_edges = batched_negative_sampling(
                 edge_index=to_undirected(pos_edges),
                 batch=batch.batch,
-                num_neg_samples=pos_edges.size(1),
-                generator=generator
+                num_neg_samples=pos_edges.size(1)
             )
             combined_edges = torch.cat([pos_edges, neg_edges], dim=1)
             labels = torch.cat([

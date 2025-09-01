@@ -134,8 +134,7 @@ def create_link_prediction_splits(data: Data) -> Dict[str, torch.Tensor]:
     val_test_neg_edges = negative_sampling(
         edge_index=to_undirected(train_edges),
         num_nodes=data.num_nodes,
-        num_neg_samples=num_val_test,
-        generator=generator
+        num_neg_samples=num_val_test
     )
 
     return {

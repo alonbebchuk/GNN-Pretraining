@@ -120,8 +120,7 @@ def process_batch(
             neg_edges = negative_sampling(
                 data.edge_index,
                 data.num_nodes,
-                pos_edges.size(1),
-                generator=generator
+                pos_edges.size(1)
             ).to(device)
             all_edges = torch.cat([pos_edges, neg_edges], dim=1)
             edge_labels = torch.cat([
