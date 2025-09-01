@@ -63,6 +63,7 @@ PROJECT_NAME = "gnn-pretraining-pretrain"
 class PretrainConfig:
     exp_name: str
     seed: int
+
     pretrain_domains: List[str]
     active_tasks: List[str]
 
@@ -188,9 +189,8 @@ def run_evaluation(
     best_total_weighted_loss: float,
     epochs_since_improvement: int,
     cfg: PretrainConfig,
-    seed: int,
     global_step: List[int]
-) -> Tuple[bool, Dict[str, float], float, int]:
+) -> Tuple[float, int]:
     model.eval()
 
     per_task_raw_losses = {}
@@ -242,7 +242,7 @@ def run_evaluation(
             'model_state_dict': model.state_dict(),
             'val_metrics': val_metrics,
         }
-        model_name = f"model_{cfg.exp_name}_{seed}"
+        model_name = f"model_{cfg.exp_name}_{cfg.seed}"
         model_path = OUTPUT_DIR / f"{model_name}.pt"
 
         torch.save(checkpoint, model_path)
@@ -261,14 +261,14 @@ def run_evaluation(
     return best_total_weighted_loss, epochs_since_improvement
 
 
-def pretrain(cfg: PretrainConfig, seed: int) -> None:
-    set_global_seed(seed)
+def pretrain(cfg: PretrainConfig) -> None:
+    set_global_seed(cfg.seed)
     generator = torch.Generator()
-    generator.manual_seed(seed)
+    generator.manual_seed(cfg.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    wandb.init(project=PROJECT_NAME, name=f"{cfg.exp_name}_{seed}")
+    wandb.init(project=PROJECT_NAME, name=f"{cfg.exp_name}_{cfg.seed}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -287,8 +287,7 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
     weighter = UncertaintyWeighter(task_names=cfg.active_tasks).to(device)
 
     opt_model = AdamW(model.parameters(), lr=LR_MODEL)
-    opt_uncertainty = AdamW(weighter.parameters(
-    ), lr=LR_UNCERTAINTY, weight_decay=UNCERTAINTY_WEIGHT_DECAY)
+    opt_uncertainty = AdamW(weighter.parameters(), lr=LR_UNCERTAINTY, weight_decay=UNCERTAINTY_WEIGHT_DECAY)
 
     train_loader = create_train_data_loader(cfg.pretrain_domains, generator)
     total_steps = len(train_loader) * EPOCHS
@@ -330,7 +329,6 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
             best_total_weighted_loss,
             epochs_since_improvement,
             cfg,
-            seed,
             global_step
         )
 
@@ -343,12 +341,11 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
-    parser.add_argument("--seed", type=int, required=True)
 
     args = parser.parse_args()
     cfg = build_config(args)
 
-    pretrain(cfg, args.seed)
+    pretrain(cfg)
 
 
 if __name__ == "__main__":

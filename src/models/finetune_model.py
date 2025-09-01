@@ -7,6 +7,7 @@ from torch_geometric.data import Batch
 from torch_geometric.nn import global_mean_pool
 
 from src.data.data_setup import DOMAIN_DIMENSIONS, NUM_CLASSES, TASK_TYPES
+from src.finetune.finetune import FinetuneConfig
 from src.models.gnn import GINBackbone, GNN_HIDDEN_DIM, InputEncoder
 from src.models.heads import BilinearPredictor, MLPHead
 from src.pretrain.pretrain import OUTPUT_DIR, PROJECT_NAME
@@ -113,8 +114,8 @@ def load_pretrained_weights(finetune_model: FinetuneGNN, pretrained_scheme: str,
     finetune_model.load_state_dict(finetune_state_dict, strict=False)
 
 
-def create_finetune_model(device: torch.device, domain_name: str, finetune_strategy: str, pretrained_scheme: str, seed: int) -> FinetuneGNN:
-    model = FinetuneGNN(device, domain_name, finetune_strategy)
-    if pretrained_scheme != 'b1':
-        load_pretrained_weights(model, pretrained_scheme, seed)
+def create_finetune_model(device: torch.device, cfg: FinetuneConfig) -> FinetuneGNN:
+    model = FinetuneGNN(device, cfg.domain_name, cfg.finetune_strategy)
+    if cfg.pretrained_scheme != 'b1':
+        load_pretrained_weights(model, cfg.pretrained_scheme, cfg.seed)
     return model
