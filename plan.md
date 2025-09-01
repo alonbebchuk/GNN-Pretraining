@@ -86,7 +86,7 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 - **Learning Rates:** `train/lr/model`, `train/lr/uncertainty`
 - **Domain Adversarial:** `train/domain_adv/lambda` (when active)
 - **Training Dynamics:** `train/gradients/model_grad_norm`, `train/system/time_per_step`
-- **Progress Tracking:** `train/epoch`, `train/step`
+- **Progress Tracking:** `train/progress/epoch`, `train/progress/step`
 
 **Validation Metrics (logged per epoch):**
 - **Granular Raw Losses:** `val/loss/{domain}/{task}_raw` (20 metrics)
@@ -95,32 +95,32 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 - **Total Weighted Loss:** `val/loss/total_weighted` (model selection metric)
 - **Uncertainty Parameters:** `val/uncertainty/{task_name}_sigma` (6 metrics)
 - **Domain Adversarial:** `val/domain_adv/lambda` (when active)
-- **Progress Tracking:** `val/epoch`
+- **Progress Tracking:** `val/progress/epoch`
 
 ### **4.2. Fine-tuning Metrics**
 
 **Training Metrics (logged per step):**
-- **Performance:** `finetune/train/{accuracy,f1,precision,recall,auc,loss}`
-- **Learning Rates:** `finetune/train/lr/{parameter_group}` (backbone, encoder, head)
-- **Progress Tracking:** `finetune/train/epoch`, `finetune/train/step`
-- **System Timing:** `finetune/system/time_per_step`
+- **Performance:** `train/{accuracy,f1,precision,recall,auc,loss}`
+- **Learning Rates:** `train/lr/{parameter_group}` (backbone, encoder, head)
+- **Training Dynamics:** `train/gradients/model_grad_norm`, `train/system/time_per_step`
+- **Progress Tracking:** `train/progress/epoch`, `train/progress/step`
 
 **Validation Metrics (logged per epoch):**
-- **Performance:** `finetune/val/{accuracy,f1,precision,recall,auc,loss}`
-- **Progress Tracking:** `finetune/val/epoch`
+- **Performance:** `val/{accuracy,f1,precision,recall,auc,loss}`
+- **Progress Tracking:** `val/progress/epoch`
 
 **Test Metrics (logged at end):**
-- **Performance:** `finetune/test/{accuracy,f1,precision,recall,auc,loss}`
-- **Efficiency:** `finetune/test/convergence_epochs`, `finetune/test/training_time`
-- **Model Size:** `finetune/test/total_parameters`, `finetune/test/trainable_parameters`
-- **Progress Tracking:** `finetune/test/epoch`
+- **Performance:** `test/{accuracy,f1,precision,recall,auc,loss}`
+- **Efficiency:** `test/convergence_epochs`, `test/training_time`
+- **Model Size:** `test/total_parameters`, `test/trainable_parameters`
+- **Progress Tracking:** `test/epoch`
 
 ### **4.3. Analysis Framework**
 
 #### **4.3.1. RQ1: Pre-training Effectiveness**
 **Metrics Used:**
-- Primary: `finetune/test/{accuracy,f1,auc}` across all schemes vs B1 baseline
-- Efficiency: `finetune/test/{convergence_epochs,training_time}`
+- Primary: `test/{accuracy,f1,auc}` across all schemes vs B1 baseline
+- Efficiency: `test/{convergence_epochs,training_time}`
 
 **Analysis Methods:**
 - Paired t-tests with Bonferroni correction for multiple comparisons
@@ -131,7 +131,7 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 **Metrics Used:**
 - Learning dynamics: `train/loss/{task_name}_raw` over time
 - Task interactions: `train/loss/{domain}/{task}_raw` correlation matrix  
-- Final performance: `finetune/test/*` by pre-training scheme
+- Final performance: `test/*` by pre-training scheme
 
 **Analysis Methods:**
 - Task synergy detection via correlation analysis
@@ -140,9 +140,9 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 
 #### **4.3.3. RQ3: Fine-tuning Strategy Comparison**
 **Metrics Used:**
-- Performance: `finetune/test/*` by fine-tuning strategy
-- Efficiency: `finetune/test/{convergence_epochs,training_time,*_parameters}`
-- Training dynamics: `finetune/train/lr/{parameter_group}`
+- Performance: `test/*` by fine-tuning strategy
+- Efficiency: `test/{convergence_epochs,training_time,*_parameters}`
+- Training dynamics: `train/lr/{parameter_group}`
 
 **Analysis Methods:**
 - Strategy effectiveness comparison (B2 vs B3)
@@ -152,7 +152,7 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 #### **4.3.4. RQ4: Task Affinity Patterns**
 **Metrics Used:**
 - Pre-training losses: `train/loss/{domain}/{task}_raw`
-- Transfer performance: `finetune/test/*` by downstream task
+- Transfer performance: `test/*` by downstream task
 - Domain adversarial impact: `train/domain_adv/lambda` correlation with transfer
 
 **Analysis Methods:**
@@ -220,8 +220,8 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 ### **6.1. Analysis Requirements vs Logged Metrics**
 
 ✅ **RQ1 Analysis Coverage:**
-- Pre-training improvement: `finetune/test/{accuracy,f1,auc}` ✓
-- Convergence advantage: `finetune/test/{convergence_epochs,training_time}` ✓
+- Pre-training improvement: `test/{accuracy,f1,auc}` ✓
+- Convergence advantage: `test/{convergence_epochs,training_time}` ✓
 - Statistical testing: Multiple seeds + test metrics ✓
 
 ✅ **RQ2 Analysis Coverage:**
@@ -230,9 +230,9 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 - Optimal combinations: Performance by scheme ✓
 
 ✅ **RQ3 Analysis Coverage:**
-- Strategy effectiveness: `finetune/test/*` by strategy ✓
-- Parameter efficiency: `finetune/test/{total,trainable}_parameters` ✓
-- Training dynamics: `finetune/train/lr/*` ✓
+- Strategy effectiveness: `test/*` by strategy ✓
+- Parameter efficiency: `test/{total,trainable}_parameters` ✓
+- Training dynamics: `train/lr/*` ✓
 
 ✅ **RQ4 Analysis Coverage:**
 - Task affinity: `train/loss/{domain}/{task}_raw` matrix ✓

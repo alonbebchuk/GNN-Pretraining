@@ -11,14 +11,13 @@ from src.pretrain.schedulers import GRLLambdaScheduler
 
 def _compute_base_metrics(
     per_domain_per_task_raw_losses: Dict[str, Dict[str, float]],
-    raw_losses: Dict[str, torch.Tensor],
+    per_task_raw_losses: Dict[str, torch.Tensor],
+    per_domain_weighted_losses: Dict[str, float],
     total_weighted_loss: torch.Tensor,
     weighter: UncertaintyWeighter,
     grl_scheduler: GRLLambdaScheduler,
     epoch: int,
-    step: int,
-    prefix: str,
-    per_domain_weighted_losses: Dict[str, float]
+    prefix: str
 ) -> Dict[str, Any]:
     metrics = {}
 
@@ -26,7 +25,7 @@ def _compute_base_metrics(
         for task in per_domain_per_task_raw_losses[domain]:
             metrics[f'{prefix}/loss/{domain}/{task}_raw'] = per_domain_per_task_raw_losses[domain][task]
 
-    for task_name, raw_loss_tensor in raw_losses.items():
+    for task_name, raw_loss_tensor in per_task_raw_losses.items():
         metrics[f'{prefix}/loss/{task_name}_raw'] = float(raw_loss_tensor.detach().cpu())
 
     for domain_name, weighted_loss in per_domain_weighted_losses.items():
@@ -38,19 +37,18 @@ def _compute_base_metrics(
     for task_name, sigma_value in task_sigmas.items():
         metrics[f'{prefix}/uncertainty/{task_name}_sigma'] = sigma_value
 
-    if 'domain_adv' in raw_losses:
+    if 'domain_adv' in per_task_raw_losses:
         metrics[f'{prefix}/domain_adv/lambda'] = grl_scheduler()
 
-    metrics[f'{prefix}/epoch'] = epoch
-    if prefix == 'train':  # Only log step for training (per-step logging)
-        metrics[f'{prefix}/step'] = step
+    metrics[f'{prefix}/progress/epoch'] = epoch
 
     return metrics
 
 
 def compute_training_metrics(
     per_domain_per_task_raw_losses: Dict[str, Dict[str, float]],
-    raw_losses: Dict[str, torch.Tensor],
+    per_task_raw_losses: Dict[str, torch.Tensor],
+    per_domain_weighted_losses: Dict[str, float],
     total_weighted_loss: torch.Tensor,
     weighter: UncertaintyWeighter,
     grl_scheduler: GRLLambdaScheduler,
@@ -59,27 +57,27 @@ def compute_training_metrics(
     model: PretrainableGNN,
     epoch: int,
     step: int,
-    step_start_time: float,
-    per_domain_weighted_losses: Dict[str, float]
+    step_start_time: float
 ) -> Dict[str, Any]:
     metrics = _compute_base_metrics(
         per_domain_per_task_raw_losses,
-        raw_losses,
+        per_task_raw_losses,
+        per_domain_weighted_losses,
         total_weighted_loss,
         weighter,
         grl_scheduler,
         epoch,
-        step,
-        'train',
-        per_domain_weighted_losses
+        'train'
     )
+
+    metrics[f'train/progress/step'] = step
 
     metrics['train/lr/model'] = optimizer_model.param_groups[0]['lr']
     metrics['train/lr/uncertainty'] = optimizer_uncertainty.param_groups[0]['lr']
 
     total_norm = 0.0
     for p in model.parameters():
-        if p.grad is not None:
+        if p.grad is not None and p.requires_grad:
             param_norm = p.grad.data.norm(2)
             total_norm += param_norm.item() ** 2
     total_norm = total_norm ** (1. / 2)
@@ -92,22 +90,20 @@ def compute_training_metrics(
 
 def compute_validation_metrics(
     per_domain_per_task_raw_losses: Dict[str, Dict[str, float]],
-    raw_losses: Dict[str, torch.Tensor],
+    per_task_raw_losses: Dict[str, torch.Tensor],
+    per_domain_weighted_losses: Dict[str, float],
     total_weighted_loss: float,
     weighter: UncertaintyWeighter,
     grl_scheduler: Any,
-    epoch: int,
-    global_step: int,
-    per_domain_weighted_losses: Dict[str, float]
+    epoch: int
 ) -> Dict[str, Any]:
     return _compute_base_metrics(
         per_domain_per_task_raw_losses,
-        raw_losses,
+        per_task_raw_losses,
+        per_domain_weighted_losses,
         total_weighted_loss,
         weighter,
         grl_scheduler,
         epoch,
-        global_step,
-        'val',
-        per_domain_weighted_losses
+        'val'
     )

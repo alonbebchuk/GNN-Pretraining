@@ -131,7 +131,7 @@ def run_training(
         for domain_name in domain_batches:
             domain_batches[domain_name] = domain_batches[domain_name].to(device)
 
-        raw_losses = {}
+        per_task_raw_losses = {}
         per_domain_per_task_raw_losses = {}
 
         for domain in cfg.pretrain_domains:
@@ -144,9 +144,9 @@ def run_training(
                 raw_loss, per_domain_loss = task.compute_loss(domain_batches, generator)
                 for domain, domain_loss in per_domain_loss.items():
                     per_domain_per_task_raw_losses[domain][task_name] = float(domain_loss)
-            raw_losses[task_name] = raw_loss
+            per_task_raw_losses[task_name] = raw_loss
 
-        total_weighted_loss = weighter(raw_losses, lambda_val=grl_sched())
+        total_weighted_loss = weighter(per_task_raw_losses, lambda_val=grl_sched())
 
         # Compute per-domain weighted losses for analysis
         per_domain_weighted_losses = {}
@@ -160,8 +160,8 @@ def run_training(
                 )
             
             # Add domain_adv if present (shared across all domains)
-            if 'domain_adv' in raw_losses:
-                domain_raw_losses['domain_adv'] = raw_losses['domain_adv']
+            if 'domain_adv' in per_task_raw_losses:
+                domain_raw_losses['domain_adv'] = per_task_raw_losses['domain_adv']
             
             # Compute weighted loss for this domain
             domain_weighted_loss = weighter(domain_raw_losses, lambda_val=grl_sched())
@@ -184,7 +184,8 @@ def run_training(
 
         train_metrics = compute_training_metrics(
             per_domain_per_task_raw_losses,
-            raw_losses,
+            per_task_raw_losses,
+            per_domain_weighted_losses,
             total_weighted_loss,
             weighter,
             grl_sched,
@@ -193,8 +194,7 @@ def run_training(
             model,
             epoch,
             global_step_ref[0],
-            step_start_time,
-            per_domain_weighted_losses
+            step_start_time
         )
 
         wandb.log(train_metrics, step=global_step_ref[0])
@@ -229,7 +229,7 @@ def run_evaluation(
         all_val_batches[domain_name] = domain_batches
 
     # Compute raw losses and per-domain losses like in training
-    raw_losses = {}
+    per_task_raw_losses = {}
     per_domain_per_task_raw_losses = {}
 
     for domain_name in val_loaders.keys():
@@ -241,7 +241,7 @@ def run_evaluation(
             # Domain adversarial uses first batch from all domains
             domain_batches = {domain: batches[0] for domain, batches in all_val_batches.items()}
             raw_loss, _ = task.compute_loss(domain_batches, generator, lambda_val=grl_sched())
-            raw_losses[task_name] = raw_loss
+            per_task_raw_losses[task_name] = raw_loss
         else:
             # Regular tasks: compute per domain and aggregate
             task_losses = []
@@ -258,7 +258,7 @@ def run_evaluation(
                 task_losses.append(domain_avg_loss)
             
             # Average across domains for this task  
-            raw_losses[task_name] = torch.stack(task_losses).mean()
+            per_task_raw_losses[task_name] = torch.stack(task_losses).mean()
 
     # Compute total weighted loss like in training (not per-domain)
     # Average per-domain losses for each task
@@ -270,8 +270,8 @@ def run_evaluation(
         task_domain_averages[task_name] = float(np.mean(task_losses))
 
     # Add domain_adv if present (computed once across all domains)
-    if 'domain_adv' in raw_losses:
-        task_domain_averages['domain_adv'] = float(raw_losses['domain_adv'].detach().cpu())
+    if 'domain_adv' in per_task_raw_losses:
+        task_domain_averages['domain_adv'] = float(per_task_raw_losses['domain_adv'].detach().cpu())
 
     # Convert to tensor dict for weighter (like training)
     domain_averaged_raw_losses = {
@@ -284,7 +284,7 @@ def run_evaluation(
     total_weighted_loss = float(total_weighted_loss_tensor.detach().cpu())
 
     # Compute per-domain weighted losses for validation analysis
-    per_domain_weighted_losses_val = {}
+    per_domain_weighted_losses = {}
     for domain in per_domain_per_task_raw_losses.keys():
         # Create domain-specific raw losses dict
         domain_raw_losses = {}
@@ -295,22 +295,22 @@ def run_evaluation(
             )
         
         # Add domain_adv if present (shared across all domains)
-        if 'domain_adv' in raw_losses:
-            domain_raw_losses['domain_adv'] = raw_losses['domain_adv']
+        if 'domain_adv' in per_task_raw_losses:
+            domain_raw_losses['domain_adv'] = per_task_raw_losses['domain_adv']
         
         # Compute weighted loss for this domain
         domain_weighted_loss = weighter(domain_raw_losses, lambda_val=grl_sched())
-        per_domain_weighted_losses_val[domain] = float(domain_weighted_loss.detach().cpu())
+        per_domain_weighted_losses[domain] = float(domain_weighted_loss.detach().cpu())
 
     val_metrics = compute_validation_metrics(
         per_domain_per_task_raw_losses,
-        raw_losses,
+        per_task_raw_losses,
+        per_domain_weighted_losses,
         total_weighted_loss,
         weighter,
         grl_sched,
         epoch,
-        global_step[0],
-        per_domain_weighted_losses_val
+        global_step[0]
     )
 
     current_total_weighted_loss = val_metrics['val/loss/total_weighted']

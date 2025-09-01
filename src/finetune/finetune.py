@@ -179,7 +179,7 @@ def run_evaluation(
     val_metrics = compute_validation_metrics(batch_metrics, epoch)
 
     # Determine selection metric
-    selection_metric_name = 'finetune/val/auc' if cfg.task_type == 'link_prediction' else 'finetune/val/accuracy'
+    selection_metric_name = 'val/auc' if cfg.task_type == 'link_prediction' else 'val/accuracy'
     current_val_metric = val_metrics[selection_metric_name]
     is_best = current_val_metric > best_selection_metric
 
@@ -253,7 +253,8 @@ def run_training(
             targets=targets,
             predictions=predictions,
             probabilities=probabilities,
-            step_start_time=step_start_time
+            step_start_time=step_start_time,
+            model=model
         )
         
         wandb.log(train_metrics, step=global_step_ref[0])
