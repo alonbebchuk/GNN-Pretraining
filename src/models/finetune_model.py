@@ -94,7 +94,7 @@ def get_pretrained_model_path(pretrained_scheme: str, seed: int) -> str:
 
 def load_pretrained_weights(finetune_model: FinetuneGNN, pretrained_scheme: str, seed: int) -> None:
     pretrained_path = get_pretrained_model_path(pretrained_scheme, seed)
-    checkpoint = torch.load(pretrained_path, map_location=finetune_model.device)
+    checkpoint = torch.load(pretrained_path, map_location=finetune_model.device, weights_only=False)
     pretrained_state_dict = checkpoint['model_state_dict']
     finetune_state_dict = finetune_model.state_dict()
 

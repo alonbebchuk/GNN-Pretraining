@@ -331,7 +331,7 @@ def finetune(cfg: FinetuneConfig) -> None:
     model_name = f"model_{cfg.exp_name}_{cfg.seed}"
     model_path = OUTPUT_DIR / f"{model_name}.pt"
 
-    best_model = torch.load(model_path, map_location=device)
+    best_model = torch.load(model_path, map_location=device, weights_only=False)
     model.load_state_dict(best_model['model_state_dict'])
 
     batch_metrics = []

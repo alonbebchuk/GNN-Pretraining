@@ -48,7 +48,7 @@ class BalancedMultiDomainSampler:
 
 def _load_graph_properties_for_split(domain_dir: Path, graphs: List[Data], split_indices: NDArray[np.int64]) -> None:
     properties_path = domain_dir / "graph_properties.pt"
-    graph_properties = torch.load(properties_path)
+    graph_properties = torch.load(properties_path, weights_only=False)
     for idx in split_indices:
         graphs[idx].graph_properties = graph_properties[idx]
 
@@ -56,8 +56,8 @@ def _load_graph_properties_for_split(domain_dir: Path, graphs: List[Data], split
 def create_val_data_loader(domain_name: str, generator: torch.Generator) -> PyGDataLoader:
     domain_dir = PROCESSED_DIR / domain_name
 
-    graphs = torch.load(domain_dir / "data.pt")
-    splits = torch.load(domain_dir / "splits.pt")
+    graphs = torch.load(domain_dir / "data.pt", weights_only=False)
+    splits = torch.load(domain_dir / "splits.pt", weights_only=False)
     split_indices = splits["val"]
     _load_graph_properties_for_split(domain_dir, graphs, split_indices)
 
@@ -71,8 +71,8 @@ def create_train_data_loader(domains: List[str], generator: torch.Generator) -> 
     for domain in domains:
         domain_dir = PROCESSED_DIR / domain
 
-        graphs = torch.load(domain_dir / "data.pt")
-        splits = torch.load(domain_dir / "splits.pt")
+        graphs = torch.load(domain_dir / "data.pt", weights_only=False)
+        splits = torch.load(domain_dir / "splits.pt", weights_only=False)
         split_indices = splits["train"]
         _load_graph_properties_for_split(domain_dir, graphs, split_indices)
 

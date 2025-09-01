@@ -67,8 +67,8 @@ def _collate_link_batch(batch: List[tuple]) -> tuple:
 def create_graph_classification_loader(domain_name: str, split: str, batch_size: int, generator: torch.Generator) -> PyGDataLoader:
     domain_dir = PROCESSED_DIR / domain_name
 
-    graphs = torch.load(domain_dir / "data.pt")
-    splits = torch.load(domain_dir / "splits.pt")
+    graphs = torch.load(domain_dir / "data.pt", weights_only=False)
+    splits = torch.load(domain_dir / "splits.pt", weights_only=False)
     split_indices = splits[split]
 
     dataset = GraphDataset(graphs, split_indices)
@@ -78,8 +78,8 @@ def create_graph_classification_loader(domain_name: str, split: str, batch_size:
 def create_node_classification_loader(domain_name: str, split: str, batch_size: int, generator: torch.Generator) -> torch.utils.data.DataLoader:
     domain_dir = PROCESSED_DIR / domain_name
 
-    graphs = torch.load(domain_dir / "data.pt")
-    splits = torch.load(domain_dir / "splits.pt")
+    graphs = torch.load(domain_dir / "data.pt", weights_only=False)
+    splits = torch.load(domain_dir / "splits.pt", weights_only=False)
     data = graphs[0]
     split_indices = splits[split]
 
@@ -90,8 +90,8 @@ def create_node_classification_loader(domain_name: str, split: str, batch_size: 
 def create_link_prediction_loader(domain_name: str, split: str, batch_size: int, generator: torch.Generator) -> torch.utils.data.DataLoader:
     domain_dir = PROCESSED_DIR / domain_name
 
-    graphs = torch.load(domain_dir / "data.pt")
-    splits = torch.load(domain_dir / "splits.pt")
+    graphs = torch.load(domain_dir / "data.pt", weights_only=False)
+    splits = torch.load(domain_dir / "splits.pt", weights_only=False)
     data = graphs[0]
     split_indices = splits[split]
 
