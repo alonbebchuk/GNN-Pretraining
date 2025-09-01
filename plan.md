@@ -206,7 +206,23 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 - Comprehensive logging for all research questions
 - Automated statistical analysis pipeline
 
-### **5.3. Expected Deliverables**
+### **5.3. Execution Method**
+**Simplified Command-Line Interface:**
+- Direct CLI argument passing to main scripts
+- Parallel GPU execution for sweep operations
+
+**Example Execution:**
+```bash
+# Single experiments
+python src/pretrain/pretrain.py --exp_name b2 --seed 42
+python src/finetune/finetune.py --domain_name ENZYMES --finetune_strategy full_finetune --pretrained_scheme b2 --seed 42
+
+# Parameter sweeps with GPU parallelization
+python run_pretrain.py --sweep
+python run_finetune.py --domain_sweep ENZYMES
+```
+
+### **5.4. Expected Deliverables**
 1. **Performance Tables** with statistical significance testing
 2. **Training Dynamics Plots** with confidence intervals  
 3. **Ablation Study Results** with effect sizes

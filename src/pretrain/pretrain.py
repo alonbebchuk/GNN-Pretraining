@@ -4,10 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-import numpy as np
 import torch
 import wandb
-import yaml
 from torch.optim import AdamW
 
 from src.data.data_setup import PRETRAIN_TUDATASETS
@@ -70,13 +68,6 @@ class PretrainConfig:
     def __post_init__(self):
         self.pretrain_domains = PRETRAIN_DOMAINS[self.exp_name]
         self.active_tasks = ACTIVE_TASKS[self.exp_name]
-
-
-def build_config(args: argparse.Namespace) -> PretrainConfig:
-    cfg_path = Path(args.config)
-    with cfg_path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    return PretrainConfig(**data)
 
 
 def set_global_seed(seed: int) -> None:
@@ -340,11 +331,11 @@ def pretrain(cfg: PretrainConfig) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True)
-
+    parser.add_argument("--exp_name", type=str, required=True)
+    parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args()
-    cfg = build_config(args)
 
+    cfg = PretrainConfig(exp_name=args.exp_name, seed=args.seed)
     pretrain(cfg)
 
 

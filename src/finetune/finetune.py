@@ -6,7 +6,6 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import wandb
-import yaml
 from torch.optim import AdamW
 from torch_geometric.data import Batch
 from torch_geometric.utils import negative_sampling
@@ -61,13 +60,6 @@ class FinetuneConfig:
         self.batch_size = BATCH_SIZES[self.domain_name]
         self.epochs = EPOCHS[self.domain_name]
         self.patience = int(self.epochs * PATIENCE_FRACTION)
-
-
-def build_config(args: argparse.Namespace) -> FinetuneConfig:
-    cfg_path = Path(args.config)
-    with cfg_path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    return FinetuneConfig(**data)
 
 
 def set_global_seed(seed: int) -> None:
@@ -362,11 +354,18 @@ def finetune(cfg: FinetuneConfig) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True)
-
+    parser.add_argument("--domain_name", type=str, required=True)
+    parser.add_argument("--finetune_strategy", type=str, required=True)
+    parser.add_argument("--pretrained_scheme", type=str, required=True)
+    parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args()
-    cfg = build_config(args)
 
+    cfg = FinetuneConfig(
+        domain_name=args.domain_name,
+        finetune_strategy=args.finetune_strategy, 
+        pretrained_scheme=args.pretrained_scheme,
+        seed=args.seed
+    )
     finetune(cfg)
 
 
