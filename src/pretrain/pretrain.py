@@ -254,10 +254,10 @@ def run_evaluation(
 
 def pretrain(cfg: PretrainConfig) -> None:
     set_global_seed(cfg.seed)
-    generator = torch.Generator()
-    generator.manual_seed(cfg.seed)
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    generator = torch.Generator(device=device)
+    generator.manual_seed(cfg.seed)
 
     wandb.init(project=PROJECT_NAME, name=f"{cfg.exp_name}_{cfg.seed}")
 
