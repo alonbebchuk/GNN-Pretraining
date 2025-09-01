@@ -21,7 +21,7 @@ def _attribute_mask(data: Data, generator: torch.Generator) -> Data:
         return data
 
     num_features_to_mask = max(1, int(num_features * ATTR_MASK_RATE))
-    mask_indices = torch.randperm(num_features, device=data.x.device, generator=generator)[:num_features_to_mask]
+    mask_indices = torch.randperm(num_features, generator=generator)[:num_features_to_mask].to(data.x.device)
 
     data.x[:, mask_indices] = 0.0
     return data
@@ -36,7 +36,7 @@ def _edge_drop(data: Data, generator: torch.Generator) -> Data:
     num_edges_to_drop = max(1, int(num_edges * EDGE_DROP_RATE))
     num_edges_to_keep = num_edges - num_edges_to_drop
 
-    keep_indices = torch.randperm(num_edges, device=data.edge_index.device, generator=generator)[:num_edges_to_keep]
+    keep_indices = torch.randperm(num_edges, generator=generator)[:num_edges_to_keep].to(data.edge_index.device)
     data.edge_index = data.edge_index[:, keep_indices]
     return data
 
@@ -50,7 +50,7 @@ def _node_drop(data: Data, generator: torch.Generator) -> Tuple[Data, torch.Tens
     num_nodes_to_drop = max(1, int(num_nodes * NODE_DROP_RATE))
     num_nodes_to_keep = num_nodes - num_nodes_to_drop
 
-    kept_nodes_indices = torch.randperm(num_nodes, device=data.x.device, generator=generator)[:num_nodes_to_keep]
+    kept_nodes_indices = torch.randperm(num_nodes, generator=generator)[:num_nodes_to_keep].to(data.x.device)
     kept_nodes_indices = kept_nodes_indices.sort()[0]
 
     edge_index, _ = subgraph(kept_nodes_indices, data.edge_index, relabel_nodes=True, num_nodes=num_nodes)

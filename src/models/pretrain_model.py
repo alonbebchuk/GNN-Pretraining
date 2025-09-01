@@ -77,7 +77,7 @@ class PretrainableGNN(nn.Module):
 
             if graph_size >= NODE_FEATURE_MASKING_MIN_NUM_NODES:
                 num_mask = max(1, int(graph_size * NODE_FEATURE_MASKING_MASK_RATE))
-                graph_indices = torch.randperm(graph_size, device=self.device, generator=generator)[:num_mask]
+                graph_indices = torch.randperm(graph_size, generator=generator)[:num_mask].to(self.device)
                 mask_indices.append(graph_indices + start_idx)
 
         if mask_indices:

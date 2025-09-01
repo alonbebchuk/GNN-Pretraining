@@ -275,10 +275,10 @@ def finetune(cfg: FinetuneConfig) -> None:
     training_start_time = time.time()
 
     set_global_seed(cfg.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    generator = torch.Generator(device=device)
+    generator = torch.Generator()
     generator.manual_seed(cfg.seed)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     wandb.init(project=PROJECT_NAME, name=f"{cfg.exp_name}_{cfg.seed}")
 
