@@ -30,7 +30,7 @@ DOMAIN_DIMENSIONS = {
     'MUTAG': 7,
     'PROTEINS': 4,
     'NCI1': 37,
-    'ENZYMES': 3,
+    'ENZYMES': 21,
     'PTC_MR': 18,
     'Cora_NC': 1433,
     'CiteSeer_NC': 3703,
