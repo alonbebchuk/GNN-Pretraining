@@ -94,6 +94,7 @@ def process_tudatasets() -> None:
                 for g in dataset_list:
                     X = g.x.detach().cpu().numpy()
                     X_scaled = scaler.transform(X)
+                    X_scaled = np.clip(X_scaled, -3.0, 3.0)
                     g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
 
             sss_val_test = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)

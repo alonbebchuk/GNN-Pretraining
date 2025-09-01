@@ -12,9 +12,15 @@ class InputEncoder(nn.Module):
     def __init__(self, dim_in: int) -> None:
         super().__init__()
         self.linear = nn.Linear(dim_in, GNN_HIDDEN_DIM)
+        self.batch_norm = nn.BatchNorm1d(GNN_HIDDEN_DIM)
+        self.dropout = nn.Dropout(DROPOUT_RATE)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.relu(self.linear(x))
+        x = self.linear(x)
+        x = self.batch_norm(x)
+        x = F.relu(x)
+        x = self.dropout(x)
+        return x
 
 
 class GINLayer(nn.Module):
