@@ -80,7 +80,7 @@ class FinetuneGNN(nn.Module):
 
 
 def get_pretrained_model_path(pretrained_scheme: str, seed: int) -> str:
-    model_name = f"best_model_{pretrained_scheme}_{seed}"
+    model_name = f"model_{pretrained_scheme}_{seed}"
     model_path = OUTPUT_DIR / f"{model_name}.pt"
 
     if not model_path.exists():

@@ -1,11 +1,9 @@
 import argparse
-import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-import numpy as np
 import torch
 import wandb
 import yaml
@@ -17,8 +15,9 @@ from src.finetune.metrics import compute_batch_metrics, compute_training_metrics
 from src.models.finetune_model import FinetuneGNN, create_finetune_model, LR_BACKBONE, LR_FINETUNE
 from src.pretrain.schedulers import CosineWithWarmup
 
-from src.data.data_setup import TASK_TYPES
 import torch.nn.functional as F
+
+from src.data.data_setup import TASK_TYPES
 
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "finetune"
 
@@ -69,11 +68,7 @@ def build_config(args: argparse.Namespace) -> FinetuneConfig:
 
 
 def set_global_seed(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
@@ -85,7 +80,6 @@ def process_batch_by_task_type(
     task_type: str,
     generator: torch.Generator = None
 ) -> tuple:
-    """Process a batch based on task type and return logits, loss, targets, predictions, probabilities."""
     
     if task_type == 'graph_classification':
         batch = batch.to(device)
@@ -143,7 +137,6 @@ def process_batch_by_task_type(
 
 
 def compute_loss_and_metrics(model: torch.nn.Module, batch, device: torch.device, task_type: str, domain_name: str) -> Dict[str, float]:
-    """Compute loss and metrics for evaluation (with torch.no_grad())."""
     model.eval()
     
     with torch.no_grad():
@@ -193,7 +186,7 @@ def run_evaluation(
             'val_metrics': val_metrics,
         }
         best_checkpoint_path = OUTPUT_DIR / \
-            f"best_model_{cfg.exp_name}_{seed}.pt"
+            f"model_{cfg.exp_name}_{seed}.pt"
         torch.save(checkpoint, best_checkpoint_path)
 
         artifact = wandb.Artifact(f"model_{cfg.exp_name}_{seed}", type="model")
@@ -226,7 +219,6 @@ def run_training(
         step_start_time = time.time()
         global_step_ref[0] += 1
 
-        # Use shared batch processing function
         logits, loss, targets, predictions, probabilities, edge_probs, edge_labels = process_batch_by_task_type(
             model, batch, device, cfg.task_type, generator
         )
@@ -243,7 +235,6 @@ def run_training(
                 pg['lr'] = LR_FINETUNE * scale
         lr_multiplier.step()
 
-        # Compute and log training metrics (all logic moved to metrics.py)
         train_metrics = compute_training_metrics(
             epoch=epoch,
             step=global_step_ref[0],
@@ -261,7 +252,7 @@ def run_training(
 
 
 def finetune(cfg: FinetuneConfig, seed: int) -> None:
-    training_start_time = time.time()  # Track total training time
+    training_start_time = time.time()
     
     set_global_seed(seed)
     generator = torch.Generator()
@@ -317,18 +308,16 @@ def finetune(cfg: FinetuneConfig, seed: int) -> None:
         if epochs_since_improvement >= cfg.patience:
             break
 
-    best_checkpoint_path = OUTPUT_DIR / f"best_model_{cfg.exp_name}_{seed}.pt"
+    best_checkpoint_path = OUTPUT_DIR / f"model_{cfg.exp_name}_{seed}.pt"
     best_checkpoint = torch.load(best_checkpoint_path, map_location=device)
     model.load_state_dict(best_checkpoint['model_state_dict'])
 
-    # Test evaluation
     batch_metrics = []
     for batch_or_data in test_loader:
         metrics = compute_loss_and_metrics(
             model, batch_or_data, device, cfg.task_type, cfg.domain_name)
         batch_metrics.append(metrics)
 
-    # Compute final test metrics with all required information
     final_metrics = compute_test_metrics(
         batch_metrics=batch_metrics,
         epoch=epoch,

@@ -236,23 +236,22 @@ class DomainAdversarialTask(BasePretrainTask):
 
     def compute_loss(self, domain_batches: Dict[str, Batch], generator: torch.Generator) -> Tuple[Tensor, Dict[str, Tensor]]:
         device = self.model.device
-        embeddings = []
-        labels = []
+        total_loss = torch.tensor(0.0, device=device)
+        total_size = torch.tensor(0, device=device, dtype=torch.long)
+        per_domain_losses = {}
 
         for domain_name, batch in domain_batches.items():
             h = self.model(batch, domain_name)
             graph_emb = global_mean_pool(h, batch.batch)
 
-            domain_idx = self.domain_to_idx[domain_name]
-            domain_labels = torch.full((graph_emb.size(0),), domain_idx, device=device, dtype=torch.long)
+            logits = self.model.get_head('domain_adv')(graph_emb)
+            labels = torch.full((graph_emb.size(0),), self.domain_to_idx[domain_name], device=device, dtype=torch.long)
 
-            embeddings.append(graph_emb)
-            labels.append(domain_labels)
+            loss = F.cross_entropy(logits, labels, reduction='sum')
+            size = torch.tensor(labels.size(0), device=device, dtype=torch.long)
+            total_loss += loss
+            total_size += size
+            per_domain_losses[domain_name] = loss / size
 
-        all_embeddings = torch.cat(embeddings, dim=0)
-        all_labels = torch.cat(labels, dim=0)
-
-        logits = self.model.get_head('domain_adv')(all_embeddings)
-
-        total_loss = F.cross_entropy(logits, all_labels)
-        return total_loss, None
+        total_loss /= total_size
+        return total_loss, per_domain_losses

@@ -92,7 +92,7 @@ def compute_validation_metrics(
     per_domain_per_task_raw_losses: Dict[str, Dict[str, float]],
     per_task_raw_losses: Dict[str, torch.Tensor],
     per_domain_weighted_losses: Dict[str, float],
-    total_weighted_loss: float,
+    total_weighted_loss: torch.Tensor,
     weighter: UncertaintyWeighter,
     grl_scheduler: Any,
     epoch: int

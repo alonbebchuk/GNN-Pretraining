@@ -1,5 +1,4 @@
 import argparse
-import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +30,7 @@ BATCH_SIZE = 32
 EPOCHS = 50
 LR_MODEL = 3e-4
 LR_UNCERTAINTY = 3e-3
-PATIENCE_EPOCHS = 5
+PATIENCE_FRACTION = 0.1
 UNCERTAINTY_WEIGHT_DECAY = 0
 
 PRETRAIN_DOMAINS = {
@@ -68,7 +67,7 @@ class PretrainConfig:
     active_tasks: List[str]
 
     def __post_init__(self):
-        self.pretrain_domains = PRETRAIN_DOMAINS.get(self.exp_name, PRETRAIN_TUDATASETS)
+        self.pretrain_domains = PRETRAIN_DOMAINS[self.exp_name]
         self.active_tasks = ACTIVE_TASKS[self.exp_name]
 
 
@@ -80,11 +79,7 @@ def build_config(args: argparse.Namespace) -> PretrainConfig:
 
 
 def set_global_seed(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
@@ -132,40 +127,20 @@ def run_training(
             domain_batches[domain_name] = domain_batches[domain_name].to(device)
 
         per_task_raw_losses = {}
-        per_domain_per_task_raw_losses = {}
-
-        for domain in cfg.pretrain_domains:
-            per_domain_per_task_raw_losses[domain] = {}
+        per_domain_per_task_raw_losses = {domain: {} for domain in cfg.pretrain_domains}
+        per_domain_weighted_losses = {}
 
         for task_name, task in tasks.items():
-            if task_name == 'domain_adv':
-                raw_loss, _ = task.compute_loss(domain_batches, generator, lambda_val=grl_sched())
-            else:
-                raw_loss, per_domain_loss = task.compute_loss(domain_batches, generator)
-                for domain, domain_loss in per_domain_loss.items():
-                    per_domain_per_task_raw_losses[domain][task_name] = float(domain_loss)
-            per_task_raw_losses[task_name] = raw_loss
+            task_raw_loss, task_per_domain_raw_loss = task.compute_loss(domain_batches, generator)
+            per_task_raw_losses[task_name] = task_raw_loss
+            for domain, per_domain_per_task_raw_loss in task_per_domain_raw_loss.items():
+                per_domain_per_task_raw_losses[domain][task_name] = float(per_domain_per_task_raw_loss)
+
+        for domain in per_domain_per_task_raw_losses.keys():
+            domain_weighted_loss = weighter(per_domain_per_task_raw_losses[domain], lambda_val=grl_sched())
+            per_domain_weighted_losses[domain] = float(domain_weighted_loss.detach().cpu())
 
         total_weighted_loss = weighter(per_task_raw_losses, lambda_val=grl_sched())
-
-        # Compute per-domain weighted losses for analysis
-        per_domain_weighted_losses = {}
-        for domain in per_domain_per_task_raw_losses.keys():
-            # Create domain-specific raw losses dict
-            domain_raw_losses = {}
-            for task_name in per_domain_per_task_raw_losses[domain].keys():
-                domain_raw_losses[task_name] = torch.tensor(
-                    per_domain_per_task_raw_losses[domain][task_name], 
-                    device=device
-                )
-            
-            # Add domain_adv if present (shared across all domains)
-            if 'domain_adv' in per_task_raw_losses:
-                domain_raw_losses['domain_adv'] = per_task_raw_losses['domain_adv']
-            
-            # Compute weighted loss for this domain
-            domain_weighted_loss = weighter(domain_raw_losses, lambda_val=grl_sched())
-            per_domain_weighted_losses[domain] = float(domain_weighted_loss.detach().cpu())
 
         opt_model.zero_grad(set_to_none=True)
         opt_uncertainty.zero_grad(set_to_none=True)
@@ -218,88 +193,34 @@ def run_evaluation(
 ) -> Tuple[bool, Dict[str, float], float, int]:
     model.eval()
 
-    val_tasks = tasks
-
-    # Collect all validation batches first
-    all_val_batches = {}
-    for domain_name, val_loader in val_loaders.items():
-        domain_batches = []
-        for batch in val_loader:
-            domain_batches.append(batch.to(device))
-        all_val_batches[domain_name] = domain_batches
-
-    # Compute raw losses and per-domain losses like in training
     per_task_raw_losses = {}
-    per_domain_per_task_raw_losses = {}
+    per_domain_per_task_raw_losses = {domain: {} for domain in val_loaders.keys()}
 
-    for domain_name in val_loaders.keys():
-        per_domain_per_task_raw_losses[domain_name] = {}
+    for task_name, task in tasks.items():
+        domain_losses = []
 
-    # Process each task like in run_training
-    for task_name, task in val_tasks.items():
-        if task_name == 'domain_adv':
-            # Domain adversarial uses first batch from all domains
-            domain_batches = {domain: batches[0] for domain, batches in all_val_batches.items()}
-            raw_loss, _ = task.compute_loss(domain_batches, generator, lambda_val=grl_sched())
-            per_task_raw_losses[task_name] = raw_loss
-        else:
-            # Regular tasks: compute per domain and aggregate
-            task_losses = []
-            for domain_name, domain_batches in all_val_batches.items():
-                domain_task_losses = []
-                for batch in domain_batches:
-                    single_batch_dict = {domain_name: batch}
-                    raw_loss, _ = task.compute_loss(single_batch_dict, generator)
-                    domain_task_losses.append(raw_loss)
-                
-                # Average across batches for this domain-task
-                domain_avg_loss = torch.stack(domain_task_losses).mean()
-                per_domain_per_task_raw_losses[domain_name][task_name] = float(domain_avg_loss.detach().cpu())
-                task_losses.append(domain_avg_loss)
+        for domain_name, val_loader in val_loaders.items():
+            batch_losses = []
+            for batch in val_loader:
+                batch = batch.to(device)
+                loss, _ = task.compute_loss({domain_name: batch}, generator)
+                batch_losses.append(loss)
             
-            # Average across domains for this task  
-            per_task_raw_losses[task_name] = torch.stack(task_losses).mean()
-
-    # Compute total weighted loss like in training (not per-domain)
-    # Average per-domain losses for each task
-    task_domain_averages = {}
-    for task_name in set().union(*[domain_tasks.keys() for domain_tasks in per_domain_per_task_raw_losses.values()]):
-        task_losses = [per_domain_per_task_raw_losses[domain][task_name] 
-                      for domain in per_domain_per_task_raw_losses.keys() 
-                      if task_name in per_domain_per_task_raw_losses[domain]]
-        task_domain_averages[task_name] = float(np.mean(task_losses))
-
-    # Add domain_adv if present (computed once across all domains)
-    if 'domain_adv' in per_task_raw_losses:
-        task_domain_averages['domain_adv'] = float(per_task_raw_losses['domain_adv'].detach().cpu())
-
-    # Convert to tensor dict for weighter (like training)
-    domain_averaged_raw_losses = {
-        task: torch.tensor(loss, device=device) 
-        for task, loss in task_domain_averages.items()
-    }
+            domain_task_raw_loss = torch.stack(batch_losses).mean()
+            domain_losses.append(domain_task_raw_loss)
+            per_domain_per_task_raw_losses[domain_name][task_name] = float(domain_task_raw_loss.detach().cpu())
+        
+        per_task_raw_losses[task_name] = torch.stack(domain_losses).mean()
     
-    # Compute total weighted loss once (like training)
-    total_weighted_loss_tensor = weighter(domain_averaged_raw_losses, lambda_val=grl_sched())
-    total_weighted_loss = float(total_weighted_loss_tensor.detach().cpu())
+    total_weighted_loss = weighter(per_task_raw_losses, lambda_val=grl_sched())
 
-    # Compute per-domain weighted losses for validation analysis
     per_domain_weighted_losses = {}
     for domain in per_domain_per_task_raw_losses.keys():
-        # Create domain-specific raw losses dict
-        domain_raw_losses = {}
-        for task_name in per_domain_per_task_raw_losses[domain].keys():
-            domain_raw_losses[task_name] = torch.tensor(
-                per_domain_per_task_raw_losses[domain][task_name], 
-                device=device
-            )
-        
-        # Add domain_adv if present (shared across all domains)
-        if 'domain_adv' in per_task_raw_losses:
-            domain_raw_losses['domain_adv'] = per_task_raw_losses['domain_adv']
-        
-        # Compute weighted loss for this domain
-        domain_weighted_loss = weighter(domain_raw_losses, lambda_val=grl_sched())
+        domain_losses = {
+            task: torch.tensor(loss, device=device)
+            for task, loss in per_domain_per_task_raw_losses[domain].items()
+        }
+        domain_weighted_loss = weighter(domain_losses, lambda_val=grl_sched())
         per_domain_weighted_losses[domain] = float(domain_weighted_loss.detach().cpu())
 
     val_metrics = compute_validation_metrics(
@@ -309,39 +230,35 @@ def run_evaluation(
         total_weighted_loss,
         weighter,
         grl_sched,
-        epoch,
-        global_step[0]
+        epoch
     )
 
-    current_total_weighted_loss = val_metrics['val/loss/total_weighted']
-    is_best = current_total_weighted_loss < best_total_weighted_loss
-    
-    if is_best:
-        new_best_loss = current_total_weighted_loss
-        new_epochs_since_improvement = 0
+    if total_weighted_loss < best_total_weighted_loss:
+        best_total_weighted_loss = total_weighted_loss
+        epochs_since_improvement = 0
 
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'val_metrics': val_metrics,
         }
+        model_name = f"model_{cfg.exp_name}_{seed}"
+        model_path = OUTPUT_DIR / f"{model_name}.pt"
 
-        best_model_path = OUTPUT_DIR / f"best_model_{cfg.exp_name}_{seed}.pt"
-        torch.save(checkpoint, best_model_path)
+        torch.save(checkpoint, model_path)
 
         artifact = wandb.Artifact(
-            name=f"model_{cfg.exp_name}_{seed}",
+            name=model_name,
             type="model",
         )
-        artifact.add_file(str(best_model_path))
+        artifact.add_file(str(model_path))
         wandb.log_artifact(artifact)
     else:
-        new_best_loss = best_total_weighted_loss
-        new_epochs_since_improvement = epochs_since_improvement + 1
+        epochs_since_improvement += 1
 
     wandb.log(val_metrics, step=global_step[0])
 
-    return is_best, val_metrics, new_best_loss, new_epochs_since_improvement
+    return best_total_weighted_loss, epochs_since_improvement
 
 
 def pretrain(cfg: PretrainConfig, seed: int) -> None:
@@ -370,7 +287,8 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
     weighter = UncertaintyWeighter(task_names=cfg.active_tasks).to(device)
 
     opt_model = AdamW(model.parameters(), lr=LR_MODEL)
-    opt_uncertainty = AdamW(weighter.parameters(), lr=LR_UNCERTAINTY, weight_decay=UNCERTAINTY_WEIGHT_DECAY)
+    opt_uncertainty = AdamW(weighter.parameters(
+    ), lr=LR_UNCERTAINTY, weight_decay=UNCERTAINTY_WEIGHT_DECAY)
 
     train_loader = create_train_data_loader(cfg.pretrain_domains, generator)
     total_steps = len(train_loader) * EPOCHS
@@ -400,13 +318,23 @@ def pretrain(cfg: PretrainConfig, seed: int) -> None:
             cfg
         )
 
-        is_best, val_metrics, best_total_weighted_loss, epochs_since_improvement = run_evaluation(
-            model, tasks, val_loaders, generator, weighter, grl_sched, device, 
-            epoch, best_total_weighted_loss, epochs_since_improvement, 
-            cfg, seed, global_step
+        best_total_weighted_loss, epochs_since_improvement = run_evaluation(
+            model,
+            tasks,
+            val_loaders,
+            generator,
+            weighter,
+            grl_sched,
+            device,
+            epoch,
+            best_total_weighted_loss,
+            epochs_since_improvement,
+            cfg,
+            seed,
+            global_step
         )
 
-        if epochs_since_improvement >= PATIENCE_EPOCHS:
+        if epochs_since_improvement >= int(EPOCHS * PATIENCE_FRACTION):
             break
 
     wandb.finish()
