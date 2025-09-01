@@ -17,10 +17,15 @@ class UncertaintyWeighter(nn.Module):
         device = next(iter(raw_losses.values())).device
         total_weighted_loss = torch.tensor(0.0, device=device)
 
-        for task_name, log_sigma_sq in self.log_sigma_sq.items():
-            raw_loss = raw_losses[task_name]
-            weighted_loss = 0.5 * (raw_loss * torch.exp(-log_sigma_sq) + log_sigma_sq)
-            total_weighted_loss += weighted_loss
+        if len(self.log_sigma_sq) == 1:
+            for task_name in self.log_sigma_sq.keys():
+                total_weighted_loss += raw_losses[task_name]
+        else:
+            for task_name, log_sigma_sq in self.log_sigma_sq.items():
+                raw_loss = raw_losses[task_name]
+                clamped_log_sigma_sq = torch.clamp(log_sigma_sq, min=-5.0, max=5.0)
+                weighted_loss = 0.5 * (raw_loss * torch.exp(-clamped_log_sigma_sq) + clamped_log_sigma_sq)
+                total_weighted_loss += weighted_loss
 
         if self.domain_adv:
             domain_adv_loss = -(lambda_val * raw_losses['domain_adv'])
