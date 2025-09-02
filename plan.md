@@ -31,6 +31,7 @@ Based on extensive experimental validation:
 - **✅ Gradient Clipping:** max_norm=0.5 prevents gradient explosions while preserving learning dynamics
 - **✅ Feature Normalization:** [-3.0, 3.0] clipping stabilizes continuous datasets (PROTEINS, ENZYMES)
 - **✅ Enhanced Input Encoding:** BatchNorm1d + Dropout improves cross-domain robustness
+- **✅ GRL Scheduler:** Kept for domain adversarial training (s5) with lambda scheduling
 
 #### **2.1.2. Building Blocks**
 - **GNN Backbone:** 5-layer GIN architecture with residual connections and batch normalization
@@ -56,9 +57,11 @@ Based on extensive experimental validation:
 6. **Domain Adversarial (DA)** - Domain classifier with gradient reversal layer (GRL)
 
 **Simplified Loss Function (Simple Averaging):**
-$$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \mathcal{L}_i - \lambda \mathcal{L}_{\text{domain}}$$
+$$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \mathcal{L}_i - \lambda(p) \mathcal{L}_{\text{domain\_adv}}$$
 
-**Rationale:** Experimental evidence showed uncertainty weighting caused training instability. Simple averaging provides stable, predictable optimization.
+**where** $\lambda(p) = \frac{2}{1 + e^{-\gamma p}} - 1$ **(GRL scheduling for domain adversarial loss)**
+
+**Rationale:** Experimental evidence showed uncertainty weighting caused training instability. Simple averaging provides stable, predictable optimization. GRL scheduler retained for domain adversarial training (s5).
 
 ### **2.3. Fine-tuning Setup**
 

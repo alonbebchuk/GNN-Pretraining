@@ -2,7 +2,7 @@ import argparse
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 import wandb
@@ -12,8 +12,7 @@ from torch_geometric.utils import negative_sampling
 
 from src.data.finetune_data_loaders import create_finetune_data_loader
 from src.finetune.metrics import compute_batch_metrics, compute_training_metrics, compute_validation_metrics, compute_test_metrics
-from src.models.finetune_model import FinetuneGNN, create_finetune_model, LR_BACKBONE, LR_FINETUNE
-from src.pretrain.schedulers import CosineWithWarmup
+from src.models.finetune_model import FinetuneGNN, create_finetune_model
 
 import torch.nn.functional as F
 
@@ -73,8 +72,7 @@ def process_batch(
     batch: Batch,
     device: torch.device,
     task_type: str,
-    domain_name: str,
-    generator: Optional[torch.Generator] = None
+    domain_name: str
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     if task_type == 'graph_classification':
         batch = batch.to(device)
@@ -220,12 +218,10 @@ def run_training(
     model: FinetuneGNN,
     optimizer: torch.optim.Optimizer,
     train_loader: torch.utils.data.DataLoader,
-    lr_multiplier: CosineWithWarmup,
     device: torch.device,
     epoch: int,
     global_step_ref: List[int],
-    cfg: FinetuneConfig,
-    generator: torch.Generator
+    cfg: FinetuneConfig
 ) -> None:
     model.train()
 
@@ -238,22 +234,12 @@ def run_training(
             batch,
             device,
             cfg.task_type,
-            cfg.domain_name,
-            generator
+            cfg.domain_name
         )
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-        scale = lr_multiplier()
-        for pg in optimizer.param_groups:
-            if pg['name'] == 'backbone':
-                pg['lr'] = LR_BACKBONE * scale
-            else:
-                pg['lr'] = LR_FINETUNE * scale
-
-        lr_multiplier.step()
 
         train_metrics = compute_training_metrics(
             epoch=epoch,
@@ -286,15 +272,10 @@ def finetune(cfg: FinetuneConfig) -> None:
 
     val_loader = create_finetune_data_loader(cfg.domain_name, 'val', cfg.batch_size, generator)
     test_loader = create_finetune_data_loader(cfg.domain_name, 'test', cfg.batch_size, generator)
+    train_loader = create_finetune_data_loader(cfg.domain_name, 'train', cfg.batch_size, generator)
 
     model = create_finetune_model(device=device, cfg=cfg)
-
     optimizer = AdamW(model.param_groups)
-
-    train_loader = create_finetune_data_loader(cfg.domain_name, 'train', cfg.batch_size, generator)
-    total_steps = len(train_loader) * cfg.epochs
-
-    lr_multiplier = CosineWithWarmup(total_steps=total_steps)
 
     best_val_metric = -float('inf')
     epochs_since_improvement = 0
@@ -306,12 +287,10 @@ def finetune(cfg: FinetuneConfig) -> None:
             model,
             optimizer,
             train_loader,
-            lr_multiplier,
             device,
             epoch,
             global_step,
-            cfg,
-            generator
+            cfg
         )
 
         best_val_metric, epochs_since_improvement = run_evaluation(

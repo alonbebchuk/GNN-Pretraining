@@ -11,9 +11,7 @@ from torch.optim import AdamW
 from src.data.data_setup import PRETRAIN_TUDATASETS
 from src.data.pretrain_data_loaders import create_train_data_loader, create_val_data_loader
 from src.models.pretrain_model import PretrainableGNN
-from src.pretrain.losses import UncertaintyWeighter
-from src.pretrain.metrics import compute_training_metrics, compute_validation_metrics
-from src.pretrain.schedulers import CosineWithWarmup, GRLLambdaScheduler
+from src.pretrain.grl_scheduler import GRLLambdaScheduler
 from src.pretrain.tasks import (
     BasePretrainTask,
     DomainAdversarialTask,
@@ -27,10 +25,9 @@ from src.pretrain.tasks import (
 BATCH_SIZE = 32
 EPOCHS = 50
 LR_MODEL = 1e-5
-LR_UNCERTAINTY = 5e-4
-PATIENCE_FRACTION = 0.5
+MAX_GRAD_NORM = 0.5
 MODEL_WEIGHT_DECAY = 1e-5
-UNCERTAINTY_WEIGHT_DECAY = 0
+PATIENCE_FRACTION = 0.5
 
 PRETRAIN_DOMAINS = {
     'b2': PRETRAIN_TUDATASETS,
@@ -98,13 +95,10 @@ def instantiate_tasks(model: PretrainableGNN, active_tasks: List[str]) -> Dict[s
 def run_training(
     model: PretrainableGNN,
     tasks: Dict[str, BasePretrainTask],
-    weighter: UncertaintyWeighter,
-    opt_model: AdamW,
-    opt_uncertainty: AdamW,
+    optimizer: AdamW,
     train_loader: torch.utils.data.DataLoader,
     generator: torch.Generator,
     grl_sched: GRLLambdaScheduler,
-    lr_multiplier: CosineWithWarmup,
     device: torch.device,
     epoch: int,
     global_step_ref: List[int],
@@ -113,64 +107,71 @@ def run_training(
     model.train()
 
     for domain_batches in train_loader:
-        step_start_time = time.time()
         global_step_ref[0] += 1
 
         for domain_name in domain_batches:
             domain_batches[domain_name] = domain_batches[domain_name].to(device)
 
-        per_task_raw_losses = {}
-        per_domain_per_task_raw_losses_tensors = {domain: {} for domain in cfg.pretrain_domains}
-        per_domain_per_task_raw_losses = {domain: {} for domain in cfg.pretrain_domains}
-        per_domain_weighted_losses = {}
+        per_task_losses = {}
+        per_domain_per_task_losses_tensors = {domain: {} for domain in cfg.pretrain_domains}
+        per_domain_per_task_losses = {domain: {} for domain in cfg.pretrain_domains}
+        per_domain_losses = {}
 
         for task_name, task in tasks.items():
-            task_raw_loss, task_per_domain_raw_loss = task.compute_loss(domain_batches, generator)
-            per_task_raw_losses[task_name] = task_raw_loss
-            for domain, per_domain_per_task_raw_loss in task_per_domain_raw_loss.items():
-                per_domain_per_task_raw_losses_tensors[domain][task_name] = per_domain_per_task_raw_loss
-                per_domain_per_task_raw_losses[domain][task_name] = float(per_domain_per_task_raw_loss.detach())
+            task_loss, task_per_domain_loss = task.compute_loss(domain_batches, generator)
+            per_task_losses[task_name] = task_loss
+            for domain, per_domain_per_task_loss in task_per_domain_loss.items():
+                per_domain_per_task_losses_tensors[domain][task_name] = per_domain_per_task_loss
+                per_domain_per_task_losses[domain][task_name] = float(per_domain_per_task_loss.detach())
 
-        for domain in per_domain_per_task_raw_losses_tensors.keys():
-            domain_weighted_loss = weighter(per_domain_per_task_raw_losses_tensors[domain], lambda_val=grl_sched())
-            per_domain_weighted_losses[domain] = float(domain_weighted_loss.detach().cpu())
+        for domain in per_domain_per_task_losses_tensors.keys():
+            domain_task_losses = list(per_domain_per_task_losses_tensors[domain].values())
+            domain_loss = torch.stack(domain_task_losses).sum()
+            per_domain_losses[domain] = float(domain_loss.detach().cpu())
 
-        total_weighted_loss = weighter(per_task_raw_losses, lambda_val=grl_sched())
+        task_losses = []
+        lambda_val = grl_sched()
 
-        opt_model.zero_grad(set_to_none=True)
-        opt_uncertainty.zero_grad(set_to_none=True)
-        total_weighted_loss.backward()
+        for task_name, task_loss in per_task_losses.items():
+            if task_name == 'domain_adv':
+                scaled_loss = -lambda_val * task_loss
+                task_losses.append(scaled_loss)
+            else:
+                task_losses.append(task_loss)
 
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
-        torch.nn.utils.clip_grad_norm_(weighter.parameters(), max_norm=0.5)
+        total_loss = torch.stack(task_losses).sum()
 
-        opt_model.step()
-        opt_uncertainty.step()
-
-        # Disable learning rate scheduling for stability
-        # scale = lr_multiplier()
-        # for pg in opt_model.param_groups:
-        #     pg["lr"] = LR_MODEL * scale
-        # for pg in opt_uncertainty.param_groups:
-        #     pg["lr"] = LR_UNCERTAINTY * scale
-
+        optimizer.zero_grad(set_to_none=True)
+        total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=MAX_GRAD_NORM)
+        optimizer.step()
         grl_sched.step()
-        # lr_multiplier.step()
 
-        train_metrics = compute_training_metrics(
-            per_domain_per_task_raw_losses,
-            per_task_raw_losses,
-            per_domain_weighted_losses,
-            total_weighted_loss,
-            weighter,
-            grl_sched,
-            opt_model,
-            opt_uncertainty,
-            model,
-            epoch,
-            global_step_ref[0],
-            step_start_time
-        )
+        train_metrics = {}
+
+        for domain in per_domain_per_task_losses:
+            for task in per_domain_per_task_losses[domain]:
+                train_metrics[f'train/loss/{domain}/{task}'] = per_domain_per_task_losses[domain][task]
+
+        for task_name, loss_tensor in per_task_losses.items():
+            train_metrics[f'train/loss/{task_name}'] = float(loss_tensor.detach().cpu())
+
+        for domain_name, domain_loss in per_domain_losses.items():
+            train_metrics[f'train/loss/{domain_name}'] = domain_loss
+
+        train_metrics['train/loss/total'] = float(total_loss.detach().cpu())
+        train_metrics['train/progress/epoch'] = epoch
+
+        if 'domain_adv' in per_task_losses:
+            train_metrics['train/domain_adv/lambda'] = lambda_val
+
+        total_norm = 0.0
+        for p in model.parameters():
+            if p.grad is not None and p.requires_grad:
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** (1. / 2)
+        train_metrics['train/gradients/model_grad_norm'] = total_norm
 
         wandb.log(train_metrics, step=global_step_ref[0])
 
@@ -181,19 +182,18 @@ def run_evaluation(
     tasks: Dict[str, BasePretrainTask],
     val_loaders: Dict[str, torch.utils.data.DataLoader],
     generator: torch.Generator,
-    weighter: UncertaintyWeighter,
     grl_sched: GRLLambdaScheduler,
     device: torch.device,
     epoch: int,
-    best_total_weighted_loss: float,
+    best_total_loss: float,
     epochs_since_improvement: int,
     cfg: PretrainConfig,
     global_step: List[int]
 ) -> Tuple[float, int]:
     model.eval()
 
-    per_task_raw_losses = {}
-    per_domain_per_task_raw_losses = {domain: {} for domain in val_loaders.keys()}
+    per_task_losses = {}
+    per_domain_per_task_losses = {domain: {} for domain in val_loaders.keys()}
 
     for task_name, task in tasks.items():
         domain_losses = []
@@ -205,35 +205,50 @@ def run_evaluation(
                 loss, _ = task.compute_loss({domain_name: batch}, generator)
                 batch_losses.append(loss)
             
-            domain_task_raw_loss = torch.stack(batch_losses).mean()
-            domain_losses.append(domain_task_raw_loss)
-            per_domain_per_task_raw_losses[domain_name][task_name] = float(domain_task_raw_loss.detach().cpu())
+            domain_task_loss = torch.stack(batch_losses).mean()
+            domain_losses.append(domain_task_loss)
+            per_domain_per_task_losses[domain_name][task_name] = float(domain_task_loss.detach().cpu())
         
-        per_task_raw_losses[task_name] = torch.stack(domain_losses).mean()
+        per_task_losses[task_name] = torch.stack(domain_losses).mean()
     
-    total_weighted_loss = weighter(per_task_raw_losses, lambda_val=grl_sched())
+    task_losses = []
+    lambda_val = grl_sched()
 
-    per_domain_weighted_losses = {}
-    for domain in per_domain_per_task_raw_losses.keys():
-        domain_losses = {
-            task: torch.tensor(loss, device=device)
-            for task, loss in per_domain_per_task_raw_losses[domain].items()
-        }
-        domain_weighted_loss = weighter(domain_losses, lambda_val=grl_sched())
-        per_domain_weighted_losses[domain] = float(domain_weighted_loss.detach().cpu())
+    for task_name, task_loss in per_task_losses.items():
+        if task_name == 'domain_adv':
+            scaled_loss = -lambda_val * task_loss
+            task_losses.append(scaled_loss)
+        else:
+            task_losses.append(task_loss)
 
-    val_metrics = compute_validation_metrics(
-        per_domain_per_task_raw_losses,
-        per_task_raw_losses,
-        per_domain_weighted_losses,
-        total_weighted_loss,
-        weighter,
-        grl_sched,
-        epoch
-    )
+    total_loss = torch.stack(task_losses).sum()
 
-    if total_weighted_loss < best_total_weighted_loss:
-        best_total_weighted_loss = total_weighted_loss
+    per_domain_losses = {}
+    for domain in per_domain_per_task_losses.keys():
+        domain_task_losses = list(per_domain_per_task_losses[domain].values())
+        domain_loss = sum(domain_task_losses) / len(domain_task_losses)
+        per_domain_losses[domain] = float(domain_loss)
+
+    val_metrics = {}
+
+    for domain in per_domain_per_task_losses:
+        for task in per_domain_per_task_losses[domain]:
+            val_metrics[f'val/loss/{domain}/{task}'] = per_domain_per_task_losses[domain][task]
+
+    for task_name, loss_tensor in per_task_losses.items():
+        val_metrics[f'val/loss/{task_name}'] = float(loss_tensor.detach().cpu())
+
+    for domain_name, domain_loss in per_domain_losses.items():
+        val_metrics[f'val/loss/{domain_name}'] = domain_loss
+
+    val_metrics['val/loss/total'] = float(total_loss.detach().cpu())
+    val_metrics['val/progress/epoch'] = epoch
+
+    if 'domain_adv' in per_task_losses:
+        val_metrics['val/domain_adv/lambda'] = lambda_val
+
+    if total_loss < best_total_loss:
+        best_total_loss = total_loss
         epochs_since_improvement = 0
 
         checkpoint = {
@@ -257,7 +272,7 @@ def run_evaluation(
 
     wandb.log(val_metrics, step=global_step[0])
 
-    return best_total_weighted_loss, epochs_since_improvement
+    return best_total_loss, epochs_since_improvement
 
 
 def pretrain(cfg: PretrainConfig) -> None:
@@ -274,27 +289,20 @@ def pretrain(cfg: PretrainConfig) -> None:
     val_loaders = {}
     for domain in cfg.pretrain_domains:
         val_loaders[domain] = create_val_data_loader(domain, generator)
+    train_loader = create_train_data_loader(cfg.pretrain_domains, generator)
 
     model = PretrainableGNN(
         device=device,
         domain_names=cfg.pretrain_domains,
         task_names=cfg.active_tasks,
     )
-
     tasks = instantiate_tasks(model, cfg.active_tasks)
+    optimizer = AdamW(model.parameters(), lr=LR_MODEL, weight_decay=MODEL_WEIGHT_DECAY)
 
-    weighter = UncertaintyWeighter(task_names=cfg.active_tasks).to(device)
-
-    opt_model = AdamW(model.parameters(), lr=LR_MODEL, weight_decay=MODEL_WEIGHT_DECAY)
-    opt_uncertainty = AdamW(weighter.parameters(), lr=LR_UNCERTAINTY, weight_decay=UNCERTAINTY_WEIGHT_DECAY)
-
-    train_loader = create_train_data_loader(cfg.pretrain_domains, generator)
     total_steps = len(train_loader) * EPOCHS
-
     grl_sched = GRLLambdaScheduler(total_steps=total_steps)
-    lr_multiplier = CosineWithWarmup(total_steps=total_steps)
 
-    best_total_weighted_loss = float("inf")
+    best_total_loss = float("inf")
     epochs_since_improvement = 0
 
     global_step = [0]
@@ -303,29 +311,25 @@ def pretrain(cfg: PretrainConfig) -> None:
         run_training(
             model,
             tasks,
-            weighter,
-            opt_model,
-            opt_uncertainty,
+            optimizer,
             train_loader,
             generator,
             grl_sched,
-            lr_multiplier,
             device,
             epoch,
             global_step,
             cfg
         )
 
-        best_total_weighted_loss, epochs_since_improvement = run_evaluation(
+        best_total_loss, epochs_since_improvement = run_evaluation(
             model,
             tasks,
             val_loaders,
             generator,
-            weighter,
             grl_sched,
             device,
             epoch,
-            best_total_weighted_loss,
+            best_total_loss,
             epochs_since_improvement,
             cfg,
             global_step
