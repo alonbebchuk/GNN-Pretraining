@@ -22,12 +22,22 @@ Pre-training remains underdeveloped for Graph Neural Networks (GNNs). Most GNNs 
 
 ### **2.1. Core Architecture**
 
-#### **2.1.1. Building Blocks**
-- **GNN Backbone:** 3-layer GIN architecture with residual connections and batch normalization
-- **Input Encoder:** Domain-specific encoder: `Linear(D_in, 256) -> ReLU`
+#### **2.1.1. Evidence-Based Design Decisions**
+Based on extensive experimental validation:
+
+- **✅ Simple Loss Averaging:** Uncertainty weighting caused exponential instability; simple averaging provides stable optimization
+- **✅ Constant Learning Rate:** Cosine annealing added complexity without benefit; constant LR=1e-5 achieves stable convergence  
+- **✅ Conservative Hyperparameters:** BATCH_SIZE=32, WEIGHT_DECAY=1e-5, PATIENCE=50% for optimal stability
+- **✅ Gradient Clipping:** max_norm=0.5 prevents gradient explosions while preserving learning dynamics
+- **✅ Feature Normalization:** [-3.0, 3.0] clipping stabilizes continuous datasets (PROTEINS, ENZYMES)
+- **✅ Enhanced Input Encoding:** BatchNorm1d + Dropout improves cross-domain robustness
+
+#### **2.1.2. Building Blocks**
+- **GNN Backbone:** 5-layer GIN architecture with residual connections and batch normalization
+- **Input Encoder:** `Linear(D_in, 256) -> BatchNorm1d -> ReLU -> Dropout(0.2)`
 - **Task Heads:** Standardized MLP: `Linear(dim_in, dim_hidden) -> ReLU -> Dropout -> Linear(dim_hidden, dim_out)`
 
-#### **2.1.2. Dataset Configuration**
+#### **2.1.3. Dataset Configuration**
 **Sources:** Graph classification (`MUTAG`, `PROTEINS`, `NCI1`, `ENZYMES`, `PTC_MR`); Node/link tasks (`Cora`, `CiteSeer`)
 
 **Input Dimensions:** `MUTAG`: 7, `PROTEINS`: 4, `NCI1`: 37, `ENZYMES`: 3, `PTC_MR`: 18, `Cora`: 1433, `CiteSeer`: 3703
@@ -45,8 +55,10 @@ Pre-training remains underdeveloped for Graph Neural Networks (GNNs). Most GNNs 
 5. **Graph Property Prediction (GPP)** - Regression on 12 structural properties (nodes, edges, density, etc.)
 6. **Domain Adversarial (DA)** - Domain classifier with gradient reversal layer (GRL)
 
-**Combined Loss Function (Kendall et al., 2018):**
-$$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma_i^2}\mathcal{L}_i + \frac{1}{2}\log\sigma_i^2 \right) - \lambda \mathcal{L}_{\text{domain}}$$
+**Simplified Loss Function (Simple Averaging):**
+$$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \mathcal{L}_i - \lambda \mathcal{L}_{\text{domain}}$$
+
+**Rationale:** Experimental evidence showed uncertainty weighting caused training instability. Simple averaging provides stable, predictable optimization.
 
 ### **2.3. Fine-tuning Setup**
 
@@ -78,22 +90,19 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 ### **4.1. Pre-training Metrics**
 
 **Training Metrics (logged per step):**
-- **Granular Raw Losses:** `train/loss/{domain}/{task}_raw` (20 metrics: 4 domains × 5 tasks)
-- **Task-Aggregated Losses:** `train/loss/{task_name}_raw` (6 metrics: 5 regular + domain_adv)
-- **Domain-Weighted Losses:** `train/loss/{domain_name}_weighted` (4 metrics)
-- **Total Weighted Loss:** `train/loss/total_weighted` (optimization target)
-- **Uncertainty Parameters:** `train/uncertainty/{task_name}_sigma` (6 metrics)
-- **Learning Rates:** `train/lr/model`, `train/lr/uncertainty`
-- **Domain Adversarial:** `train/domain_adv/lambda` (when active)
-- **Training Dynamics:** `train/gradients/model_grad_norm`, `train/system/time_per_step`
-- **Progress Tracking:** `train/progress/epoch`, `train/progress/step`
+- **Domain-Task Losses:** `train/loss/{domain}/{task}` (20 metrics: 4 domains × 5 tasks)
+- **Task-Aggregated Losses:** `train/loss/{task_name}` (6 metrics: 5 regular + domain_adv)
+- **Domain-Aggregated Losses:** `train/loss/{domain_name}` (4 metrics)
+- **Total Loss:** `train/loss/total` (optimization target)
+- **Domain Adversarial:** `val/domain_adv/lambda` (when active)
+- **Training Dynamics:** `train/gradients/model_grad_norm`
+- **Progress Tracking:** `train/progress/epoch`
 
 **Validation Metrics (logged per epoch):**
-- **Granular Raw Losses:** `val/loss/{domain}/{task}_raw` (20 metrics)
-- **Task-Aggregated Losses:** `val/loss/{task_name}_raw` (6 metrics)
-- **Domain-Weighted Losses:** `val/loss/{domain_name}_weighted` (4 metrics)
-- **Total Weighted Loss:** `val/loss/total_weighted` (model selection metric)
-- **Uncertainty Parameters:** `val/uncertainty/{task_name}_sigma` (6 metrics)
+- **Domain-Task Losses:** `val/loss/{domain}/{task}` (20 metrics)
+- **Task-Aggregated Losses:** `val/loss/{task_name}` (6 metrics)
+- **Domain-Aggregated Losses:** `val/loss/{domain_name}` (4 metrics)
+- **Total Loss:** `val/loss/total` (model selection metric)
 - **Domain Adversarial:** `val/domain_adv/lambda` (when active)
 - **Progress Tracking:** `val/progress/epoch`
 
@@ -170,9 +179,8 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \left( \frac{1}{2\sigma
 
 #### **Supplementary Figures:**
 5. **Domain-Task Affinity Matrix:** Heat map of domain-task performance patterns
-6. **Uncertainty Evolution:** Task uncertainty weights over training steps
-7. **Training Dynamics:** Gradient norms and timing analysis
-8. **Computational Efficiency:** Performance vs cost trade-off analysis
+6. **Training Dynamics:** Gradient norms and timing analysis
+7. **Computational Efficiency:** Performance vs cost trade-off analysis
 
 ### **4.5. Statistical Rigor**
 
@@ -257,7 +265,7 @@ python run_finetune.py --domain_sweep ENZYMES
 
 ### **6.2. Comprehensive Metric Summary**
 
-**Pre-training Metrics Total:** ~44 per training step, ~34 per validation epoch
+**Pre-training Metrics Total:** ~34 per training step, ~33 per validation epoch
 **Fine-tuning Metrics Total:** ~12 per training step, ~7 per validation epoch, ~9 at test
 
 **All research questions fully supported by logged metrics with no redundancy.**
