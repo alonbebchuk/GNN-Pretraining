@@ -25,7 +25,7 @@ Pre-training remains underdeveloped for Graph Neural Networks (GNNs). Most GNNs 
 #### **2.1.1. Evidence-Based Design Decisions**
 Based on extensive experimental validation:
 
-- **✅ Simple Loss Averaging:** Uncertainty weighting caused exponential instability; simple averaging provides stable optimization
+- **✅ Adaptive Loss Balancing:** Multi-task interference resolved with inverse-magnitude weighting and domain adversarial safety constraints
 - **✅ Constant Learning Rate:** Cosine annealing added complexity without benefit; constant LR=1e-5 achieves stable convergence  
 - **✅ Conservative Hyperparameters:** BATCH_SIZE=32, WEIGHT_DECAY=1e-5, PATIENCE=50% for optimal stability
 - **✅ Gradient Clipping:** max_norm=0.5 prevents gradient explosions while preserving learning dynamics
@@ -56,12 +56,12 @@ Based on extensive experimental validation:
 5. **Graph Property Prediction (GPP)** - Regression on 12 structural properties (nodes, edges, density, etc.)
 6. **Domain Adversarial (DA)** - Domain classifier with gradient reversal layer (GRL)
 
-**Simplified Loss Function (Simple Averaging):**
-$$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \mathcal{L}_i - \lambda(p) \mathcal{L}_{\text{domain\_adv}}$$
+**Adaptive Loss Balancing Function:**
+$$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} w_i \mathcal{L}_i - \lambda(p) \mathcal{L}_{\text{domain\_adv}}$$
 
-**where** $\lambda(p) = \frac{2}{1 + e^{-\gamma p}} - 1$ **(GRL scheduling for domain adversarial loss)**
+**where** $w_i = \frac{1/|\mathcal{L}_i|}{\sum_j 1/|\mathcal{L}_j|}$ **(inverse magnitude weighting)** and $\lambda(p) = \frac{2}{1 + e^{-\gamma p}} - 1$ **(GRL scheduling)**
 
-**Rationale:** Experimental evidence showed uncertainty weighting caused training instability. Simple averaging provides stable, predictable optimization. GRL scheduler retained for domain adversarial training (s5).
+**Rationale:** Multi-task training suffered from severe task interference with simple averaging. Adaptive weighting using inverse loss magnitudes provides stable multi-task optimization while domain adversarial loss includes safety constraints to prevent negative total losses.
 
 ### **2.3. Fine-tuning Setup**
 
@@ -201,7 +201,28 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} \mathcal{L}_i - \lambda
 
 ## **5. Implementation Details**
 
-### **5.1. Experimental Scope**
+### **5.1. Pre-training Experimental Schemes**
+
+**Systematic Multi-Task Design:**
+
+| Scheme | Tasks | Domain | Research Purpose |
+|--------|-------|--------|------------------|
+| **b2** | node_feat_mask | Cross | Generative baseline |
+| **b3** | node_contrast | Cross | Contrastive baseline |
+| **s1** | node_feat_mask, link_pred | Cross | Generative multi-task |
+| **s2** | node_contrast, graph_contrast | Cross | Contrastive multi-task |
+| **s3** | node_feat_mask, link_pred, node_contrast, graph_contrast | Cross | Combined 4-task |
+| **s4** | All 5 tasks | Cross | Full cross-domain |
+| **s5** | All 5 tasks + domain_adv | Cross | Full + domain adversarial |
+| **b4** | All 5 tasks | Single (ENZYMES) | Single-domain comprehensive |
+
+**Research Questions Addressed:**
+- **RQ1 (Effectiveness):** All schemes vs from-scratch baselines
+- **RQ2 (Task Combinations):** Systematic progression b2/b3 → s1/s2 → s3 → s4 → s5
+- **RQ3 (Fine-tuning):** Cross-cutting across all pretrained models  
+- **RQ4 (Task Affinity):** Critical comparison s4 (cross-domain) vs b4 (single-domain) with identical tasks
+
+### **5.2. Experimental Scope**
 **Total Runs:** ~150 experiments
 - **Pre-training:** 24 runs (8 schemes × 3 seeds)
 - **Fine-tuning:** ~125 runs (various configurations × 3 seeds)

@@ -14,7 +14,4 @@ data/processed/
 wandb/
 
 # Checkpoints
-checkpoints/
-
-# Artifacts
-artifacts/
+outputs/

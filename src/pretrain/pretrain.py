@@ -20,10 +20,10 @@ from src.pretrain.tasks import (
     NodeContrastiveTask,
     NodeFeatureMaskingTask,
 )
+from src.pretrain.adaptive_loss_balancer import AdaptiveLossBalancer
 
 BATCH_SIZE = 32
-# EPOCHS = 50
-EPOCHS = 10
+EPOCHS = 50
 LR_MODEL = 1e-5
 MAX_GRAD_NORM = 0.5
 MODEL_WEIGHT_DECAY = 1e-5
@@ -31,7 +31,7 @@ PATIENCE_FRACTION = 0.5
 
 PRETRAIN_DOMAINS = {
     'b2': PRETRAIN_TUDATASETS,
-    'b3': PRETRAIN_TUDATASETS,
+    'b3': PRETRAIN_TUDATASETS, 
     'b4': ['ENZYMES'],
     's1': PRETRAIN_TUDATASETS,
     's2': PRETRAIN_TUDATASETS,
@@ -103,6 +103,7 @@ def run_training(
     epoch: int,
     global_step_ref: List[int],
     cfg: PretrainConfig,
+    loss_balancer: AdaptiveLossBalancer,
 ) -> None:
     model.train()
 
@@ -129,17 +130,9 @@ def run_training(
             domain_loss = torch.stack(domain_task_losses).sum()
             per_domain_losses[domain] = float(domain_loss.detach().cpu())
 
-        task_losses = []
         lambda_val = grl_sched()
 
-        for task_name, task_loss in per_task_losses.items():
-            if task_name == 'domain_adv':
-                scaled_loss = -lambda_val * task_loss
-                task_losses.append(scaled_loss)
-            else:
-                task_losses.append(task_loss)
-
-        total_loss = torch.stack(task_losses).sum()
+        total_loss = loss_balancer.balance_losses(per_task_losses, lambda_val)
 
         optimizer.zero_grad(set_to_none=True)
         total_loss.backward()
@@ -165,6 +158,10 @@ def run_training(
         if 'domain_adv' in per_task_losses:
             train_metrics['train/domain_adv/lambda'] = lambda_val
 
+        current_weights = loss_balancer.get_current_weights()
+        for task_name, weight in current_weights.items():
+            train_metrics[f'train/loss_balancer/weight/{task_name}'] = weight
+
         total_norm = 0.0
         for p in model.parameters():
             if p.grad is not None and p.requires_grad:
@@ -188,7 +185,8 @@ def run_evaluation(
     best_total_loss: float,
     epochs_since_improvement: int,
     cfg: PretrainConfig,
-    global_step: List[int]
+    global_step: List[int],
+    loss_balancer: AdaptiveLossBalancer,
 ) -> Tuple[float, int]:
     model.eval()
 
@@ -211,17 +209,9 @@ def run_evaluation(
         
         per_task_losses[task_name] = torch.stack(domain_losses).mean()
     
-    task_losses = []
     lambda_val = grl_sched()
 
-    for task_name, task_loss in per_task_losses.items():
-        if task_name == 'domain_adv':
-            scaled_loss = -lambda_val * task_loss
-            task_losses.append(scaled_loss)
-        else:
-            task_losses.append(task_loss)
-
-    total_loss = torch.stack(task_losses).sum()
+    total_loss = loss_balancer.balance_losses(per_task_losses, lambda_val)
 
     per_domain_losses = {}
     for domain in per_domain_per_task_losses.keys():
@@ -302,6 +292,8 @@ def pretrain(cfg: PretrainConfig) -> None:
     total_steps = len(train_loader) * EPOCHS
     grl_sched = GRLLambdaScheduler(total_steps=total_steps)
 
+    loss_balancer = AdaptiveLossBalancer()
+
     best_total_loss = float("inf")
     epochs_since_improvement = 0
 
@@ -318,7 +310,8 @@ def pretrain(cfg: PretrainConfig) -> None:
             device,
             epoch,
             global_step,
-            cfg
+            cfg,
+            loss_balancer
         )
 
         best_total_loss, epochs_since_improvement = run_evaluation(
@@ -332,7 +325,8 @@ def pretrain(cfg: PretrainConfig) -> None:
             best_total_loss,
             epochs_since_improvement,
             cfg,
-            global_step
+            global_step,
+            loss_balancer
         )
 
         if epochs_since_improvement >= int(EPOCHS * PATIENCE_FRACTION):
