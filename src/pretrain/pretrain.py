@@ -232,7 +232,6 @@ def run_evaluation(
         val_metrics[f'val/loss/{domain_name}'] = domain_loss
 
     val_metrics['val/loss/total'] = float(total_loss.detach().cpu())
-    val_metrics['val/progress/epoch'] = epoch
 
     if 'domain_adv' in per_task_losses:
         val_metrics['val/domain_adv/lambda'] = lambda_val

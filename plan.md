@@ -107,7 +107,6 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} w_i \mathcal{L}_i - \la
 - **Domain-Aggregated Losses:** `val/loss/{domain_name}` (4 metrics)
 - **Total Loss:** `val/loss/total` (model selection metric)
 - **Domain Adversarial:** `val/domain_adv/lambda` (when active)
-- **Progress Tracking:** `val/progress/epoch`
 
 ### **4.2. Fine-tuning Metrics**
 
@@ -119,13 +118,12 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} w_i \mathcal{L}_i - \la
 
 **Validation Metrics (logged per epoch):**
 - **Performance:** `val/{accuracy,f1,precision,recall,auc,loss}`
-- **Progress Tracking:** `val/progress/epoch`
 
 **Test Metrics (logged at end):**
 - **Performance:** `test/{accuracy,f1,precision,recall,auc,loss}`
 - **Efficiency:** `test/convergence_epochs`, `test/training_time`
 - **Model Size:** `test/total_parameters`, `test/trainable_parameters`
-- **Progress Tracking:** `test/epoch`
+- **Progress Tracking:** `test/progress/epoch`
 
 ### **4.3. Analysis Framework**
 
@@ -286,11 +284,6 @@ python run_finetune.py --domain_sweep ENZYMES
 - Task affinity: `train/loss/{domain}/{task}_raw` matrix ✓
 - Transfer patterns: Cross-domain performance comparison ✓
 - Domain adaptation: `train/domain_adv/lambda` effectiveness ✓
-
-### **6.2. Comprehensive Metric Summary**
-
-**Pre-training Metrics Total:** ~34 per training step, ~33 per validation epoch
-**Fine-tuning Metrics Total:** ~12 per training step, ~7 per validation epoch, ~9 at test
 
 **All research questions fully supported by logged metrics with no redundancy.**
 
