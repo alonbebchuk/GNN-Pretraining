@@ -1,5 +1,4 @@
 import argparse
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -23,7 +22,8 @@ from src.pretrain.tasks import (
 )
 
 BATCH_SIZE = 32
-EPOCHS = 50
+# EPOCHS = 50
+EPOCHS = 10
 LR_MODEL = 1e-5
 MAX_GRAD_NORM = 0.5
 MODEL_WEIGHT_DECAY = 1e-5

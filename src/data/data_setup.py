@@ -14,6 +14,8 @@ from tqdm import tqdm
 
 from src.data.graph_properties import GraphPropertyCalculator
 
+MIN_SCALE = -3.0
+MAX_SCALE = 3.0
 RANDOM_SEED = 42
 VAL_FRACTION = 0.1
 VAL_TEST_FRACTION = 0.2
@@ -94,7 +96,7 @@ def process_tudatasets() -> None:
                 for g in dataset_list:
                     X = g.x.detach().cpu().numpy()
                     X_scaled = scaler.transform(X)
-                    X_scaled = np.clip(X_scaled, -3.0, 3.0)
+                    X_scaled = np.clip(X_scaled, MIN_SCALE, MAX_SCALE)
                     g.x = torch.from_numpy(X_scaled).to(g.x.dtype)
 
             sss_val_test = StratifiedShuffleSplit(n_splits=1, test_size=VAL_TEST_SPLIT_RATIO, random_state=RANDOM_SEED)
