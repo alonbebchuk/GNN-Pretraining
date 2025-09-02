@@ -26,7 +26,8 @@ def _aggregate_batch_metrics(
         )
         metrics[metric_name] = weighted_sum / total_samples
 
-    metrics[f'{prefix}/progress/epoch'] = epoch
+    if prefix != 'val':
+        metrics[f'{prefix}/progress/epoch'] = epoch
 
     return metrics
 
