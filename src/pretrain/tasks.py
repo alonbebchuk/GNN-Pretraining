@@ -217,6 +217,7 @@ class GraphPropertyPredictionTask(BasePretrainTask):
 
             preds = self.model.get_head('graph_prop', domain_name)(graph_emb)
             labels = batch.graph_properties.to(torch.float32).to(device)
+            labels = labels.view(graph_emb.size(0), GRAPH_PROPERTY_DIM)
 
             loss = F.mse_loss(preds, labels, reduction='sum')
             size = torch.tensor(graph_emb.size(0) * GRAPH_PROPERTY_DIM, device=device, dtype=torch.long)
