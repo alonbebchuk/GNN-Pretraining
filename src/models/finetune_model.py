@@ -8,7 +8,7 @@ from torch_geometric.nn import global_mean_pool
 
 from src.data.data_setup import DOMAIN_DIMENSIONS, NUM_CLASSES, TASK_TYPES
 from src.models.gnn import GINBackbone, GNN_HIDDEN_DIM, InputEncoder
-from src.models.heads import BilinearPredictor, MLPHead
+from src.models.heads import MLPLinkPredictor, MLPHead
 from src.pretrain.pretrain import OUTPUT_DIR, PROJECT_NAME
 
 FINETUNE_HIDDEN_DIM = 128
@@ -33,7 +33,7 @@ class FinetuneGNN(nn.Module):
         elif task_type == 'node_classification':
             self.classification_head = MLPHead([GNN_HIDDEN_DIM, num_classes])
         elif task_type == 'link_prediction':
-            self.classification_head = BilinearPredictor()
+            self.classification_head = MLPLinkPredictor()
 
         self.param_groups = []
 

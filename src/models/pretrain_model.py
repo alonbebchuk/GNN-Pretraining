@@ -9,10 +9,9 @@ from src.data.graph_properties import GRAPH_PROPERTY_DIM
 from src.models.gnn import GINBackbone, GNN_HIDDEN_DIM, InputEncoder
 from src.models.heads import (
     CONTRASTIVE_PROJ_DIM,
-    GRAPH_PROP_HEAD_HIDDEN_DIM,
-    BilinearDiscriminator,
+    GRAPH_PROP_HIDDEN_DIM,
     DomainClassifierHead,
-    DotProductDecoder,
+    MLPLinkPredictor,
     MLPHead,
 )
 
@@ -44,7 +43,7 @@ class PretrainableGNN(nn.Module):
                     for domain_name in domain_names
                 })
             elif task_name == 'link_pred':
-                self.heads[task_name] = DotProductDecoder()
+                self.heads[task_name] = MLPLinkPredictor()
             elif task_name == 'node_contrast':
                 self.heads[task_name] = nn.ModuleDict({
                     domain_name: MLPHead([GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, CONTRASTIVE_PROJ_DIM])
@@ -52,12 +51,12 @@ class PretrainableGNN(nn.Module):
                 })
             elif task_name == 'graph_contrast':
                 self.heads[task_name] = nn.ModuleDict({
-                    domain_name: BilinearDiscriminator()
+                    domain_name: MLPHead([2 * GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, CONTRASTIVE_PROJ_DIM])
                     for domain_name in domain_names
                 })
             elif task_name == 'graph_prop':
                 self.heads[task_name] = nn.ModuleDict({
-                    domain_name: MLPHead([GNN_HIDDEN_DIM, GRAPH_PROP_HEAD_HIDDEN_DIM, GRAPH_PROPERTY_DIM])
+                    domain_name: MLPHead([GNN_HIDDEN_DIM, GRAPH_PROP_HIDDEN_DIM, GRAPH_PROPERTY_DIM])
                     for domain_name in domain_names
                 })
             elif task_name == 'domain_adv':

@@ -18,12 +18,16 @@ def run_single_experiment(params):
     print(f"[GPU-{torch.cuda.current_device() if torch.cuda.is_available() else 'CPU'}] Running pretraining: {exp_name} (seed={seed})")
 
     try:
+        import os
+        env = os.environ.copy()
+        env['PYTHONPATH'] = str(Path.cwd())
+
         cmd = [
             sys.executable, "src/pretrain/pretrain.py",
             "--exp_name", exp_name,
             "--seed", str(seed)
         ]
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
         print(f"✓ Completed: {exp_name} (seed={seed})")
         return True, exp_name, seed, None
 

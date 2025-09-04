@@ -6,66 +6,77 @@ import torch.nn.functional as F
 
 from src.data.data_setup import PRETRAIN_TUDATASETS
 from src.models.gnn import DROPOUT_RATE, GNN_HIDDEN_DIM
-from src.models.layers import GradientReversalLayer
 
 CONTRASTIVE_PROJ_DIM = 128
-DOMAIN_ADV_HEAD_HIDDEN_DIM = 128
-DOMAIN_ADV_HEAD_OUT_DIM = len(PRETRAIN_TUDATASETS)
+DOMAIN_CLASSIFIER_DROPOUT_RATE = 0.5
+DOMAIN_CLASSIFIER_HIDDEN_DIM = 128
 GRAPH_PROP_HEAD_HIDDEN_DIM = 512
 
 
-class MLPHead(nn.Module):
-    def __init__(self, dims: List[int]) -> None:
+class GradientReversalFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, lambda_val):
+        ctx.lambda_val = lambda_val
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output.neg() * ctx.lambda_val, None
+
+
+class GradientReversalLayer(nn.Module):
+    def __init__(self):
         super().__init__()
+
+    def forward(self, x, lambda_val):
+        return GradientReversalFunction.apply(x, lambda_val)
+
+
+class MLPHead(nn.Module):
+    def __init__(self, dims: List[int], dropout_rates: List[float] = None) -> None:
+        super().__init__()
+
         layers = []
         for i in range(len(dims) - 1):
             layers.append(nn.Linear(dims[i], dims[i + 1]))
             if i < len(dims) - 2:
                 layers.append(nn.ReLU())
-                layers.append(nn.Dropout(DROPOUT_RATE))
+                dropout_rate = dropout_rates[i] if dropout_rates is not None else DROPOUT_RATE
+                layers.append(nn.Dropout(dropout_rate))
+
         self.mlp = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.mlp(x)
 
 
-class DotProductDecoder(nn.Module):
-    def forward(self, h: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        return torch.sigmoid((h[edge_index[0]] * h[edge_index[1]]).sum(dim=-1))
-
-
-class BilinearDiscriminator(nn.Module):
+class MLPLinkPredictor(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.W = nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, bias=False)
-
-    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        x = F.dropout(x, p=DROPOUT_RATE, training=self.training)
-        y = F.dropout(y, p=DROPOUT_RATE, training=self.training)
-        return torch.sigmoid((self.W(x.unsqueeze(1)) * y.unsqueeze(0)).sum(dim=-1))
-
-
-class BilinearPredictor(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.W = nn.Linear(GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, bias=False)
+        self.predictor = MLPHead([3 * GNN_HIDDEN_DIM, GNN_HIDDEN_DIM, 1])
 
     def forward(self, h: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        h_src = F.dropout(h[edge_index[0]], p=DROPOUT_RATE, training=self.training)
-        h_dst = F.dropout(h[edge_index[1]], p=DROPOUT_RATE, training=self.training)
-        return torch.sigmoid((self.W(h_src) * h_dst).sum(dim=-1))
+        h_src = h[edge_index[0]]
+        h_dst = h[edge_index[1]]
+
+        h_sum = h_src + h_dst
+        h_product = h_src * h_dst
+        h_diff = torch.abs(h_src - h_dst)
+
+        edge_features = torch.cat([h_sum, h_product, h_diff], dim=1)
+        return torch.sigmoid(self.predictor(edge_features).squeeze(-1))
 
 
 class DomainClassifierHead(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__()
-        self.grl_start = GradientReversalLayer()
-        self.linear1 = nn.Linear(GNN_HIDDEN_DIM, DOMAIN_ADV_HEAD_HIDDEN_DIM)
-        self.linear2 = nn.Linear(DOMAIN_ADV_HEAD_HIDDEN_DIM, DOMAIN_ADV_HEAD_OUT_DIM)
-        self.grl_end = GradientReversalLayer()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.grl_start(x)
-        x = F.relu(self.linear1(x))
-        x = self.linear2(x)
-        return self.grl_end(x)
+        self.grl = GradientReversalLayer()
+
+        dims = [GNN_HIDDEN_DIM, DOMAIN_CLASSIFIER_HIDDEN_DIM, len(PRETRAIN_TUDATASETS)]
+        dropout_rates = [DOMAIN_CLASSIFIER_DROPOUT_RATE]
+        self.classifier = MLPHead(dims, dropout_rates=dropout_rates)
+
+    def forward(self, x: torch.Tensor, lambda_val: float) -> torch.Tensor:
+        x_reversed = self.grl(x, lambda_val)
+        return self.classifier(x_reversed)

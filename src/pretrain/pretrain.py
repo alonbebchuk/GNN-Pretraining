@@ -10,7 +10,6 @@ from torch.optim import AdamW
 from src.data.data_setup import PRETRAIN_TUDATASETS
 from src.data.pretrain_data_loaders import create_train_data_loader, create_val_data_loader
 from src.models.pretrain_model import PretrainableGNN
-from src.pretrain.grl_scheduler import GRLLambdaScheduler
 from src.pretrain.tasks import (
     BasePretrainTask,
     DomainAdversarialTask,
@@ -20,10 +19,16 @@ from src.pretrain.tasks import (
     NodeContrastiveTask,
     NodeFeatureMaskingTask,
 )
+from src.pretrain.schedulers import TemperatureScheduler, GRLScheduler
 from src.pretrain.adaptive_loss_balancer import AdaptiveLossBalancer
+from src.pretrain.gradient_surgery import GradientSurgery
+from src.pretrain.optimizers import TaskSpecificOptimizer
 
 BATCH_SIZE = 32
-EPOCHS = 50
+# EPOCHS = 50
+EPOCHS = 10
+FINAL_TEMP = 0.05
+INITIAL_TEMP = 0.5
 LR_MODEL = 1e-5
 MAX_GRAD_NORM = 0.5
 MODEL_WEIGHT_DECAY = 1e-5
@@ -74,21 +79,22 @@ def set_global_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def instantiate_tasks(model: PretrainableGNN, active_tasks: List[str]) -> Dict[str, BasePretrainTask]:
+def instantiate_tasks(model: PretrainableGNN, active_tasks: List[str], grl_scheduler: GRLScheduler, temperature_scheduler: TemperatureScheduler) -> Dict[str, BasePretrainTask]:
     tasks = {}
+
     for name in active_tasks:
         if name == "node_feat_mask":
             tasks[name] = NodeFeatureMaskingTask(model)
         elif name == "link_pred":
             tasks[name] = LinkPredictionTask(model)
         elif name == "node_contrast":
-            tasks[name] = NodeContrastiveTask(model)
+            tasks[name] = NodeContrastiveTask(model, temperature_scheduler)
         elif name == "graph_contrast":
-            tasks[name] = GraphContrastiveTask(model)
+            tasks[name] = GraphContrastiveTask(model, temperature_scheduler)
         elif name == "graph_prop":
             tasks[name] = GraphPropertyPredictionTask(model)
         elif name == "domain_adv":
-            tasks[name] = DomainAdversarialTask(model)
+            tasks[name] = DomainAdversarialTask(model, grl_scheduler)
     return tasks
 
 
@@ -98,12 +104,14 @@ def run_training(
     optimizer: AdamW,
     train_loader: torch.utils.data.DataLoader,
     generator: torch.Generator,
-    grl_sched: GRLLambdaScheduler,
+    grl_sched: GRLScheduler,
+    temperature_scheduler: TemperatureScheduler,
     device: torch.device,
     epoch: int,
     global_step_ref: List[int],
     cfg: PretrainConfig,
     loss_balancer: AdaptiveLossBalancer,
+    gradient_surgery: GradientSurgery
 ) -> None:
     model.train()
 
@@ -132,13 +140,24 @@ def run_training(
 
         lambda_val = grl_sched()
 
-        total_loss = loss_balancer.balance_losses(per_task_losses, lambda_val)
+        main_task_losses = {k: v for k, v in per_task_losses.items() if k != 'domain_adv'}
+        domain_adv_loss = per_task_losses.get('domain_adv', torch.tensor(0.0))
+
+        total_loss = loss_balancer.balance_losses(main_task_losses, lambda_val)
 
         optimizer.zero_grad(set_to_none=True)
-        total_loss.backward()
+
+        gradient_metrics = gradient_surgery.apply_gradient_surgery(model, main_task_losses, list(main_task_losses.keys()))
+        if not gradient_metrics:
+            total_loss.backward(retain_graph=bool(domain_adv_loss.item()))
+
+        if 'domain_adv' in per_task_losses:
+            domain_adv_loss.backward()
+
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=MAX_GRAD_NORM)
         optimizer.step()
         grl_sched.step()
+        temperature_scheduler.step()
 
         train_metrics = {}
 
@@ -156,11 +175,14 @@ def run_training(
         train_metrics['train/progress/epoch'] = epoch
 
         if 'domain_adv' in per_task_losses:
-            train_metrics['train/domain_adv/lambda'] = lambda_val
+            train_metrics['train/domain_adv/lambda'] = grl_sched()
+            train_metrics['train/domain_adv/loss'] = float(domain_adv_loss.detach().cpu())
 
         current_weights = loss_balancer.get_current_weights()
         for task_name, weight in current_weights.items():
             train_metrics[f'train/loss_balancer/weight/{task_name}'] = weight
+
+        train_metrics.update(gradient_metrics)
 
         total_norm = 0.0
         for p in model.parameters():
@@ -179,7 +201,7 @@ def run_evaluation(
     tasks: Dict[str, BasePretrainTask],
     val_loaders: Dict[str, torch.utils.data.DataLoader],
     generator: torch.Generator,
-    grl_sched: GRLLambdaScheduler,
+    grl_sched: GRLScheduler,
     device: torch.device,
     epoch: int,
     best_total_loss: float,
@@ -202,16 +224,19 @@ def run_evaluation(
                 batch = batch.to(device)
                 loss, _ = task.compute_loss({domain_name: batch}, generator)
                 batch_losses.append(loss)
-            
+
             domain_task_loss = torch.stack(batch_losses).mean()
             domain_losses.append(domain_task_loss)
             per_domain_per_task_losses[domain_name][task_name] = float(domain_task_loss.detach().cpu())
-        
+
         per_task_losses[task_name] = torch.stack(domain_losses).mean()
-    
+
     lambda_val = grl_sched()
 
-    total_loss = loss_balancer.balance_losses(per_task_losses, lambda_val)
+    main_task_losses = {k: v for k, v in per_task_losses.items() if k != 'domain_adv'}
+    domain_adv_loss = per_task_losses.get('domain_adv', torch.tensor(0.0))
+
+    total_loss = loss_balancer.balance_losses(main_task_losses, lambda_val)
 
     per_domain_losses = {}
     for domain in per_domain_per_task_losses.keys():
@@ -234,7 +259,7 @@ def run_evaluation(
     val_metrics['val/loss/total'] = float(total_loss.detach().cpu())
 
     if 'domain_adv' in per_task_losses:
-        val_metrics['val/domain_adv/lambda'] = lambda_val
+        val_metrics['val/domain_adv/loss'] = float(domain_adv_loss.detach().cpu())
 
     if total_loss < best_total_loss:
         best_total_loss = total_loss
@@ -250,10 +275,7 @@ def run_evaluation(
 
         torch.save(checkpoint, model_path)
 
-        artifact = wandb.Artifact(
-            name=model_name,
-            type="model",
-        )
+        artifact = wandb.Artifact(name=model_name, type="model")
         artifact.add_file(str(model_path))
         wandb.log_artifact(artifact)
     else:
@@ -280,16 +302,16 @@ def pretrain(cfg: PretrainConfig) -> None:
         val_loaders[domain] = create_val_data_loader(domain, generator)
     train_loader = create_train_data_loader(cfg.pretrain_domains, generator)
 
-    model = PretrainableGNN(
-        device=device,
-        domain_names=cfg.pretrain_domains,
-        task_names=cfg.active_tasks,
-    )
-    tasks = instantiate_tasks(model, cfg.active_tasks)
-    optimizer = AdamW(model.parameters(), lr=LR_MODEL, weight_decay=MODEL_WEIGHT_DECAY)
+    model = PretrainableGNN(device=device, domain_names=cfg.pretrain_domains, task_names=cfg.active_tasks)
 
-    total_steps = len(train_loader) * EPOCHS
-    grl_sched = GRLLambdaScheduler(total_steps=total_steps)
+    grl_sched = GRLScheduler(total_epochs=EPOCHS, steps_per_epoch=len(train_loader))
+    temperature_scheduler = TemperatureScheduler(total_steps=len(train_loader) * EPOCHS)
+
+    tasks = instantiate_tasks(model, cfg.active_tasks, grl_sched, temperature_scheduler)
+
+    optimizer = TaskSpecificOptimizer(model=model, active_tasks=cfg.active_tasks)
+
+    gradient_surgery = GradientSurgery(device=device)
 
     loss_balancer = AdaptiveLossBalancer()
 
@@ -306,11 +328,13 @@ def pretrain(cfg: PretrainConfig) -> None:
             train_loader,
             generator,
             grl_sched,
+            temperature_scheduler,
             device,
             epoch,
             global_step,
             cfg,
-            loss_balancer
+            loss_balancer,
+            gradient_surgery
         )
 
         best_total_loss, epochs_since_improvement = run_evaluation(

@@ -26,6 +26,7 @@ Pre-training remains underdeveloped for Graph Neural Networks (GNNs). Most GNNs 
 Based on extensive experimental validation:
 
 - **✅ Adaptive Loss Balancing:** Multi-task interference resolved with inverse-magnitude weighting and domain adversarial safety constraints
+- **✅ Gradient Surgery (PCGrad):** Multi-task gradient conflicts resolved through conflict detection and orthogonal projection, applied uniformly to all multi-task schemes for fair experimental comparison
 - **✅ Constant Learning Rate:** Cosine annealing added complexity without benefit; constant LR=1e-5 achieves stable convergence  
 - **✅ Conservative Hyperparameters:** BATCH_SIZE=32, WEIGHT_DECAY=1e-5, PATIENCE=50% for optimal stability
 - **✅ Gradient Clipping:** max_norm=0.5 prevents gradient explosions while preserving learning dynamics
@@ -63,6 +64,20 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} w_i \mathcal{L}_i - \la
 
 **Rationale:** Multi-task training suffered from severe task interference with simple averaging. Adaptive weighting using inverse loss magnitudes provides stable multi-task optimization while domain adversarial loss includes safety constraints to prevent negative total losses.
 
+**Gradient Surgery for Multi-Task Optimization:**
+
+For schemes with multiple tasks (b4, s1, s2, s3, s4, s5), **PCGrad (Projecting Conflicting Gradients)** is applied to resolve gradient conflicts:
+
+$$\mathbf{g}_i^{(t+1)} = \mathbf{g}_i^{(t)} - \sum_{j \neq i} \max(0, \mathbf{g}_i^{(t)} \cdot \mathbf{g}_j^{(t)}) \frac{\mathbf{g}_j^{(t)}}{||\mathbf{g}_j^{(t)}||^2}$$
+
+**where** $\mathbf{g}_i^{(t)}$ represents the gradient for task $i$ at step $t$, and conflicting gradients (negative dot product) are projected onto the normal plane of interfering task gradients.
+
+**Application Logic:**
+- **Multi-task schemes:** Apply PCGrad gradient surgery for conflict resolution
+- **Single-task schemes:** Standard backward propagation (no conflicts to resolve)
+
+**Rationale:** While adaptive loss balancing handles loss scale differences, gradient surgery addresses directional conflicts between task gradients, ensuring fair experimental comparison across all multi-task schemes while leveraging beneficial optimization techniques.
+
 ### **2.3. Fine-tuning Setup**
 
 **Fine-tuning Strategies:**
@@ -97,7 +112,9 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} w_i \mathcal{L}_i - \la
 - **Task-Aggregated Losses:** `train/loss/{task_name}` (6 metrics: 5 regular + domain_adv)
 - **Domain-Aggregated Losses:** `train/loss/{domain_name}` (4 metrics)
 - **Total Loss:** `train/loss/total` (optimization target)
-- **Domain Adversarial:** `val/domain_adv/lambda` (when active)
+- **Loss Balancer Weights:** `train/loss_balancer/weight/{task_name}` (adaptive weighting coefficients)
+- **Gradient Surgery:** `gradient_surgery/{total_conflicts,total_projections,conflict_ratio}` (multi-task only)
+- **Domain Adversarial:** `train/domain_adv/lambda` (when active)
 - **Training Dynamics:** `train/gradients/model_grad_norm`
 - **Progress Tracking:** `train/progress/epoch`
 
@@ -141,11 +158,14 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} w_i \mathcal{L}_i - \la
 **Metrics Used:**
 - Learning dynamics: `train/loss/{task_name}_raw` over time
 - Task interactions: `train/loss/{domain}/{task}_raw` correlation matrix  
+- Gradient conflicts: `gradient_surgery/{conflict_ratio,total_conflicts}` (multi-task schemes)
 - Final performance: `test/*` by pre-training scheme
 
 **Analysis Methods:**
 - Task synergy detection via correlation analysis
-- Ablation studies comparing single-task vs multi-task schemes
+- Gradient conflict analysis: conflict frequency and resolution effectiveness
+- Ablation studies comparing single-task vs multi-task schemes  
+- Multi-task optimization stability: gradient surgery impact on training dynamics
 - Domain-task affinity heat maps
 
 #### **4.3.3. RQ3: Fine-tuning Strategy Comparison**
@@ -213,6 +233,10 @@ $$\mathcal{L}_{\text{total}} = \sum_{i \in \text{Tasks}} w_i \mathcal{L}_i - \la
 | **s4** | All 5 tasks | Cross | Full cross-domain |
 | **s5** | All 5 tasks + domain_adv | Cross | Full + domain adversarial |
 | **b4** | All 5 tasks | Single (ENZYMES) | Single-domain comprehensive |
+
+**Optimization Strategy:**
+- **Multi-task schemes** (b4, s1, s2, s3, s4, s5): PCGrad gradient surgery + adaptive loss balancing
+- **Single-task schemes** (b2, b3): Standard optimization (no multi-task conflicts)
 
 **Research Questions Addressed:**
 - **RQ1 (Effectiveness):** All schemes vs from-scratch baselines

@@ -29,23 +29,14 @@ BATCH_SIZES = {
     'Cora_LP': 256,
     'CiteSeer_LP': 256,
 }
-# EPOCHS = {
-#     'ENZYMES': 100,
-#     'PTC_MR': 100,
-#     'Cora_NC': 200,
-#     'CiteSeer_NC': 200,
-#     'Cora_LP': 300,
-#     'CiteSeer_LP': 300,
-# }
 EPOCHS = {
-    'ENZYMES': 10,
-    'PTC_MR': 10,
-    'Cora_NC': 10,
-    'CiteSeer_NC': 10,
-    'Cora_LP': 10,
-    'CiteSeer_LP': 10,
+    'ENZYMES': 100,
+    'PTC_MR': 100,
+    'Cora_NC': 200,
+    'CiteSeer_NC': 200,
+    'Cora_LP': 300,
+    'CiteSeer_LP': 300,
 }
-# PATIENCE_FRACTION = 0.1
 PATIENCE_FRACTION = 0.5
 
 @dataclass

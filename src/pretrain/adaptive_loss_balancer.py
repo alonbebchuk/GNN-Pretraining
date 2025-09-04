@@ -51,6 +51,6 @@ class AdaptiveLossBalancer:
         total_loss = torch.clamp(torch.stack(weighted_losses).sum(), min=MIN_TOTAL_LOSS)
 
         return total_loss
-    
+
     def get_current_weights(self) -> Dict[str, float]:
         return self.current_weights

@@ -18,6 +18,10 @@ def run_single_experiment(params):
     print(f"[GPU-{torch.cuda.current_device() if torch.cuda.is_available() else 'CPU'}] Running finetuning: {domain_name} | {finetune_strategy} | {pretrained_scheme} (seed={seed})")
 
     try:
+        import os
+        env = os.environ.copy()
+        env['PYTHONPATH'] = str(Path.cwd())
+
         cmd = [
             sys.executable, "src/finetune/finetune.py",
             "--domain_name", domain_name,
@@ -25,7 +29,7 @@ def run_single_experiment(params):
             "--pretrained_scheme", pretrained_scheme,
             "--seed", str(seed)
         ]
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
         print(f"✓ Completed: {domain_name} | {finetune_strategy} | {pretrained_scheme} (seed={seed})")
         return True, domain_name, finetune_strategy, pretrained_scheme, seed, None
 
