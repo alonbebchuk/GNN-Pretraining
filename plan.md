@@ -44,6 +44,17 @@ Based on extensive experimental validation:
 
 **Input Dimensions:** `MUTAG`: 7, `PROTEINS`: 4, `NCI1`: 37, `ENZYMES`: 3, `PTC_MR`: 18, `Cora`: 1433, `CiteSeer`: 3703
 
+#### **2.1.4. Latest Architecture Updates (2024)**
+
+**Enhanced Multi-Task Optimization:**
+- **✅ Task-Specific Learning Rates:** Link prediction (1e-6), others (1e-5), domain adversarial (5e-6) for stability
+- **✅ Gradient Surgery Separation:** Domain adversarial excluded from PCGrad (preserves adversarial dynamics)
+- **✅ Improved GRL Integration:** Proper gradient reversal with progressive scheduling (λ: 0→0.01)
+- **✅ Temperature Scheduling:** Contrastive learning with exact progress tracking (0.5→0.05)
+- **✅ Order-Invariant Link Prediction:** Symmetric features (sum, product, difference) for undirected graphs
+- **✅ Flexible MLP Architecture:** Configurable dropout rates with proper validation
+- **✅ Separate Loss Optimization:** Main tasks cooperatively optimized, domain adversarial separately
+
 ### **2.2. Pre-training Setup**
 
 **Dataset Pool:** Combined training splits of `MUTAG`, `PROTEINS`, `NCI1`, and `ENZYMES`
@@ -217,9 +228,97 @@ $$\mathbf{g}_i^{(t+1)} = \mathbf{g}_i^{(t)} - \sum_{j \neq i} \max(0, \mathbf{g}
 
 ---
 
-## **5. Implementation Details**
+## **5. Current Implementation Status**
 
-### **5.1. Pre-training Experimental Schemes**
+### **5.1. Architecture Files (Fully Implemented)**
+
+#### **Core Model Components:**
+- **`src/models/pretrain_model.py`**: Main `PretrainableGNN` model with domain-specific input encoders
+- **`src/models/heads.py`**: Task-specific heads with GRL, flexible MLPHead, order-invariant link predictor
+- **`src/models/gnn.py`**: GIN backbone with standardized InputEncoder
+
+#### **Training Infrastructure:**
+- **`src/pretrain/pretrain.py`**: Main training orchestration with separate domain adversarial optimization
+- **`src/pretrain/schedulers.py`**: Temperature and GRL schedulers with exact progress tracking
+- **`src/pretrain/optimizers.py`**: Task-specific learning rates with automatic parameter grouping
+- **`src/pretrain/gradient_surgery.py`**: PCGrad implementation for multi-task optimization
+- **`src/pretrain/tasks.py`**: All pretraining tasks with hard negative mining and enhanced contrastive learning
+- **`src/pretrain/adaptive_loss_balancer.py`**: Inverse magnitude loss weighting
+
+#### **Data Processing:**
+- **`src/pretrain/augmentations.py`**: Proven graph augmentation strategies (node/edge drop, attribute masking)
+
+### **5.2. Key Implementation Features**
+
+#### **🔧 Multi-Task Learning Architecture:**
+```python
+# Separate optimization paths:
+main_task_losses = {k: v for k, v in per_task_losses.items() if k != 'domain_adv'}
+domain_adv_loss = per_task_losses.get('domain_adv', torch.tensor(0.0))
+
+# PCGrad applied to cooperative tasks only
+gradient_surgery.apply_gradient_surgery(model, main_task_losses, task_names)
+main_total_loss.backward(retain_graph=True)
+
+# Domain adversarial gets separate backward pass (preserves adversarial dynamics)
+domain_adv_loss.backward()
+```
+
+#### **🎯 Task-Specific Optimization:**
+```python
+TASK_SPECIFIC_LR = {
+    'link_pred': 1e-6,      # Reduced for stability (S1_42 instability fix)
+    'node_feat_mask': 1e-5,
+    'node_contrast': 1e-5,
+    'graph_contrast': 1e-5,
+    'graph_prop': 1e-5,
+    'domain_adv': 5e-6,     # Slightly reduced for softer adversarial training
+}
+```
+
+#### **⚡ Progressive Scheduling:**
+```python
+# Temperature scheduling for contrastive learning
+TemperatureScheduler: 0.5 → 0.05 (exact step tracking)
+
+# GRL scheduling for domain adversarial
+GRLScheduler: λ = 0 (first 40% epochs) → 0.01 (progressive ramp-up)
+```
+
+#### **🔄 Order-Invariant Link Prediction:**
+```python
+# Symmetric edge features for undirected graphs
+h_sum = h_src + h_dst      # Commutative
+h_product = h_src * h_dst  # Commutative  
+h_diff = torch.abs(h_src - h_dst)  # Symmetric
+edge_features = torch.cat([h_sum, h_product, h_diff], dim=1)
+```
+
+### **5.3. Implementation Quality Assurance**
+
+#### **✅ Correctness Verification:**
+- **Syntax Validation:** All Python files compile successfully
+- **Import Dependencies:** All cross-module imports verified
+- **Edge Case Handling:** Division by zero protection in schedulers
+- **Type Safety:** Proper error handling in flexible constructors
+
+#### **✅ Architectural Consistency:**
+- **Domain Encoding:** Standard `InputEncoder` used across all domains (maximum specificity)
+- **Task Heads:** Unified `MLPHead` with configurable dropout rates
+- **Loss Computation:** Proper gradient flow for adversarial and cooperative objectives
+- **Scheduler Interface:** Consistent `__call__()` and `step()` methods
+
+#### **✅ Scientific Soundness:**
+- **Gradient Surgery:** PCGrad applied only to compatible cooperative tasks
+- **Domain Adversarial:** Proper GRL with separate optimization (maintains adversarial dynamics)
+- **Contrastive Learning:** Hard negative mining with proven augmentation strategies
+- **Learning Rates:** Task-specific rates based on empirical stability analysis
+
+---
+
+## **6. Experimental Design**
+
+### **6.1. Pre-training Experimental Schemes**
 
 **Systematic Multi-Task Design:**
 
@@ -244,7 +343,7 @@ $$\mathbf{g}_i^{(t+1)} = \mathbf{g}_i^{(t)} - \sum_{j \neq i} \max(0, \mathbf{g}
 - **RQ3 (Fine-tuning):** Cross-cutting across all pretrained models  
 - **RQ4 (Task Affinity):** Critical comparison s4 (cross-domain) vs b4 (single-domain) with identical tasks
 
-### **5.2. Experimental Scope**
+### **6.2. Experimental Scope**
 **Total Runs:** ~150 experiments
 - **Pre-training:** 24 runs (8 schemes × 3 seeds)
 - **Fine-tuning:** ~125 runs (various configurations × 3 seeds)
@@ -254,13 +353,13 @@ $$\mathbf{g}_i^{(t+1)} = \mathbf{g}_i^{(t)} - \sum_{j \neq i} \max(0, \mathbf{g}
 - **Fine-tuning:** ~24 GPU hours
 - **Total:** ~41 GPU hours
 
-### **5.2. Quality Assurance**
+### **6.3. Quality Assurance**
 - Reproducible random seed management (seeds: 42, 84, 126)
 - Model selection excludes ENZYMES (prevents overfitting)
 - Comprehensive logging for all research questions
 - Automated statistical analysis pipeline
 
-### **5.3. Execution Method**
+### **6.4. Execution Method**
 **Simplified Command-Line Interface:**
 - Direct CLI argument passing to main scripts
 - Parallel GPU execution for sweep operations
@@ -276,7 +375,7 @@ python run_pretrain.py --sweep
 python run_finetune.py --domain_sweep ENZYMES
 ```
 
-### **5.4. Expected Deliverables**
+### **6.5. Expected Deliverables**
 1. **Performance Tables** with statistical significance testing
 2. **Training Dynamics Plots** with confidence intervals  
 3. **Ablation Study Results** with effect sizes
@@ -285,9 +384,9 @@ python run_finetune.py --domain_sweep ENZYMES
 
 ---
 
-## **6. Metric Coverage Verification**
+## **7. Metric Coverage Verification**
 
-### **6.1. Analysis Requirements vs Logged Metrics**
+### **7.1. Analysis Requirements vs Logged Metrics**
 
 ✅ **RQ1 Analysis Coverage:**
 - Pre-training improvement: `test/{accuracy,f1,auc}` ✓
@@ -313,7 +412,7 @@ python run_finetune.py --domain_sweep ENZYMES
 
 ---
 
-## **7. Expected Contributions**
+## **8. Expected Contributions**
 
 1. **Multi-task pre-training effectiveness** - Statistical validation of improvement over baselines
 2. **Task synergy identification** - Evidence-based task combination recommendations  
