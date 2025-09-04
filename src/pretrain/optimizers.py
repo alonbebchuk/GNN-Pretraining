@@ -6,7 +6,7 @@ DEFAULT_LR = 1e-5
 DEFAULT_WEIGHT_DECAY = 1e-5
 
 TASK_SPECIFIC_LR = {
-    'link_pred': 1e-6,
+    'link_pred': 5e-7,
     'node_feat_mask': 1e-5,
     'node_contrast': 1e-5,
     'graph_contrast': 1e-5,

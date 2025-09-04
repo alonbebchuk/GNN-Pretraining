@@ -1,6 +1,6 @@
 import math
 
-FINAL_TEMP = 0.05
+FINAL_TEMP = 0.2
 GAMMA = 10.0
 INITIAL_TEMP = 0.5
 MAX_LAMBDA = 0.01

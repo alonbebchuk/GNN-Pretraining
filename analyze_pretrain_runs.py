@@ -8,14 +8,14 @@ api = wandb.Api()
 
 # Define the runs to analyze - mapping names to actual run IDs
 run_mapping = {
-    'b2_42': 'qw02dmhg',
-    'b3_42': 'f5k48b92', 
-    'b4_42': '3j6xp4o7',
-    's1_42': 'r6du63pt',
-    's2_42': '9xus55bw',
-    's3_42': 'vl2ep2p3',
-    's4_42': '218h8sdy',
-    's5_42': 'wdacspcz'
+    'b2_42': 'vesia2mn',
+    'b3_42': 'n4ew4pbk', 
+    'b4_42': 'jlt3mpx4',
+    's1_42': 'jgw2das3',
+    's2_42': 'iwvi5sa4',
+    's3_42': '2l2inzyc',
+    's4_42': 'hgizj0vm',
+    's5_42': 'cwph8hc8'
 }
 project_path = "alonbebchuk-tel-aviv-university/gnn-pretraining-pretrain"
 
