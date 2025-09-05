@@ -1,21 +1,23 @@
 # GNN Pretraining - Distributed Execution Guide
 
+> **Updated for GPU Quota Constraints**: This guide has been redesigned for **2 VMs total (1 per teammate)** due to GPU quota limitations.
+
 ## Overview
 
-This guide explains how to run the complete GNN pretraining experiments using **8 VMs (4 per teammate)** for maximum parallel efficiency.
+This guide explains how to run the complete GNN pretraining experiments using **2 VMs (1 per teammate)** due to GPU quota limitations.
 
 **Total Experiments:**
 - **Pretraining**: 24 experiments (8 schemes × 3 seeds) = ~17 GPU hours
 - **Finetuning**: 324 experiments (6 domains × 2 strategies × 9 schemes × 3 seeds) = ~24 GPU hours
 - **Sequential time**: ~41 GPU hours
-- **With 8 VMs**: ~6-8 hours total
+- **With 2 VMs**: ~20-21 hours total (parallel pretraining + parallel finetuning)
 
 ## Team Setup
 
 ### VM Naming Convention
-Each teammate creates 4 VMs with these exact names:
-- **Ben**: `gnn-l4-01`, `gnn-l4-02`, `gnn-l4-03`, `gnn-l4-04`
-- **Tim**: `gnn-l4-01`, `gnn-l4-02`, `gnn-l4-03`, `gnn-l4-04`
+Each teammate creates 1 VM with these names:
+- **Ben**: `ben-gnn-l4` 
+- **Tim**: `tim-gnn-l4`
 
 ### Results Location
 All experiments log to the shared wandb project:
@@ -68,59 +70,35 @@ On each VM, copy the appropriate scripts from this repository:
 git pull  # Get latest version with scripts
 
 # Verify scripts exist
-ls vm_execution_scripts/Ben/{pretraining,finetuning}/
-ls vm_execution_scripts/Tim/{pretraining,finetuning}/
+ls vm_execution_scripts/Ben/ben_vm_*.sh
+ls vm_execution_scripts/Tim/tim_vm_*.sh
 ```
 
 ---
 
 ## Phase 2: Pretraining (Run in Parallel)
 
-### Execution Order: **ALL VMs START SIMULTANEOUSLY**
+### Execution Order: **BOTH VMs START SIMULTANEOUSLY**
 
-#### Ben's VMs:
+#### Ben's VM:
 ```bash
-# VM gnn-l4-01 (Ben)
-./vm_execution_scripts/Ben/pretraining/gnn-l4-01_pretrain.sh
-
-# VM gnn-l4-02 (Ben)  
-./vm_execution_scripts/Ben/pretraining/gnn-l4-02_pretrain.sh
-
-# VM gnn-l4-03 (Ben)
-./vm_execution_scripts/Ben/pretraining/gnn-l4-03_pretrain.sh
-
-# VM gnn-l4-04 (Ben)
-./vm_execution_scripts/Ben/pretraining/gnn-l4-04_pretrain.sh
+# Ben's VM (ben-gnn-l4)
+./vm_execution_scripts/Ben/ben_vm_pretrain.sh
 ```
 
-#### Tim's VMs:
+#### Tim's VM:
 ```bash
-# VM gnn-l4-01 (Tim)
-./vm_execution_scripts/Tim/pretraining/gnn-l4-01_pretrain.sh
-
-# VM gnn-l4-02 (Tim)
-./vm_execution_scripts/Tim/pretraining/gnn-l4-02_pretrain.sh
-
-# VM gnn-l4-03 (Tim)
-./vm_execution_scripts/Tim/pretraining/gnn-l4-03_pretrain.sh
-
-# VM gnn-l4-04 (Tim)
-./vm_execution_scripts/Tim/pretraining/gnn-l4-04_pretrain.sh
+# Tim's VM (tim-gnn-l4)
+./vm_execution_scripts/Tim/tim_vm_pretrain.sh
 ```
 
 ### Pretraining Distribution:
-| Person | VM | Scheme | Experiments |
+| Person | VM | Schemes | Experiments |
 |--------|----|---------| ------------|
-| Ben | gnn-l4-01 | b2 | 3 (seeds: 42, 84, 126) |
-| Ben | gnn-l4-02 | b3 | 3 (seeds: 42, 84, 126) |
-| Ben | gnn-l4-03 | s1 | 3 (seeds: 42, 84, 126) |
-| Ben | gnn-l4-04 | s2 | 3 (seeds: 42, 84, 126) |
-| Tim | gnn-l4-01 | s3 | 3 (seeds: 42, 84, 126) |
-| Tim | gnn-l4-02 | s4 | 3 (seeds: 42, 84, 126) |
-| Tim | gnn-l4-03 | s5 | 3 (seeds: 42, 84, 126) |
-| Tim | gnn-l4-04 | b4 | 3 (seeds: 42, 84, 126) |
+| Ben | ben-gnn-l4 | b2, b3, s1, s2 | 12 (4 schemes × 3 seeds each) |
+| Tim | tim-gnn-l4 | s3, s4, s5, b4 | 12 (4 schemes × 3 seeds each) |
 
-**Expected Duration**: 2-4 hours (3 experiments per VM in parallel)
+**Expected Duration**: 8-10 hours (12 experiments per VM in parallel)
 
 ---
 
@@ -133,52 +111,28 @@ Monitor progress at: https://wandb.ai/alon-bebchuk-tel-aviv-university/gnn-pretr
 
 Look for **24 completed pretraining runs** before proceeding.
 
-### Execution Order: **ALL VMs START SIMULTANEOUSLY**
+### Execution Order: **BOTH VMs START SIMULTANEOUSLY**
 
-#### Ben's VMs:
+#### Ben's VM:
 ```bash
-# VM gnn-l4-01 (Ben) - CiteSeer_NC domain
-./vm_execution_scripts/Ben/finetuning/gnn-l4-01_finetune.sh
-
-# VM gnn-l4-02 (Ben) - Cora_LP domain
-./vm_execution_scripts/Ben/finetuning/gnn-l4-02_finetune.sh
-
-# VM gnn-l4-03 (Ben) - CiteSeer_LP domain
-./vm_execution_scripts/Ben/finetuning/gnn-l4-03_finetune.sh
-
-# VM gnn-l4-04 (Ben) - Standby (can be stopped to save costs)
-./vm_execution_scripts/Ben/finetuning/gnn-l4-04_finetune.sh
+# Ben's VM (ben-gnn-l4)
+./vm_execution_scripts/Ben/ben_vm_finetune.sh
 ```
 
-#### Tim's VMs:
+#### Tim's VM:
 ```bash
-# VM gnn-l4-01 (Tim) - ENZYMES domain
-./vm_execution_scripts/Tim/finetuning/gnn-l4-01_finetune.sh
-
-# VM gnn-l4-02 (Tim) - PTC_MR domain
-./vm_execution_scripts/Tim/finetuning/gnn-l4-02_finetune.sh
-
-# VM gnn-l4-03 (Tim) - Cora_NC domain
-./vm_execution_scripts/Tim/finetuning/gnn-l4-03_finetune.sh
-
-# VM gnn-l4-04 (Tim) - Standby (can be stopped to save costs)
-./vm_execution_scripts/Tim/finetuning/gnn-l4-04_finetune.sh
+# Tim's VM (tim-gnn-l4)
+./vm_execution_scripts/Tim/tim_vm_finetune.sh
 ```
 
 ### Finetuning Distribution:
-| Person | VM | Domain | Experiments |
+| Person | VM | Domains | Experiments |
 |--------|----|---------| ------------|
-| Ben | gnn-l4-01 | CiteSeer_NC | 54 (2 strategies × 9 schemes × 3 seeds) |
-| Ben | gnn-l4-02 | Cora_LP | 54 |
-| Ben | gnn-l4-03 | CiteSeer_LP | 54 |
-| Ben | gnn-l4-04 | Standby | 0 (can stop to save costs) |
-| Tim | gnn-l4-01 | ENZYMES | 54 |
-| Tim | gnn-l4-02 | PTC_MR | 54 |
-| Tim | gnn-l4-03 | Cora_NC | 54 |
-| Tim | gnn-l4-04 | Standby | 0 (can stop to save costs) |
+| Ben | ben-gnn-l4 | CiteSeer_NC, Cora_LP, CiteSeer_LP | 162 (3 domains × 54 exp each) |
+| Tim | tim-gnn-l4 | ENZYMES, PTC_MR, Cora_NC | 162 (3 domains × 54 exp each) |
 
 **Total**: Ben = 162 experiments, Tim = 162 experiments (perfectly balanced!)  
-**Expected Duration**: 4-6 hours (54 experiments per active VM)
+**Expected Duration**: 12-15 hours (162 experiments per VM sequentially)
 
 ---
 
@@ -223,13 +177,13 @@ echo $WANDB_PROJECT
 | Phase | Duration | Parallelization | Status |
 |-------|----------|-----------------|---------|
 | **VM Setup** | 30 min | Per person | One-time |
-| **Pretraining** | 2-4 hours | 8 VMs (3 exp/VM) | Required first |
-| **Finetuning** | 4-6 hours | 6 VMs (54 exp/VM) | After pretraining |
-| **Total** | **6-10 hours** | vs 41 hours sequential | 4x speedup! |
+| **Pretraining** | 8-10 hours | 2 VMs (12 exp/VM) | Required first |
+| **Finetuning** | 12-15 hours | 2 VMs (162 exp/VM) | After pretraining |
+| **Total** | **20-25 hours** | vs 41 hours sequential | 2x speedup! |
 
 ## Cost Estimate
 - **L4 GPU**: ~$0.60/hour
-- **8 VMs × 8 hours**: ~$38 total
+- **2 VMs × 25 hours**: ~$30 total
 - **vs Sequential**: 41 hours × $0.60 = ~$25 (but takes 2+ days)
 
 ---
