@@ -25,8 +25,7 @@ from src.pretrain.gradient_surgery import GradientSurgery
 from src.pretrain.optimizers import TaskSpecificOptimizer
 
 BATCH_SIZE = 32
-# EPOCHS = 50
-EPOCHS = 10
+EPOCHS = 50
 MAX_GRAD_NORM = 0.5
 PATIENCE_FRACTION = 0.5
 

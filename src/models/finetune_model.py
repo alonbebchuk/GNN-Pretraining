@@ -85,7 +85,7 @@ def get_pretrained_model_path(pretrained_scheme: str, seed: int) -> str:
 
     if not model_path.exists():
         api = wandb.Api()
-        full_artifact_name = f"{PROJECT_NAME}/{model_name}"
+        full_artifact_name = f"{PROJECT_NAME}/{model_name}:latest"
         artifact = api.artifact(full_artifact_name)
         artifact.download(root=str(OUTPUT_DIR))
 

@@ -24,8 +24,8 @@ PROJECT_NAME = "gnn-pretraining-finetune"
 BATCH_SIZES = {
     'ENZYMES': 32,
     'PTC_MR': 32,
-    'Cora_NC': 512,
-    'CiteSeer_NC': 512,
+    'Cora_NC': -1,
+    'CiteSeer_NC': -1,
     'Cora_LP': 256,
     'CiteSeer_LP': 256,
 }

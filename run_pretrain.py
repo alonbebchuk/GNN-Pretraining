@@ -39,8 +39,7 @@ def run_single_experiment(params):
 
 def run_sweep():
     exp_names = ["b2", "b3", "b4", "s1", "s2", "s3", "s4", "s5"]
-    # seeds = [42, 84, 126]
-    seeds = [42]
+    seeds = [42, 84, 126]
 
     experiments = list(product(exp_names, seeds))
     total_experiments = len(experiments)

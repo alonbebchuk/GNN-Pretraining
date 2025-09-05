@@ -84,6 +84,10 @@ def create_node_classification_loader(domain_name: str, split: str, batch_size: 
     split_indices = splits[split]
 
     dataset = NodeDataset(data, split_indices)
+
+    if batch_size == -1:
+        batch_size = len(dataset)
+
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, generator=generator, collate_fn=_collate_node_batch)
 
 
