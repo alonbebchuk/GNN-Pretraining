@@ -12,12 +12,3 @@ data/processed/
 
 # Wandb
 wandb/
-
-# Checkpoints
-outputs/
-
-# Experiment outputs (generated during runs)
-artifacts/
-checkpoints/
-outputs/
-wandb/
