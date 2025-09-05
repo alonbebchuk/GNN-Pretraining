@@ -14,8 +14,8 @@ source ~/miniconda/bin/activate
 conda activate ./.conda
 
 # Set wandb configuration
-export WANDB_ENTITY=alon-bebchuk-tel-aviv-university
-export WANDB_PROJECT=gnn-pretraining
+export WANDB_ENTITY=timoshka3-tel-aviv-university
+export WANDB_PROJECT=GNN
 
 echo "Starting Ben's pretraining experiments..."
 
@@ -33,4 +33,4 @@ wait
 echo "=== Ben's VM Pretraining Complete ==="
 echo "Completed: 12 experiments (b2, b3, s1, s2 × 3 seeds each)"
 echo "End time: $(date)"
-echo "Results: https://wandb.ai/alon-bebchuk-tel-aviv-university/gnn-pretraining"
+echo "Results: https://wandb.ai/timoshka3-tel-aviv-university/GNN"

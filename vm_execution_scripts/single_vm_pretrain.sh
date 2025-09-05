@@ -14,8 +14,8 @@ source ~/miniconda/bin/activate
 conda activate ./.conda
 
 # Set wandb configuration
-export WANDB_ENTITY=alon-bebchuk-tel-aviv-university
-export WANDB_PROJECT=gnn-pretraining
+export WANDB_ENTITY=timoshka3-tel-aviv-university
+export WANDB_PROJECT=GNN
 
 echo "Starting all pretraining experiments on single VM..."
 echo "This will take approximately 17 GPU hours (~17-20 hours wall time)"
@@ -33,7 +33,7 @@ done
 echo "=== Single VM Pretraining Complete ==="
 echo "Completed: ALL 24 experiments (8 schemes × 3 seeds each)"
 echo "End time: $(date)"
-echo "Results: https://wandb.ai/alon-bebchuk-tel-aviv-university/gnn-pretraining"
+echo "Results: https://wandb.ai/timoshka3-tel-aviv-university/GNN"
 echo ""
 echo "Next steps:"
 echo "1. Verify all 24 pretraining runs completed successfully in wandb"

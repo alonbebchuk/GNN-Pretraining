@@ -21,7 +21,7 @@ Each teammate creates 1 VM with these names:
 
 ### Results Location
 All experiments log to the shared wandb project:
-**https://wandb.ai/alon-bebchuk-tel-aviv-university/gnn-pretraining**
+**https://wandb.ai/timoshka3-tel-aviv-university/GNN**
 
 ---
 
@@ -48,12 +48,12 @@ cd ~/workspace/GNN-Pretraining
 conda activate ./.conda
 
 # Set correct wandb entity for shared project
-export WANDB_ENTITY=alon-bebchuk-tel-aviv-university
-export WANDB_PROJECT=gnn-pretraining
+export WANDB_ENTITY=timoshka3-tel-aviv-university
+export WANDB_PROJECT=GNN
 
 # Make it permanent in bashrc
-echo "export WANDB_ENTITY=alon-bebchuk-tel-aviv-university" >> ~/.bashrc
-echo "export WANDB_PROJECT=gnn-pretraining" >> ~/.bashrc
+echo "export WANDB_ENTITY=timoshka3-tel-aviv-university" >> ~/.bashrc
+echo "export WANDB_PROJECT=GNN" >> ~/.bashrc
 
 # Login to wandb
 wandb login  # Paste your API key
@@ -132,7 +132,7 @@ If you can only create/afford one VM for pretraining, use this approach:
 ### Wait Condition
 ⚠️ **Do NOT start finetuning until pretraining is complete!** 
 
-Monitor progress at: https://wandb.ai/alon-bebchuk-tel-aviv-university/gnn-pretraining
+Monitor progress at: https://wandb.ai/timoshka3-tel-aviv-university/GNN
 
 Look for **24 completed pretraining runs** before proceeding.
 
@@ -164,7 +164,7 @@ Look for **24 completed pretraining runs** before proceeding.
 ## Monitoring and Results
 
 ### Real-time Monitoring
-- **Wandb Dashboard**: https://wandb.ai/alon-bebchuk-tel-aviv-university/gnn-pretraining
+- **Wandb Dashboard**: https://wandb.ai/timoshka3-tel-aviv-university/GNN
 - **Expected runs**: 24 pretraining + 324 finetuning = 348 total runs
 - **Run naming**: `{domain}_{strategy}_{scheme}_{seed}`
 
@@ -220,7 +220,7 @@ echo $WANDB_PROJECT
 ✅ **Total Results**: 348 runs with comprehensive metrics  
 ✅ **Ready for Analysis**: Statistical significance testing, performance tables, plots
 
-**Final Results Location**: https://wandb.ai/alon-bebchuk-tel-aviv-university/gnn-pretraining
+**Final Results Location**: https://wandb.ai/timoshka3-tel-aviv-university/GNN
 
 ---
 

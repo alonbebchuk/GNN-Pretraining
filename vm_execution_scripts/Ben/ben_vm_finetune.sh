@@ -14,12 +14,12 @@ source ~/miniconda/bin/activate
 conda activate ./.conda
 
 # Set wandb configuration
-export WANDB_ENTITY=alon-bebchuk-tel-aviv-university
-export WANDB_PROJECT=gnn-pretraining
+export WANDB_ENTITY=timoshka3-tel-aviv-university
+export WANDB_PROJECT=GNN
 
 # Wait for pretraining to complete (check wandb for required models)
 echo "Waiting for pretraining models to be available..."
-echo "Check https://wandb.ai/alon-bebchuk-tel-aviv-university/gnn-pretraining for progress"
+echo "Check https://wandb.ai/timoshka3-tel-aviv-university/GNN for progress"
 echo "Ensure all 24 pretraining runs are complete before proceeding"
 read -p "Press Enter when all pretraining is complete..."
 
@@ -38,4 +38,4 @@ python run_finetune.py --domain_sweep CiteSeer_LP
 echo "=== Ben's VM Finetuning Complete ==="
 echo "Completed: 162 experiments across 3 domains"
 echo "End time: $(date)"
-echo "Results: https://wandb.ai/alon-bebchuk-tel-aviv-university/gnn-pretraining"
+echo "Results: https://wandb.ai/timoshka3-tel-aviv-university/GNN"
