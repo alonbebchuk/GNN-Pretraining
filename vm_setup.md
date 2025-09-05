@@ -1,4 +1,4 @@
-# GNN Project — Google Cloud VM Setup & Team Workflow (Markdown Guide)
+# GNN Project — Google Cloud VM Setup & Team Workflow (Markdown Guide) check
 
 This guide shows **each teammate** how to create a personal Google Cloud VM with an **NVIDIA L4** GPU, set up a **project-local Conda environment**, and use **Weights & Biases (W&B)** to share runs and checkpoints. It also covers creating SSH keys (for GitHub and for VM login) and connecting over SSH.
 
