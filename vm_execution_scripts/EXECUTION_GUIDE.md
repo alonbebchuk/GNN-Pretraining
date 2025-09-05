@@ -15,7 +15,8 @@ This guide explains how to run the complete GNN pretraining experiments using **
 ## Team Setup
 
 ### VM Naming Convention
-Each teammate creates 1 VM with these names:
+**Pretraining**: Either teammate creates 1 VM: `shared-gnn-l4`
+**Finetuning**: Each teammate creates 1 VM:
 - **Ben**: `ben-gnn-l4` 
 - **Tim**: `tim-gnn-l4`
 
@@ -70,60 +71,37 @@ On each VM, copy the appropriate scripts from this repository:
 git pull  # Get latest version with scripts
 
 # Verify scripts exist
-ls vm_execution_scripts/single_vm_pretrain.sh  # Option B: Single VM
-ls vm_execution_scripts/Ben/ben_vm_*.sh        # Option A: Ben's scripts
-ls vm_execution_scripts/Tim/tim_vm_*.sh        # Option A: Tim's scripts
+ls vm_execution_scripts/single_vm_pretrain.sh  # Pretraining: Single VM
+ls vm_execution_scripts/Ben/ben_vm_finetune.sh # Finetuning: Ben's script
+ls vm_execution_scripts/Tim/tim_vm_finetune.sh # Finetuning: Tim's script
 ```
 
 ---
 
-## Phase 2: Pretraining
+## Phase 2: Pretraining (Single VM Only)
 
-### Option A: 2-VM Parallel Pretraining (Recommended)
+### Single VM Pretraining Setup
 
-**Execution Order: BOTH VMs START SIMULTANEOUSLY**
+Either Ben or Tim creates one VM and runs all pretraining:
 
-#### Ben's VM:
-```bash
-# Ben's VM (ben-gnn-l4)
-./vm_execution_scripts/Ben/ben_vm_pretrain.sh
-```
-
-#### Tim's VM:
-```bash
-# Tim's VM (tim-gnn-l4)
-./vm_execution_scripts/Tim/tim_vm_pretrain.sh
-```
-
-### Pretraining Distribution:
-| Person | VM | Schemes | Experiments |
-|--------|----|---------| ------------|
-| Ben | ben-gnn-l4 | b2, b3, s1, s2 | 12 (4 schemes × 3 seeds each) |
-| Tim | tim-gnn-l4 | s3, s4, s5, b4 | 12 (4 schemes × 3 seeds each) |
-
-**Expected Duration**: 8-10 hours (12 experiments per VM in parallel)
-
-### Option B: 1-VM Sequential Pretraining (If Only 1 VM Available)
-
-If you can only create/afford one VM for pretraining, use this approach:
-
-#### Single VM Setup:
+#### Execution:
 ```bash
 # Either Ben or Tim creates one VM (e.g., shared-gnn-l4) and runs:
 ./vm_execution_scripts/single_vm_pretrain.sh
 ```
 
-#### Single VM Distribution:
+#### Distribution:
 | Setup | VM | Schemes | Experiments |
 |-------|----|---------| ------------|
-| Single VM | shared-gnn-l4 | b2, b3, s1, s2, s3, s4, s5, b4 | 24 (8 schemes × 3 seeds each) |
+| Single VM | shared-gnn-l4 | ALL: b2, b3, s1, s2, s3, s4, s5, b4 | 24 (8 schemes × 3 seeds each) |
 
-**Expected Duration**: 17-20 hours (24 experiments sequential)
+**Expected Duration**: 17-20 hours (uses built-in sweep with automatic parallelization)
 
-**Coordination**: 
-- One teammate runs pretraining, both teammates run finetuning after completion
-- Monitor progress at wandb to know when all 24 pretraining experiments are done
-- Both teammates can then proceed to their respective finetuning scripts
+**Features**: 
+- **Built-in progress tracking**: Shows "Progress: X/24 (✓completed ✗failed)"
+- **Automatic parallelization**: Uses available GPU cores efficiently  
+- **Error handling**: Reports failed experiments with details
+- **Coordination**: Monitor progress at wandb, both teammates proceed to finetuning after completion
 
 ---
 
