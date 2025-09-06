@@ -28,6 +28,7 @@ class LinkPredictionDataset(Dataset):
     def __init__(self, data: Data, split_edges: Dict[str, torch.Tensor], split: str) -> None:
         self.data = data
         self.split = split
+        self.train_edges = split_edges['train_pos']
 
         if split == 'train':
             self.edges = split_edges['train_pos']
@@ -97,9 +98,8 @@ def create_link_prediction_loader(domain_name: str, split: str, batch_size: int,
     graphs = torch.load(domain_dir / "data.pt", weights_only=False)
     splits = torch.load(domain_dir / "splits.pt", weights_only=False)
     data = graphs[0]
-    split_indices = splits[split]
 
-    dataset = LinkPredictionDataset(data, split_indices, split)
+    dataset = LinkPredictionDataset(data, splits, split)
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, generator=generator, collate_fn=_collate_link_batch)
 
 

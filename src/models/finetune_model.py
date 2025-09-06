@@ -65,9 +65,10 @@ class FinetuneGNN(nn.Module):
 
         self.to(self.device)
 
-    def forward(self, batch: Batch, edge_index: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, batch: Batch, edge_index: Optional[torch.Tensor] = None, message_passing_edges: Optional[torch.Tensor] = None) -> torch.Tensor:
         h_0 = self.input_encoder(batch.x)
-        node_embeddings = self.gnn_backbone(h_0, batch.edge_index)
+        mp_edges = message_passing_edges if message_passing_edges is not None else batch.edge_index
+        node_embeddings = self.gnn_backbone(h_0, mp_edges)
 
         task_type = TASK_TYPES[self.domain_name]
         if task_type == 'graph_classification':
@@ -86,8 +87,40 @@ def get_pretrained_model_path(pretrained_scheme: str, seed: int) -> str:
     if not model_path.exists():
         api = wandb.Api()
         full_artifact_name = f"{PROJECT_NAME}/{model_name}:latest"
-        artifact = api.artifact(full_artifact_name)
-        artifact.download(root=str(OUTPUT_DIR))
+
+        try:
+            artifact = api.artifact(full_artifact_name)
+            artifact.download(root=str(OUTPUT_DIR))
+        except Exception as e:
+            try:
+                pretrain_project = PROJECT_NAME.replace('-finetune', '-pretrain')
+                runs = api.runs(pretrain_project)
+
+                max_version = -1
+                for run in runs:
+                    if run.state == 'finished':
+                        try:
+                            artifacts = run.logged_artifacts()
+                            for art in artifacts:
+                                if art.name.startswith(model_name + ':v'):
+                                    version_str = art.name.split(':v')[1]
+                                    try:
+                                        version_num = int(version_str)
+                                        max_version = max(max_version, version_num)
+                                    except:
+                                        pass
+                        except:
+                            pass
+
+                if max_version >= 0:
+                    versioned_name = f"{PROJECT_NAME.replace('-finetune', '-pretrain')}/{model_name}:v{max_version}"
+                    artifact = api.artifact(versioned_name)
+                    artifact.download(root=str(OUTPUT_DIR))
+                else:
+                    raise Exception(f"Could not find any version of {model_name}")
+
+            except Exception as e2:
+                raise Exception(f"Failed to load pretrained model {model_name}: {e2}")
 
     return str(model_path)
 

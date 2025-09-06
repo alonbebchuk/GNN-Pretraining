@@ -1,6 +1,7 @@
 import time
 from typing import Dict, List
 
+import numpy as np
 import torch
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, precision_score, recall_score
 from torch import Tensor
@@ -52,18 +53,24 @@ def compute_batch_metrics(
 
     metrics[f'{prefix}/accuracy'] = float(accuracy_score(y_true_np, y_pred_np))
 
-    average_type = 'binary' if is_binary_classification else 'macro'
-    metrics[f'{prefix}/f1'] = float(f1_score(y_true_np, y_pred_np, average=average_type))
-    metrics[f'{prefix}/precision'] = float(precision_score(y_true_np, y_pred_np, average=average_type))
-    metrics[f'{prefix}/recall'] = float(recall_score(y_true_np, y_pred_np, average=average_type))
+    unique_true = np.unique(y_true_np)
+    unique_pred = np.unique(y_pred_np)
 
-    try:
-        if is_binary_classification:
-            metrics[f'{prefix}/auc'] = float(roc_auc_score(y_true_np, y_prob_np))
-        else:
-            metrics[f'{prefix}/auc'] = float(roc_auc_score(y_true_np, y_prob_np, multi_class='ovr'))
-    except ValueError:
+    average_type = 'binary' if is_binary_classification else 'macro'
+    metrics[f'{prefix}/f1'] = float(f1_score(y_true_np, y_pred_np, average=average_type, zero_division=0))
+    metrics[f'{prefix}/precision'] = float(precision_score(y_true_np, y_pred_np, average=average_type, zero_division=0))
+    metrics[f'{prefix}/recall'] = float(recall_score(y_true_np, y_pred_np, average=average_type, zero_division=0))
+
+    if len(unique_true) < 2:
         metrics[f'{prefix}/auc'] = 0.0
+    else:
+        try:
+            if is_binary_classification:
+                metrics[f'{prefix}/auc'] = float(roc_auc_score(y_true_np, y_prob_np))
+            else:
+                metrics[f'{prefix}/auc'] = float(roc_auc_score(y_true_np, y_prob_np, multi_class='ovr'))
+        except (ValueError, RuntimeWarning):
+            metrics[f'{prefix}/auc'] = 0.0
 
     metrics[f'{prefix}/loss'] = float(loss.item())
     metrics['num_samples'] = len(targets)

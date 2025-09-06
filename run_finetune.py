@@ -86,8 +86,7 @@ def run_sweep():
 def run_domain_sweep(domain_name: str):
     finetune_strategies = ["full_finetune", "linear_probe"]
     pretrained_schemes = ["b1", "b2", "b3", "b4", "s1", "s2", "s3", "s4", "s5"]
-    # seeds = [42, 84, 126]
-    seeds = [42]
+    seeds = [42, 84, 126]
 
     experiments = [(domain_name, strategy, scheme, seed) for strategy, scheme, seed in product(finetune_strategies, pretrained_schemes, seeds)]
     total_experiments = len(experiments)
