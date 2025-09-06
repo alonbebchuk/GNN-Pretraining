@@ -46,7 +46,7 @@ ssh gnn-l4-01  # (or 02, 03, 04)
 # Activate environment
 source ~/.bashrc
 cd ~/workspace/GNN-Pretraining
-conda activate ./.conda
+conda activate gnn-pretraining
 
 # Set correct wandb entity for shared project
 export WANDB_ENTITY=timoshka3-tel-aviv-university

@@ -193,8 +193,8 @@ PROJECT_DIR="$WORKSPACE/GNN-Pretraining"
 PYTHON_VER="3.10"
 
 # Set this to the SAME entity & project for all teammates:
-WANDB_ENTITY="benc6116-tel-aviv-university"
-WANDB_PROJECT="gnn-pretraining"
+WANDB_ENTITY="timoshka3-tel-aviv-university"
+WANDB_PROJECT="GNN"
 # ------------------------------------------------------
 
 echo "==> Basic tools"
@@ -228,11 +228,11 @@ if [[ ! -d "$PROJECT_DIR/.git" ]]; then
 fi
 cd "$PROJECT_DIR"
 
-echo "==> Create & activate project-local conda env ($PROJECT_DIR/.conda)"
-if [[ ! -d "$PROJECT_DIR/.conda" ]]; then
-  conda create -p ./.conda "python=$PYTHON_VER"
+echo "==> Create & activate conda env (gnn-pretraining)"
+if ! conda env list | grep -q "gnn-pretraining"; then
+  conda create -n gnn-pretraining "python=$PYTHON_VER"
 fi
-conda activate "$PROJECT_DIR/.conda"
+conda activate gnn-pretraining
 
 echo "==> Upgrade pip"
 pip install --upgrade pip
@@ -267,7 +267,7 @@ PY
 echo
 echo "All set. Next:"
 echo "  1) source ~/.bashrc"
-echo "  2) cd \"$PROJECT_DIR\" && conda activate ./.conda"
+echo "  2) cd \"$PROJECT_DIR\" && conda activate gnn-pretraining"
 echo "  3) wandb login   # paste your own API key"
 echo
 EOF
@@ -281,7 +281,7 @@ When it finishes:
 ```bash
 source ~/.bashrc
 cd ~/workspace/GNN-Pretraining
-conda activate ./.conda
+conda activate gnn-pretraining
 wandb login   # paste your personal API key from https://wandb.ai/authorize
 ```
 
@@ -303,8 +303,8 @@ PY
 The bootstrap script sets:
 
 ```bash
-export WANDB_ENTITY=benc6116-tel-aviv-university
-export WANDB_PROJECT=gnn-pretraining
+export WANDB_ENTITY=timoshka3-tel-aviv-university
+export WANDB_PROJECT=GNN
 ```
 
 Verify:
