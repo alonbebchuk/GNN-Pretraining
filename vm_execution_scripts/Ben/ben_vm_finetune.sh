@@ -1,10 +1,10 @@
 #!/bin/bash
 # Ben's VM - Complete Finetuning Script
-# Domains: CiteSeer_NC, Cora_LP, CiteSeer_LP (162 experiments: 3 domains × 2 strategies × 9 schemes × 3 seeds)
+# Domains: CiteSeer_NC, CiteSeer_LP, ENZYMES (162 experiments: 3 domains × 2 strategies × 9 schemes × 3 seeds)
 
 set -e
 echo "=== Ben's VM - Finetuning Phase ==="
-echo "Running: CiteSeer_NC, Cora_LP, CiteSeer_LP domains (162 experiments total)"
+echo "Running: CiteSeer_NC, CiteSeer_LP, ENZYMES domains (162 experiments total)"
 echo "Start time: $(date)"
 
 cd ~/workspace/GNN-Pretraining
@@ -29,11 +29,11 @@ echo "Starting Ben's finetuning experiments..."
 echo "Running CiteSeer_NC domain..."
 python run_finetune.py --domain_sweep CiteSeer_NC
 
-echo "Running Cora_LP domain..."
-python run_finetune.py --domain_sweep Cora_LP
-
 echo "Running CiteSeer_LP domain..."
 python run_finetune.py --domain_sweep CiteSeer_LP
+
+echo "Running ENZYMES domain..."
+python run_finetune.py --domain_sweep ENZYMES
 
 echo "=== Ben's VM Finetuning Complete ==="
 echo "Completed: 162 experiments across 3 domains"

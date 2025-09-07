@@ -1,10 +1,10 @@
 #!/bin/bash
 # Tim's VM - Complete Finetuning Script
-# Domains: ENZYMES, PTC_MR, Cora_NC (162 experiments: 3 domains × 2 strategies × 9 schemes × 3 seeds)
+# Domains: Cora_NC, Cora_LP, PTC_MR (162 experiments: 3 domains × 2 strategies × 9 schemes × 3 seeds)
 
 set -e
 echo "=== Tim's VM - Finetuning Phase ==="
-echo "Running: ENZYMES, PTC_MR, Cora_NC domains (162 experiments total)"
+echo "Running: Cora_NC, Cora_LP, PTC_MR domains (162 experiments total)"
 echo "Start time: $(date)"
 
 cd ~/workspace/GNN-Pretraining
@@ -26,14 +26,14 @@ read -p "Press Enter when all pretraining is complete..."
 echo "Starting Tim's finetuning experiments..."
 
 # Run Tim's domain sweeps sequentially (to avoid overwhelming single GPU)
-echo "Running ENZYMES domain..."
-python run_finetune.py --domain_sweep ENZYMES
+echo "Running Cora_NC domain..."
+python run_finetune.py --domain_sweep Cora_NC
+
+echo "Running Cora_LP domain..."
+python run_finetune.py --domain_sweep Cora_LP
 
 echo "Running PTC_MR domain..."
 python run_finetune.py --domain_sweep PTC_MR
-
-echo "Running Cora_NC domain..."
-python run_finetune.py --domain_sweep Cora_NC
 
 echo "=== Tim's VM Finetuning Complete ==="
 echo "Completed: 162 experiments across 3 domains"
