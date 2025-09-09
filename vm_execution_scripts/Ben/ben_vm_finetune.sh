@@ -11,7 +11,7 @@ cd ~/workspace/GNN-Pretraining
 
 # Activate conda environment
 source ~/miniconda/bin/activate
-conda activate gnn-pretraining
+conda activate /home/benc6116/workspace/GNN-Pretraining/.conda
 
 # Set wandb configuration
 export WANDB_ENTITY=timoshka3-tel-aviv-university
