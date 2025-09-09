@@ -30,15 +30,15 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('analysis/statistical_analysis.log', mode='w'),
+        logging.FileHandler('statistical_analysis.log', mode='w'),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
 # Configuration
-RESULTS_DIR = Path("analysis/results")
-FIGURES_DIR = Path("analysis/figures")
+RESULTS_DIR = Path("results")
+FIGURES_DIR = Path("figures")
 
 # Ensure directories exist
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -51,8 +51,10 @@ PRIMARY_METRICS = {
     'link_prediction': 'auc'
 }
 
-# Pre-training schemes (excluding baseline)
-PRETRAINED_SCHEMES = ['b2', 'b3', 's1', 's2', 's3', 's4', 's5', 'b4']
+# Constants from data collection
+DOMAINS = ['ENZYMES', 'PTC_MR', 'Cora_NC', 'CiteSeer_NC', 'Cora_LP', 'CiteSeer_LP']
+FINETUNE_STRATEGIES = ['linear_probe', 'full_finetune']
+PRETRAINED_SCHEMES = ['b1', 'b2', 'b3', 's1', 's2', 's3', 's4', 's5', 'b4']
 BASELINE_SCHEME = 'b1'
 
 
@@ -101,6 +103,19 @@ def cohens_d(group1: np.array, group2: np.array) -> float:
     # Cohen's d
     d = (np.mean(group1) - np.mean(group2)) / pooled_std
     return d
+
+
+def get_effect_size_category(cohens_d: float) -> str:
+    """Categorize Cohen's d effect size."""
+    abs_d = abs(cohens_d)
+    if abs_d < 0.2:
+        return 'negligible'
+    elif abs_d < 0.5:
+        return 'small'
+    elif abs_d < 0.8:
+        return 'medium'
+    else:
+        return 'large'
 
 
 def perform_paired_ttest(raw_df: pd.DataFrame, domain: str, strategy: str, 
@@ -387,6 +402,428 @@ def main():
     except Exception as e:
         logger.error(f"RQ1 Analysis failed: {e}")
         raise
+
+
+# ========================
+# RQ2: Task Combination Analysis
+# ========================
+
+def get_task_combinations():
+    """
+    Define task combinations for pre-training schemes.
+    
+    Returns:
+        dict: Mapping of scheme to task combination info
+    """
+    return {
+        'b2': {'tasks': ['node_feat_mask'], 'type': 'single', 'count': 1},
+        'b3': {'tasks': ['node_contrast'], 'type': 'single', 'count': 1},
+        's1': {'tasks': ['node_feat_mask', 'link_pred'], 'type': 'generative', 'count': 2},
+        's2': {'tasks': ['node_contrast', 'graph_contrast'], 'type': 'contrastive', 'count': 2},
+        's3': {'tasks': ['node_feat_mask', 'link_pred', 'node_contrast', 'graph_contrast'], 'type': 'combined', 'count': 4},
+        's4': {'tasks': ['node_feat_mask', 'link_pred', 'node_contrast', 'graph_contrast', 'graph_prop'], 'type': 'cross_domain', 'count': 5},
+        's5': {'tasks': ['node_feat_mask', 'link_pred', 'node_contrast', 'graph_contrast', 'graph_prop', 'domain_adv'], 'type': 'full_adv', 'count': 6},
+        'b4': {'tasks': ['node_feat_mask', 'link_pred', 'node_contrast', 'graph_contrast', 'graph_prop'], 'type': 'single_domain', 'count': 5}
+    }
+
+
+def analyze_task_combinations(agg_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Analyze performance across different task combinations.
+    
+    Args:
+        agg_df: Aggregated results DataFrame
+        
+    Returns:
+        DataFrame with task combination analysis
+    """
+    logger.info("Analyzing task combinations")
+    
+    task_combos = get_task_combinations()
+    results = []
+    
+    for domain in DOMAINS:
+        for strategy in FINETUNE_STRATEGIES:
+            # Get baseline performance
+            baseline_row = agg_df[
+                (agg_df['domain_name'] == domain) & 
+                (agg_df['finetune_strategy'] == strategy) & 
+                (agg_df['pretrained_scheme'] == 'b1')
+            ]
+            
+            if baseline_row.empty:
+                logger.warning(f"No baseline found for {domain}-{strategy}")
+                continue
+                
+            # Get primary metric for this task type
+            task_type = baseline_row['task_type'].iloc[0]
+            primary_metric = PRIMARY_METRICS[task_type]
+            baseline_perf = baseline_row[f'{primary_metric}_mean'].iloc[0]
+            
+            # Analyze each scheme
+            for scheme in ['b2', 'b3', 's1', 's2', 's3', 's4', 's5', 'b4']:
+                scheme_row = agg_df[
+                    (agg_df['domain_name'] == domain) & 
+                    (agg_df['finetune_strategy'] == strategy) & 
+                    (agg_df['pretrained_scheme'] == scheme)
+                ]
+                
+                if scheme_row.empty:
+                    continue
+                    
+                scheme_perf = scheme_row[f'{primary_metric}_mean'].iloc[0]
+                improvement = ((scheme_perf - baseline_perf) / baseline_perf) * 100
+                
+                combo_info = task_combos[scheme]
+                
+                results.append({
+                    'domain': domain,
+                    'strategy': strategy,
+                    'scheme': scheme,
+                    'task_count': combo_info['count'],
+                    'task_type': combo_info['type'],
+                    'tasks': ', '.join(combo_info['tasks']),
+                    'baseline_performance': baseline_perf,
+                    'scheme_performance': scheme_perf,
+                    'improvement_pct': improvement,
+                    'mean_std': scheme_row[f'{primary_metric}_std'].iloc[0],
+                    'mean_sem': scheme_row[f'{primary_metric}_sem'].iloc[0]
+                })
+    
+    return pd.DataFrame(results)
+
+
+def calculate_synergy_scores(agg_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate task synergy scores.
+    Synergy = performance(multi-task) - max(performance(single-tasks))
+    
+    Args:
+        agg_df: Aggregated results DataFrame
+        
+    Returns:
+        DataFrame with synergy analysis
+    """
+    logger.info("Calculating task synergy scores")
+    
+    results = []
+    
+    for domain in DOMAINS:
+        for strategy in FINETUNE_STRATEGIES:
+            # Get primary metric for this domain
+            domain_rows = agg_df[agg_df['domain_name'] == domain]
+            if domain_rows.empty:
+                continue
+            task_type = domain_rows['task_type'].iloc[0]
+            primary_metric = PRIMARY_METRICS[task_type]
+            
+            # Get single-task performances (b2, b3)
+            single_tasks = {}
+            for scheme in ['b2', 'b3']:
+                scheme_row = agg_df[
+                    (agg_df['domain_name'] == domain) & 
+                    (agg_df['finetune_strategy'] == strategy) & 
+                    (agg_df['pretrained_scheme'] == scheme)
+                ]
+                if not scheme_row.empty:
+                    single_tasks[scheme] = scheme_row[f'{primary_metric}_mean'].iloc[0]
+            
+            if len(single_tasks) < 2:
+                continue
+                
+            max_single = max(single_tasks.values())
+            
+            # Calculate synergy for multi-task schemes
+            for scheme in ['s1', 's2', 's3', 's4', 's5', 'b4']:
+                scheme_row = agg_df[
+                    (agg_df['domain_name'] == domain) & 
+                    (agg_df['finetune_strategy'] == strategy) & 
+                    (agg_df['pretrained_scheme'] == scheme)
+                ]
+                
+                if scheme_row.empty:
+                    continue
+                    
+                multi_perf = scheme_row[f'{primary_metric}_mean'].iloc[0]
+                synergy = multi_perf - max_single
+                synergy_pct = (synergy / max_single) * 100
+                
+                task_combos = get_task_combinations()
+                
+                results.append({
+                    'domain': domain,
+                    'strategy': strategy,
+                    'scheme': scheme,
+                    'task_count': task_combos[scheme]['count'],
+                    'task_type': task_combos[scheme]['type'],
+                    'max_single_performance': max_single,
+                    'multi_task_performance': multi_perf,
+                    'synergy_score': synergy,
+                    'synergy_pct': synergy_pct,
+                    'is_positive_synergy': synergy > 0
+                })
+    
+    return pd.DataFrame(results)
+
+
+def compare_progressive_combinations(raw_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Statistical comparison between progressive task combinations.
+    
+    Args:
+        raw_df: Raw experimental results DataFrame
+        
+    Returns:
+        DataFrame with statistical comparison results
+    """
+    logger.info("Performing progressive task combination comparisons")
+    
+    # Define progressive comparisons
+    comparisons = [
+        ('b2', 's1', 'Adding link prediction to node feature masking'),
+        ('b3', 's2', 'Adding graph contrastive to node contrastive'),
+        ('s1', 's3', 'Combining generative (s1) with contrastive tasks'),
+        ('s2', 's3', 'Combining contrastive (s2) with generative tasks'),
+        ('s3', 's4', 'Adding graph property prediction to 4-task'),
+        ('s4', 's5', 'Adding domain adversarial to 5-task'),
+        ('s4', 'b4', 'Cross-domain vs single-domain (5-task)')
+    ]
+    
+    results = []
+    
+    for domain in DOMAINS:
+        for strategy in FINETUNE_STRATEGIES:
+            # Get primary metric for this domain
+            domain_rows = raw_df[raw_df['domain_name'] == domain]
+            if domain_rows.empty:
+                continue
+            task_type = domain_rows['task_type'].iloc[0]
+            primary_metric = PRIMARY_METRICS[task_type]
+            
+            for scheme1, scheme2, description in comparisons:
+                # Get data for both schemes
+                data1 = raw_df[
+                    (raw_df['domain_name'] == domain) & 
+                    (raw_df['finetune_strategy'] == strategy) & 
+                    (raw_df['pretrained_scheme'] == scheme1)
+                ][primary_metric].values
+                
+                data2 = raw_df[
+                    (raw_df['domain_name'] == domain) & 
+                    (raw_df['finetune_strategy'] == strategy) & 
+                    (raw_df['pretrained_scheme'] == scheme2)
+                ][primary_metric].values
+                
+                if len(data1) == 0 or len(data2) == 0:
+                    continue
+                
+                # Perform paired t-test
+                from scipy.stats import ttest_rel
+                
+                try:
+                    t_stat, p_value = ttest_rel(data2, data1)  # data2 - data1
+                    
+                    # Calculate effect size (Cohen's d for paired samples)
+                    diff = data2 - data1
+                    cohens_d = np.mean(diff) / np.std(diff, ddof=1) if np.std(diff, ddof=1) > 0 else 0
+                    
+                    # Calculate mean improvement
+                    mean1, mean2 = np.mean(data1), np.mean(data2)
+                    improvement = ((mean2 - mean1) / mean1) * 100 if mean1 != 0 else 0
+                    
+                    results.append({
+                        'domain': domain,
+                        'strategy': strategy,
+                        'comparison': f"{scheme1} vs {scheme2}",
+                        'description': description,
+                        'scheme1': scheme1,
+                        'scheme2': scheme2,
+                        'mean1': mean1,
+                        'mean2': mean2,
+                        'improvement_pct': improvement,
+                        'p_value': p_value,
+                        'cohens_d': cohens_d,
+                        't_statistic': t_stat,
+                        'significant': p_value < 0.05,
+                        'effect_size_category': get_effect_size_category(abs(cohens_d))
+                    })
+                    
+                except Exception as e:
+                    logger.warning(f"Statistical test failed for {domain}-{strategy} {scheme1} vs {scheme2}: {e}")
+                    continue
+    
+    return pd.DataFrame(results)
+
+
+def create_task_combination_summary(combo_df: pd.DataFrame, synergy_df: pd.DataFrame) -> dict:
+    """
+    Create summary tables for task combination analysis.
+    
+    Args:
+        combo_df: Task combination analysis DataFrame
+        synergy_df: Synergy analysis DataFrame
+        
+    Returns:
+        Dictionary of summary tables
+    """
+    logger.info("Creating task combination summary tables")
+    
+    summaries = {}
+    
+    # 1. Best task combination per domain
+    best_per_domain = combo_df.loc[combo_df.groupby(['domain', 'strategy'])['improvement_pct'].idxmax()]
+    summaries['best_per_domain'] = best_per_domain[['domain', 'strategy', 'scheme', 'task_type', 'improvement_pct']].copy()
+    
+    # 2. Overall task type effectiveness
+    task_type_summary = combo_df.groupby('task_type').agg({
+        'improvement_pct': ['mean', 'std', 'count'],
+        'scheme_performance': ['mean', 'std']
+    }).round(3)
+    task_type_summary.columns = ['_'.join(col).strip() for col in task_type_summary.columns]
+    summaries['task_type_effectiveness'] = task_type_summary
+    
+    # 3. Synergy analysis summary
+    synergy_summary = synergy_df.groupby('task_type').agg({
+        'synergy_pct': ['mean', 'std', 'count'],
+        'is_positive_synergy': 'sum'
+    }).round(3)
+    synergy_summary.columns = ['_'.join(col).strip() for col in synergy_summary.columns]
+    synergy_summary['positive_synergy_rate'] = (synergy_summary['is_positive_synergy_sum'] / 
+                                                synergy_summary['synergy_pct_count'] * 100).round(1)
+    summaries['synergy_summary'] = synergy_summary
+    
+    # 4. Task count vs performance
+    task_count_perf = combo_df.groupby('task_count').agg({
+        'improvement_pct': ['mean', 'std', 'count'],
+        'scheme_performance': ['mean', 'std']
+    }).round(3)
+    task_count_perf.columns = ['_'.join(col).strip() for col in task_count_perf.columns]
+    summaries['task_count_performance'] = task_count_perf
+    
+    return summaries
+
+
+def analyze_rq2(agg_df: pd.DataFrame, raw_df: pd.DataFrame) -> tuple:
+    """
+    Complete RQ2 analysis: Task Combination Analysis.
+    
+    Args:
+        agg_df: Aggregated results DataFrame
+        raw_df: Raw experimental results DataFrame
+        
+    Returns:
+        Tuple of analysis results
+    """
+    logger.info("Starting RQ2 Analysis: Task Combination Analysis")
+    logger.info("=" * 50)
+    
+    try:
+        # 1. Task combination analysis
+        combo_df = analyze_task_combinations(agg_df)
+        
+        # 2. Synergy analysis
+        synergy_df = calculate_synergy_scores(agg_df)
+        
+        # 3. Progressive comparison analysis
+        progressive_df = compare_progressive_combinations(raw_df)
+        
+        # 4. Apply Bonferroni correction to progressive comparisons
+        if not progressive_df.empty:
+            from statsmodels.stats.multitest import multipletests
+            _, corrected_p, _, _ = multipletests(progressive_df['p_value'], method='bonferroni')
+            progressive_df['p_value_corrected'] = corrected_p
+            progressive_df['significant_corrected'] = corrected_p < 0.05
+        
+        # 5. Create summary tables
+        summary_tables = create_task_combination_summary(combo_df, synergy_df)
+        
+        # 6. Save results
+        logger.info("Saving RQ2 results")
+        combo_df.to_csv(RESULTS_DIR / 'rq2_task_combination_analysis.csv', index=False)
+        synergy_df.to_csv(RESULTS_DIR / 'rq2_synergy_scores.csv', index=False)
+        progressive_df.to_csv(RESULTS_DIR / 'rq2_progressive_comparisons.csv', index=False)
+        
+        # Save summary tables
+        for name, table in summary_tables.items():
+            table.to_csv(RESULTS_DIR / f'rq2_summary_{name}.csv', index=True)
+        
+        logger.info("RQ2 results saved to analysis/results")
+        
+        # 7. Log key findings
+        log_rq2_findings(combo_df, synergy_df, progressive_df, summary_tables)
+        
+        logger.info("RQ2 Analysis completed successfully!")
+        
+        return combo_df, synergy_df, progressive_df, summary_tables
+        
+    except Exception as e:
+        logger.error(f"RQ2 Analysis failed: {e}")
+        raise
+
+
+def log_rq2_findings(combo_df: pd.DataFrame, synergy_df: pd.DataFrame, 
+                     progressive_df: pd.DataFrame, summary_tables: dict):
+    """Log key findings from RQ2 analysis."""
+    logger.info("\n" + "="*50)
+    logger.info("RQ2 KEY FINDINGS: Task Combination Analysis")
+    logger.info("="*50)
+    
+    # Best task type overall
+    task_type_eff = summary_tables['task_type_effectiveness']
+    best_task_type = task_type_eff['improvement_pct_mean'].idxmax()
+    best_improvement = task_type_eff.loc[best_task_type, 'improvement_pct_mean']
+    
+    logger.info(f"1. BEST TASK TYPE: {best_task_type} ({best_improvement:.2f}% avg improvement)")
+    
+    # Synergy analysis
+    synergy_summary = summary_tables['synergy_summary']
+    positive_synergy_rates = synergy_summary['positive_synergy_rate']
+    best_synergy_type = positive_synergy_rates.idxmax()
+    best_synergy_rate = positive_synergy_rates.max()
+    
+    logger.info(f"2. BEST SYNERGY: {best_synergy_type} ({best_synergy_rate:.1f}% positive synergy rate)")
+    
+    # Task count vs performance
+    task_count_perf = summary_tables['task_count_performance']
+    best_task_count = task_count_perf['improvement_pct_mean'].idxmax()
+    best_count_improvement = task_count_perf.loc[best_task_count, 'improvement_pct_mean']
+    
+    logger.info(f"3. OPTIMAL TASK COUNT: {best_task_count} tasks ({best_count_improvement:.2f}% avg improvement)")
+    
+    # Significant progressive improvements
+    if not progressive_df.empty:
+        sig_improvements = progressive_df[progressive_df['significant_corrected'] & (progressive_df['improvement_pct'] > 0)]
+        logger.info(f"4. SIGNIFICANT IMPROVEMENTS: {len(sig_improvements)} progressive combinations show significant gains")
+        
+        if not sig_improvements.empty:
+            best_progression = sig_improvements.loc[sig_improvements['improvement_pct'].idxmax()]
+            logger.info(f"   Best: {best_progression['comparison']} (+{best_progression['improvement_pct']:.2f}%)")
+    
+    # Overall synergy rate
+    total_positive = synergy_df['is_positive_synergy'].sum()
+    total_combinations = len(synergy_df)
+    overall_synergy_rate = (total_positive / total_combinations * 100) if total_combinations > 0 else 0
+    
+    logger.info(f"5. OVERALL SYNERGY: {overall_synergy_rate:.1f}% of multi-task combinations show positive synergy")
+    
+    logger.info("="*50)
+
+
+def main():
+    logger.info("Starting Comprehensive Statistical Analysis")
+    logger.info("=" * 50)
+
+    # Load data
+    agg_df = load_aggregated_data()
+    raw_df = load_raw_data()
+
+    # Perform RQ1 analysis
+    improvement_df, statistical_df, best_schemes_df = analyze_rq1_effectiveness(agg_df, raw_df)
+    
+    # Perform RQ2 analysis
+    combo_df, synergy_df, progressive_df, rq2_summary_tables = analyze_rq2(agg_df, raw_df)
+    
+    logger.info("All analyses completed successfully!")
 
 
 if __name__ == "__main__":

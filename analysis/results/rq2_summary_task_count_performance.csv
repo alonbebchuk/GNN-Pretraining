@@ -1,0 +1,6 @@
+task_count,improvement_pct_mean,improvement_pct_std,improvement_pct_count,scheme_performance_mean,scheme_performance_std
+1,-2.46,9.092,24,0.356,0.203
+2,-2.743,12.886,24,0.36,0.213
+4,-2.583,6.138,12,0.358,0.208
+5,-4.968,4.763,24,0.349,0.199
+6,-5.847,7.953,12,0.347,0.204

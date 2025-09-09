@@ -1,0 +1,13 @@
+,domain,strategy,scheme,task_type,improvement_pct
+91,CiteSeer_LP,full_finetune,s2,contrastive,2.3543836232985673
+81,CiteSeer_LP,linear_probe,b3,single,17.049524237656396
+56,CiteSeer_NC,full_finetune,b2,single,-0.1470588235293956
+48,CiteSeer_NC,linear_probe,b2,single,-1.1191047162270016
+79,Cora_LP,full_finetune,b4,single_domain,-0.17449187320250228
+64,Cora_LP,linear_probe,b2,single,4.292199752373075
+41,Cora_NC,full_finetune,b3,single,-0.5593536357986537
+34,Cora_NC,linear_probe,s1,generative,4.630269523151368
+15,ENZYMES,full_finetune,b4,single_domain,-0.8333333333333304
+0,ENZYMES,linear_probe,b2,single,-5.61797752808989
+26,PTC_MR,full_finetune,s1,generative,35.84905660377361
+18,PTC_MR,linear_probe,s1,generative,17.241379310344847

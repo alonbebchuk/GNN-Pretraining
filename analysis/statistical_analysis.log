@@ -1,23 +1,27 @@
-2025-09-09 13:29:07,876 - INFO - Starting RQ1 Pre-training Effectiveness Analysis
-2025-09-09 13:29:07,876 - INFO - ============================================================
-2025-09-09 13:29:07,877 - INFO - Loading aggregated data from analysis/results/aggregated_results.csv
-2025-09-09 13:29:07,883 - INFO - Loaded 108 aggregated combinations
-2025-09-09 13:29:07,883 - INFO - Loading raw data from analysis/results/raw_experimental_results.csv
-2025-09-09 13:29:07,886 - INFO - Loaded 324 raw experiments
-2025-09-09 13:29:07,886 - INFO - Starting RQ1 Analysis: Pre-training Effectiveness
-2025-09-09 13:29:08,168 - INFO - Creating summary tables
-2025-09-09 13:29:08,210 - INFO - Saving results
-2025-09-09 13:29:08,217 - INFO - Results saved to analysis/results
-2025-09-09 13:29:08,217 - INFO - 
-============================================================
-2025-09-09 13:29:08,217 - INFO - KEY FINDINGS - RQ1: Pre-training Effectiveness
-2025-09-09 13:29:08,217 - INFO - ============================================================
-2025-09-09 13:29:08,217 - INFO - 
-1. Overall mean improvement: -3.60%
-2025-09-09 13:29:08,217 - INFO - 2. Best performing scheme: b2 (mean improvement: -0.39%)
-2025-09-09 13:29:08,218 - INFO - 3. Statistically significant improvements: 0/96 (0.0%)
-2025-09-09 13:29:08,218 - INFO - 4. Combinations with positive improvement: 22/96 (22.9%)
-2025-09-09 13:29:08,218 - INFO - 5. Average effect size (Cohen's d): -0.715
-2025-09-09 13:29:08,218 - INFO - ============================================================
-
-2025-09-09 13:29:08,218 - INFO - RQ1 Analysis completed successfully!
+2025-09-09 14:23:48,552 - INFO - Starting Comprehensive Statistical Analysis
+2025-09-09 14:23:48,552 - INFO - ==================================================
+2025-09-09 14:23:48,552 - INFO - Loading aggregated data from results/aggregated_results.csv
+2025-09-09 14:23:48,559 - INFO - Loaded 108 aggregated combinations
+2025-09-09 14:23:48,559 - INFO - Loading raw data from results/raw_experimental_results.csv
+2025-09-09 14:23:48,562 - INFO - Loaded 324 raw experiments
+2025-09-09 14:23:48,562 - INFO - Starting RQ1 Analysis: Pre-training Effectiveness
+2025-09-09 14:23:48,893 - INFO - Starting RQ2 Analysis: Task Combination Analysis
+2025-09-09 14:23:48,893 - INFO - ==================================================
+2025-09-09 14:23:48,893 - INFO - Analyzing task combinations
+2025-09-09 14:23:48,965 - INFO - Calculating task synergy scores
+2025-09-09 14:23:49,027 - INFO - Performing progressive task combination comparisons
+2025-09-09 14:23:49,203 - INFO - Creating task combination summary tables
+2025-09-09 14:23:49,215 - INFO - Saving RQ2 results
+2025-09-09 14:23:49,223 - INFO - RQ2 results saved to analysis/results
+2025-09-09 14:23:49,223 - INFO - 
+==================================================
+2025-09-09 14:23:49,223 - INFO - RQ2 KEY FINDINGS: Task Combination Analysis
+2025-09-09 14:23:49,223 - INFO - ==================================================
+2025-09-09 14:23:49,223 - INFO - 1. BEST TASK TYPE: single (-2.46% avg improvement)
+2025-09-09 14:23:49,224 - INFO - 2. BEST SYNERGY: generative (25.0% positive synergy rate)
+2025-09-09 14:23:49,224 - INFO - 3. OPTIMAL TASK COUNT: 1 tasks (-2.46% avg improvement)
+2025-09-09 14:23:49,225 - INFO - 4. SIGNIFICANT IMPROVEMENTS: 0 progressive combinations show significant gains
+2025-09-09 14:23:49,225 - INFO - 5. OVERALL SYNERGY: 15.3% of multi-task combinations show positive synergy
+2025-09-09 14:23:49,225 - INFO - ==================================================
+2025-09-09 14:23:49,225 - INFO - RQ2 Analysis completed successfully!
+2025-09-09 14:23:49,225 - INFO - All analyses completed successfully!

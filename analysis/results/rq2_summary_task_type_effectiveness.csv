@@ -1,0 +1,8 @@
+task_type,improvement_pct_mean,improvement_pct_std,improvement_pct_count,scheme_performance_mean,scheme_performance_std
+combined,-2.583,6.138,12,0.358,0.208
+contrastive,-2.814,7.871,12,0.353,0.203
+cross_domain,-5.894,4.869,12,0.344,0.198
+full_adv,-5.847,7.953,12,0.347,0.204
+generative,-2.671,16.888,12,0.366,0.23
+single,-2.46,9.092,24,0.356,0.203
+single_domain,-4.043,4.676,12,0.354,0.209
