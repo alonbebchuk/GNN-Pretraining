@@ -10,7 +10,7 @@ def analyze_completed_runs():
     
     # Initialize WandB
     api = wandb.Api()
-    project = "alonbebchuk-tel-aviv-university/gnn-pretraining-pretrain"
+    project = "timoshka3-tel-aviv-university/GNN"
     
     # Target runs to analyze - all pretraining schemes
     target_runs = ["b2_42", "b3_42", "b4_42", "s1_42", "s2_42", "s3_42", "s4_42", "s5_42"]

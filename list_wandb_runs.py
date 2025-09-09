@@ -4,7 +4,7 @@ import wandb
 api = wandb.Api()
 
 # List all runs in the project
-project_path = "alonbebchuk-tel-aviv-university/gnn-pretraining-pretrain"
+project_path = "timoshka3-tel-aviv-university/GNN"
 
 print(f"Listing all runs in project: {project_path}")
 print("="*80)

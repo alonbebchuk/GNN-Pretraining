@@ -17,7 +17,7 @@ run_mapping = {
     's4_42': 'hgizj0vm',
     's5_42': 'cwph8hc8'
 }
-project_path = "alonbebchuk-tel-aviv-university/gnn-pretraining-pretrain"
+project_path = "timoshka3-tel-aviv-university/GNN"
 
 def fetch_run_data(run_name, run_id):
     """Fetch comprehensive data for a given run"""
