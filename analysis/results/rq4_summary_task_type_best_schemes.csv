@@ -1,0 +1,4 @@
+,best_scheme,mean_improvement,consistency
+graph_classification,s1,3.9721539721539934,8.566038278275546
+node_classification,b2,-4.118568791720887,4.611491505389059
+link_prediction,s2,3.838367293330455,3.590831666258479

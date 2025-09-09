@@ -1216,6 +1216,566 @@ def log_rq3_findings(strategy_df: pd.DataFrame, effectiveness_df: pd.DataFrame,
     logger.info("="*50)
 
 
+# ========================
+# RQ4: Domain-Task Affinity Analysis
+# ========================
+
+def create_domain_affinity_matrix(agg_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create domain-task affinity matrix showing improvement over baseline for each combination.
+    
+    Args:
+        agg_df: Aggregated results DataFrame
+        
+    Returns:
+        DataFrame with domain-scheme affinity matrix
+    """
+    logger.info("Creating domain-task affinity matrix")
+    
+    # Create matrix with domains as rows and schemes as columns
+    affinity_data = []
+    
+    for domain in DOMAINS:
+        # Get primary metric for this domain
+        domain_rows = agg_df[agg_df['domain_name'] == domain]
+        if domain_rows.empty:
+            continue
+        task_type = domain_rows['task_type'].iloc[0]
+        primary_metric = PRIMARY_METRICS[task_type]
+        
+        # Get baseline performance
+        baseline_row = agg_df[
+            (agg_df['domain_name'] == domain) & 
+            (agg_df['pretrained_scheme'] == 'b1')
+        ]
+        
+        if baseline_row.empty:
+            continue
+            
+        # Average across strategies for baseline
+        baseline_perf = baseline_row[f'{primary_metric}_mean'].mean()
+        
+        domain_data = {'domain': domain, 'task_type': task_type}
+        
+        # Calculate improvement for each scheme
+        for scheme in ['b2', 'b3', 's1', 's2', 's3', 's4', 's5', 'b4']:
+            scheme_rows = agg_df[
+                (agg_df['domain_name'] == domain) & 
+                (agg_df['pretrained_scheme'] == scheme)
+            ]
+            
+            if scheme_rows.empty:
+                domain_data[scheme] = np.nan
+            else:
+                # Average across strategies
+                scheme_perf = scheme_rows[f'{primary_metric}_mean'].mean()
+                improvement = ((scheme_perf - baseline_perf) / baseline_perf) * 100
+                domain_data[scheme] = improvement
+        
+        affinity_data.append(domain_data)
+    
+    return pd.DataFrame(affinity_data).set_index('domain')
+
+
+def analyze_cross_domain_transfer(agg_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Analyze cross-domain transfer effectiveness.
+    
+    Args:
+        agg_df: Aggregated results DataFrame
+        
+    Returns:
+        DataFrame with transfer analysis results
+    """
+    logger.info("Analyzing cross-domain transfer effectiveness")
+    
+    results = []
+    
+    for domain in DOMAINS:
+        # Get primary metric for this domain
+        domain_rows = agg_df[agg_df['domain_name'] == domain]
+        if domain_rows.empty:
+            continue
+        task_type = domain_rows['task_type'].iloc[0]
+        primary_metric = PRIMARY_METRICS[task_type]
+        
+        for strategy in FINETUNE_STRATEGIES:
+            # Compare single-domain (b4) vs cross-domain (s4) when available
+            b4_row = agg_df[
+                (agg_df['domain_name'] == domain) & 
+                (agg_df['finetune_strategy'] == strategy) & 
+                (agg_df['pretrained_scheme'] == 'b4')
+            ]
+            
+            s4_row = agg_df[
+                (agg_df['domain_name'] == domain) & 
+                (agg_df['finetune_strategy'] == strategy) & 
+                (agg_df['pretrained_scheme'] == 's4')
+            ]
+            
+            baseline_row = agg_df[
+                (agg_df['domain_name'] == domain) & 
+                (agg_df['finetune_strategy'] == strategy) & 
+                (agg_df['pretrained_scheme'] == 'b1')
+            ]
+            
+            if baseline_row.empty:
+                continue
+                
+            baseline_perf = baseline_row[f'{primary_metric}_mean'].iloc[0]
+            
+            # Calculate improvements
+            b4_improvement = np.nan
+            s4_improvement = np.nan
+            transfer_benefit = np.nan
+            
+            if not b4_row.empty:
+                b4_perf = b4_row[f'{primary_metric}_mean'].iloc[0]
+                b4_improvement = ((b4_perf - baseline_perf) / baseline_perf) * 100
+            
+            if not s4_row.empty:
+                s4_perf = s4_row[f'{primary_metric}_mean'].iloc[0]
+                s4_improvement = ((s4_perf - baseline_perf) / baseline_perf) * 100
+            
+            if not np.isnan(b4_improvement) and not np.isnan(s4_improvement):
+                transfer_benefit = s4_improvement - b4_improvement
+            
+            results.append({
+                'domain': domain,
+                'strategy': strategy,
+                'task_type': task_type,
+                'baseline_performance': baseline_perf,
+                'single_domain_improvement': b4_improvement,
+                'cross_domain_improvement': s4_improvement,
+                'transfer_benefit': transfer_benefit,
+                'better_approach': 'cross_domain' if transfer_benefit > 0 else 'single_domain' if transfer_benefit < 0 else 'equivalent'
+            })
+    
+    return pd.DataFrame(results)
+
+
+def analyze_task_type_affinity(affinity_matrix: pd.DataFrame) -> dict:
+    """
+    Analyze task type affinity patterns.
+    
+    Args:
+        affinity_matrix: Domain-scheme affinity matrix
+        
+    Returns:
+        Dictionary with task type analysis results
+    """
+    logger.info("Analyzing task type affinity patterns")
+    
+    results = {}
+    
+    # Group domains by task type
+    task_groups = {
+        'graph_classification': ['ENZYMES', 'PTC_MR'],
+        'node_classification': ['Cora_NC', 'CiteSeer_NC'],
+        'link_prediction': ['Cora_LP', 'CiteSeer_LP']
+    }
+    
+    # Get scheme columns (exclude task_type)
+    schemes = [col for col in affinity_matrix.columns if col != 'task_type']
+    
+    for task_type, domains in task_groups.items():
+        available_domains = [d for d in domains if d in affinity_matrix.index]
+        if not available_domains:
+            continue
+            
+        # Get subset of matrix for this task type (only numeric columns)
+        task_matrix = affinity_matrix.loc[available_domains, schemes]
+        
+        # Calculate statistics
+        results[task_type] = {
+            'domains': available_domains,
+            'best_scheme_overall': task_matrix.mean().idxmax(),
+            'best_scheme_per_domain': task_matrix.idxmax(axis=1).to_dict(),
+            'mean_improvements': task_matrix.mean().to_dict(),
+            'std_improvements': task_matrix.std().to_dict(),
+            'consistency_score': task_matrix.std(axis=0).mean()  # Lower = more consistent across domains
+        }
+    
+    return results
+
+
+def analyze_specialization_vs_generalization(affinity_matrix: pd.DataFrame) -> pd.DataFrame:
+    """
+    Analyze specialization vs generalization trade-offs.
+    
+    Args:
+        affinity_matrix: Domain-scheme affinity matrix
+        
+    Returns:
+        DataFrame with specialization analysis
+    """
+    logger.info("Analyzing specialization vs generalization trade-offs")
+    
+    results = []
+    
+    schemes = [col for col in affinity_matrix.columns if col != 'task_type']
+    
+    for scheme in schemes:
+        scheme_data = affinity_matrix[scheme].dropna()
+        
+        if len(scheme_data) == 0:
+            continue
+            
+        # Generalization metrics
+        mean_improvement = scheme_data.mean()
+        std_improvement = scheme_data.std()
+        min_improvement = scheme_data.min()
+        max_improvement = scheme_data.max()
+        
+        # Specialization metrics
+        positive_domains = (scheme_data > 0).sum()
+        total_domains = len(scheme_data)
+        success_rate = positive_domains / total_domains * 100
+        
+        # Trade-off metrics
+        range_performance = max_improvement - min_improvement
+        coefficient_variation = std_improvement / abs(mean_improvement) if mean_improvement != 0 else np.inf
+        
+        # Classification
+        if mean_improvement > 0 and std_improvement < 2:
+            category = 'generalist'
+        elif max_improvement > 5 and positive_domains < total_domains:
+            category = 'specialist'
+        elif mean_improvement < -2:
+            category = 'poor_performer'
+        else:
+            category = 'mixed'
+        
+        results.append({
+            'scheme': scheme,
+            'mean_improvement': mean_improvement,
+            'std_improvement': std_improvement,
+            'min_improvement': min_improvement,
+            'max_improvement': max_improvement,
+            'range_performance': range_performance,
+            'success_rate': success_rate,
+            'coefficient_variation': coefficient_variation,
+            'category': category,
+            'domains_analyzed': total_domains
+        })
+    
+    return pd.DataFrame(results)
+
+
+def perform_domain_clustering(affinity_matrix: pd.DataFrame) -> dict:
+    """
+    Perform clustering analysis to group similar domains.
+    
+    Args:
+        affinity_matrix: Domain-scheme affinity matrix
+        
+    Returns:
+        Dictionary with clustering results
+    """
+    logger.info("Performing domain clustering analysis")
+    
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+    from scipy.cluster.hierarchy import dendrogram, linkage
+    from scipy.spatial.distance import pdist, squareform
+    
+    # Prepare data (domains as rows, schemes as columns)
+    data_matrix = affinity_matrix.select_dtypes(include=[np.number]).fillna(0)
+    
+    if data_matrix.empty or data_matrix.shape[0] < 2:
+        logger.warning("Insufficient data for clustering")
+        return {}
+    
+    # Standardize data
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(data_matrix)
+    
+    # K-means clustering (try 2-3 clusters)
+    kmeans_results = {}
+    for k in [2, 3]:
+        if k <= data_matrix.shape[0]:
+            kmeans = KMeans(n_clusters=k, random_state=42)
+            clusters = kmeans.fit_predict(scaled_data)
+            kmeans_results[f'k{k}'] = {
+                'labels': dict(zip(data_matrix.index, clusters)),
+                'inertia': kmeans.inertia_
+            }
+    
+    # Hierarchical clustering
+    linkage_matrix = linkage(scaled_data, method='ward')
+    
+    # Domain similarity matrix
+    distances = pdist(scaled_data, metric='euclidean')
+    similarity_matrix = 1 / (1 + squareform(distances))
+    similarity_df = pd.DataFrame(similarity_matrix, 
+                                index=data_matrix.index, 
+                                columns=data_matrix.index)
+    
+    return {
+        'kmeans': kmeans_results,
+        'linkage_matrix': linkage_matrix,
+        'similarity_matrix': similarity_df,
+        'domain_names': list(data_matrix.index)
+    }
+
+
+def analyze_domain_adaptation(agg_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Analyze domain adaptation insights including domain adversarial training.
+    
+    Args:
+        agg_df: Aggregated results DataFrame
+        
+    Returns:
+        DataFrame with domain adaptation analysis
+    """
+    logger.info("Analyzing domain adaptation insights")
+    
+    results = []
+    
+    for domain in DOMAINS:
+        # Get primary metric for this domain
+        domain_rows = agg_df[agg_df['domain_name'] == domain]
+        if domain_rows.empty:
+            continue
+        task_type = domain_rows['task_type'].iloc[0]
+        primary_metric = PRIMARY_METRICS[task_type]
+        
+        for strategy in FINETUNE_STRATEGIES:
+            # Compare schemes: s4 (cross-domain) vs s5 (+ domain adversarial)
+            s4_row = agg_df[
+                (agg_df['domain_name'] == domain) & 
+                (agg_df['finetune_strategy'] == strategy) & 
+                (agg_df['pretrained_scheme'] == 's4')
+            ]
+            
+            s5_row = agg_df[
+                (agg_df['domain_name'] == domain) & 
+                (agg_df['finetune_strategy'] == strategy) & 
+                (agg_df['pretrained_scheme'] == 's5')
+            ]
+            
+            if s4_row.empty or s5_row.empty:
+                continue
+                
+            s4_perf = s4_row[f'{primary_metric}_mean'].iloc[0]
+            s5_perf = s5_row[f'{primary_metric}_mean'].iloc[0]
+            
+            domain_adv_benefit = ((s5_perf - s4_perf) / s4_perf) * 100
+            
+            results.append({
+                'domain': domain,
+                'strategy': strategy,
+                'task_type': task_type,
+                's4_performance': s4_perf,
+                's5_performance': s5_perf,
+                'domain_adversarial_benefit': domain_adv_benefit,
+                'benefits_from_domain_adv': domain_adv_benefit > 0
+            })
+    
+    return pd.DataFrame(results)
+
+
+def create_rq4_summary_tables(affinity_matrix: pd.DataFrame, transfer_df: pd.DataFrame, 
+                             task_affinity: dict, specialization_df: pd.DataFrame, 
+                             domain_adaptation_df: pd.DataFrame) -> dict:
+    """
+    Create summary tables for RQ4 analysis.
+    
+    Args:
+        affinity_matrix: Domain-scheme affinity matrix
+        transfer_df: Transfer analysis DataFrame
+        task_affinity: Task type affinity analysis
+        specialization_df: Specialization analysis DataFrame
+        domain_adaptation_df: Domain adaptation analysis DataFrame
+        
+    Returns:
+        Dictionary of summary tables
+    """
+    logger.info("Creating RQ4 summary tables")
+    
+    summaries = {}
+    
+    # 1. Best schemes per domain
+    schemes = [col for col in affinity_matrix.columns if col != 'task_type']
+    best_per_domain = affinity_matrix[schemes].idxmax(axis=1)
+    best_improvements = affinity_matrix[schemes].max(axis=1)
+    
+    summaries['best_schemes_per_domain'] = pd.DataFrame({
+        'best_scheme': best_per_domain,
+        'best_improvement': best_improvements,
+        'task_type': affinity_matrix['task_type']
+    })
+    
+    # 2. Scheme performance summary
+    scheme_summary = affinity_matrix[schemes].agg(['mean', 'std', 'min', 'max', 'count']).T
+    scheme_summary['positive_domains'] = (affinity_matrix[schemes] > 0).sum()
+    scheme_summary['success_rate'] = (scheme_summary['positive_domains'] / scheme_summary['count'] * 100).round(1)
+    summaries['scheme_performance_summary'] = scheme_summary
+    
+    # 3. Task type best schemes
+    task_type_best = {}
+    for task_type, analysis in task_affinity.items():
+        task_type_best[task_type] = {
+            'best_scheme': analysis['best_scheme_overall'],
+            'mean_improvement': analysis['mean_improvements'][analysis['best_scheme_overall']],
+            'consistency': analysis['consistency_score']
+        }
+    summaries['task_type_best_schemes'] = pd.DataFrame(task_type_best).T
+    
+    # 4. Transfer learning summary
+    if not transfer_df.empty:
+        transfer_summary = transfer_df.groupby('better_approach').agg({
+            'transfer_benefit': ['mean', 'std', 'count'],
+            'domain': 'count'
+        })
+        transfer_summary.columns = ['_'.join(col).strip() for col in transfer_summary.columns]
+        summaries['transfer_learning_summary'] = transfer_summary
+    
+    # 5. Domain adaptation summary
+    if not domain_adaptation_df.empty:
+        domain_adv_summary = pd.Series({
+            'mean_benefit': domain_adaptation_df['domain_adversarial_benefit'].mean(),
+            'std_benefit': domain_adaptation_df['domain_adversarial_benefit'].std(),
+            'positive_cases': domain_adaptation_df['benefits_from_domain_adv'].sum(),
+            'total_cases': len(domain_adaptation_df),
+            'positive_benefit_rate': (domain_adaptation_df['benefits_from_domain_adv'].sum() / len(domain_adaptation_df) * 100)
+        })
+        summaries['domain_adaptation_summary'] = domain_adv_summary
+    
+    return summaries
+
+
+def analyze_rq4(agg_df: pd.DataFrame) -> tuple:
+    """
+    Complete RQ4 analysis: Domain-Task Affinity Analysis.
+    
+    Args:
+        agg_df: Aggregated results DataFrame
+        
+    Returns:
+        Tuple of analysis results
+    """
+    logger.info("Starting RQ4 Analysis: Domain-Task Affinity Analysis")
+    logger.info("=" * 50)
+    
+    try:
+        # 1. Create domain-task affinity matrix
+        affinity_matrix = create_domain_affinity_matrix(agg_df)
+        
+        # 2. Cross-domain transfer analysis
+        transfer_df = analyze_cross_domain_transfer(agg_df)
+        
+        # 3. Task type affinity patterns
+        task_affinity = analyze_task_type_affinity(affinity_matrix)
+        
+        # 4. Specialization vs generalization analysis
+        specialization_df = analyze_specialization_vs_generalization(affinity_matrix)
+        
+        # 5. Domain clustering analysis
+        clustering_results = perform_domain_clustering(affinity_matrix)
+        
+        # 6. Domain adaptation insights
+        domain_adaptation_df = analyze_domain_adaptation(agg_df)
+        
+        # 7. Create summary tables
+        summary_tables = create_rq4_summary_tables(affinity_matrix, transfer_df, task_affinity, 
+                                                  specialization_df, domain_adaptation_df)
+        
+        # 8. Save results
+        logger.info("Saving RQ4 results")
+        affinity_matrix.to_csv(RESULTS_DIR / 'rq4_domain_affinity_matrix.csv', index=True)
+        transfer_df.to_csv(RESULTS_DIR / 'rq4_transfer_analysis.csv', index=False)
+        specialization_df.to_csv(RESULTS_DIR / 'rq4_specialization_analysis.csv', index=False)
+        if not domain_adaptation_df.empty:
+            domain_adaptation_df.to_csv(RESULTS_DIR / 'rq4_domain_adaptation.csv', index=False)
+        
+        # Save task affinity analysis
+        with open(RESULTS_DIR / 'rq4_task_affinity_analysis.txt', 'w') as f:
+            for task_type, analysis in task_affinity.items():
+                f.write(f"\n{task_type.upper()} ANALYSIS:\n")
+                f.write(f"Best scheme: {analysis['best_scheme_overall']}\n")
+                f.write(f"Domains: {analysis['domains']}\n")
+                f.write(f"Mean improvements: {analysis['mean_improvements']}\n")
+                f.write(f"Consistency score: {analysis['consistency_score']:.3f}\n")
+        
+        # Save clustering results if available
+        if 'similarity_matrix' in clustering_results:
+            clustering_results['similarity_matrix'].to_csv(RESULTS_DIR / 'rq4_domain_similarity_matrix.csv')
+        
+        # Save summary tables
+        for name, table in summary_tables.items():
+            table.to_csv(RESULTS_DIR / f'rq4_summary_{name}.csv', index=True)
+        
+        logger.info("RQ4 results saved to analysis/results")
+        
+        # 9. Log key findings
+        log_rq4_findings(affinity_matrix, transfer_df, task_affinity, specialization_df, 
+                        domain_adaptation_df, summary_tables)
+        
+        logger.info("RQ4 Analysis completed successfully!")
+        
+        return (affinity_matrix, transfer_df, task_affinity, specialization_df, 
+                clustering_results, domain_adaptation_df, summary_tables)
+        
+    except Exception as e:
+        logger.error(f"RQ4 Analysis failed: {e}")
+        raise
+
+
+def log_rq4_findings(affinity_matrix: pd.DataFrame, transfer_df: pd.DataFrame, 
+                     task_affinity: dict, specialization_df: pd.DataFrame,
+                     domain_adaptation_df: pd.DataFrame, summary_tables: dict):
+    """Log key findings from RQ4 analysis."""
+    logger.info("\n" + "="*50)
+    logger.info("RQ4 KEY FINDINGS: Domain-Task Affinity Analysis")
+    logger.info("="*50)
+    
+    # Best overall scheme
+    schemes = [col for col in affinity_matrix.columns if col != 'task_type']
+    overall_best = affinity_matrix[schemes].mean().idxmax()
+    overall_improvement = affinity_matrix[schemes].mean().max()
+    
+    logger.info(f"1. BEST OVERALL SCHEME: {overall_best} ({overall_improvement:.2f}% avg improvement)")
+    
+    # Task type insights
+    logger.info("2. TASK TYPE PREFERENCES:")
+    for task_type, analysis in task_affinity.items():
+        best_scheme = analysis['best_scheme_overall']
+        best_improvement = analysis['mean_improvements'][best_scheme]
+        logger.info(f"   {task_type}: {best_scheme} ({best_improvement:.2f}% avg improvement)")
+    
+    # Specialization insights
+    specialists = specialization_df[specialization_df['category'] == 'specialist']
+    generalists = specialization_df[specialization_df['category'] == 'generalist']
+    
+    logger.info(f"3. SPECIALIZATION PATTERNS:")
+    logger.info(f"   Specialist schemes: {len(specialists)} ({', '.join(specialists['scheme'].tolist())})")
+    logger.info(f"   Generalist schemes: {len(generalists)} ({', '.join(generalists['scheme'].tolist())})")
+    
+    # Transfer learning insights
+    if not transfer_df.empty:
+        cross_domain_wins = (transfer_df['better_approach'] == 'cross_domain').sum()
+        total_comparisons = len(transfer_df.dropna(subset=['transfer_benefit']))
+        logger.info(f"4. TRANSFER LEARNING: Cross-domain wins in {cross_domain_wins}/{total_comparisons} cases")
+    
+    # Domain adaptation insights
+    if not domain_adaptation_df.empty:
+        positive_domain_adv = (domain_adaptation_df['benefits_from_domain_adv']).sum()
+        total_domain_adv = len(domain_adaptation_df)
+        logger.info(f"5. DOMAIN ADAPTATION: Benefits in {positive_domain_adv}/{total_domain_adv} cases")
+    
+    # Best domain performers
+    best_domains = summary_tables['best_schemes_per_domain']
+    top_domain = best_domains['best_improvement'].idxmax()
+    top_improvement = best_domains.loc[top_domain, 'best_improvement']
+    top_scheme = best_domains.loc[top_domain, 'best_scheme']
+    
+    logger.info(f"6. BEST DOMAIN PERFORMANCE: {top_domain} with {top_scheme} (+{top_improvement:.2f}%)")
+    
+    logger.info("="*50)
+
+
 def main():
     logger.info("Starting Comprehensive Statistical Analysis")
     logger.info("=" * 50)
@@ -1232,6 +1792,10 @@ def main():
     
     # Perform RQ3 analysis
     strategy_df, effectiveness_df, rq3_statistical_df, efficiency_df, rq3_summary_tables = analyze_rq3(agg_df, raw_df)
+    
+    # Perform RQ4 analysis
+    (affinity_matrix, transfer_df, task_affinity, specialization_df, 
+     clustering_results, domain_adaptation_df, rq4_summary_tables) = analyze_rq4(agg_df)
     
     logger.info("All analyses completed successfully!")
 

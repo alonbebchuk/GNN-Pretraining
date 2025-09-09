@@ -1,48 +1,76 @@
-2025-09-09 14:38:33,096 - INFO - Starting Comprehensive Statistical Analysis
-2025-09-09 14:38:33,096 - INFO - ==================================================
-2025-09-09 14:38:33,096 - INFO - Loading aggregated data from results/aggregated_results.csv
-2025-09-09 14:38:33,103 - INFO - Loaded 108 aggregated combinations
-2025-09-09 14:38:33,103 - INFO - Loading raw data from results/raw_experimental_results.csv
-2025-09-09 14:38:33,106 - INFO - Loaded 324 raw experiments
-2025-09-09 14:38:33,106 - INFO - Starting RQ1 Analysis: Pre-training Effectiveness
-2025-09-09 14:38:33,437 - INFO - Starting RQ2 Analysis: Task Combination Analysis
-2025-09-09 14:38:33,437 - INFO - ==================================================
-2025-09-09 14:38:33,437 - INFO - Analyzing task combinations
-2025-09-09 14:38:33,509 - INFO - Calculating task synergy scores
-2025-09-09 14:38:33,572 - INFO - Performing progressive task combination comparisons
-2025-09-09 14:38:33,745 - INFO - Creating task combination summary tables
-2025-09-09 14:38:33,757 - INFO - Saving RQ2 results
-2025-09-09 14:38:33,765 - INFO - RQ2 results saved to analysis/results
-2025-09-09 14:38:33,765 - INFO - 
+2025-09-09 15:03:19,070 - INFO - Starting Comprehensive Statistical Analysis
+2025-09-09 15:03:19,070 - INFO - ==================================================
+2025-09-09 15:03:19,070 - INFO - Loading aggregated data from results/aggregated_results.csv
+2025-09-09 15:03:19,076 - INFO - Loaded 108 aggregated combinations
+2025-09-09 15:03:19,076 - INFO - Loading raw data from results/raw_experimental_results.csv
+2025-09-09 15:03:19,080 - INFO - Loaded 324 raw experiments
+2025-09-09 15:03:19,080 - INFO - Starting RQ1 Analysis: Pre-training Effectiveness
+2025-09-09 15:03:19,406 - INFO - Starting RQ2 Analysis: Task Combination Analysis
+2025-09-09 15:03:19,406 - INFO - ==================================================
+2025-09-09 15:03:19,406 - INFO - Analyzing task combinations
+2025-09-09 15:03:19,476 - INFO - Calculating task synergy scores
+2025-09-09 15:03:19,537 - INFO - Performing progressive task combination comparisons
+2025-09-09 15:03:19,708 - INFO - Creating task combination summary tables
+2025-09-09 15:03:19,719 - INFO - Saving RQ2 results
+2025-09-09 15:03:19,727 - INFO - RQ2 results saved to analysis/results
+2025-09-09 15:03:19,727 - INFO - 
 ==================================================
-2025-09-09 14:38:33,765 - INFO - RQ2 KEY FINDINGS: Task Combination Analysis
-2025-09-09 14:38:33,765 - INFO - ==================================================
-2025-09-09 14:38:33,765 - INFO - 1. BEST TASK TYPE: single (-2.46% avg improvement)
-2025-09-09 14:38:33,765 - INFO - 2. BEST SYNERGY: generative (25.0% positive synergy rate)
-2025-09-09 14:38:33,766 - INFO - 3. OPTIMAL TASK COUNT: 1 tasks (-2.46% avg improvement)
-2025-09-09 14:38:33,766 - INFO - 4. SIGNIFICANT IMPROVEMENTS: 0 progressive combinations show significant gains
-2025-09-09 14:38:33,766 - INFO - 5. OVERALL SYNERGY: 15.3% of multi-task combinations show positive synergy
-2025-09-09 14:38:33,767 - INFO - ==================================================
-2025-09-09 14:38:33,767 - INFO - RQ2 Analysis completed successfully!
-2025-09-09 14:38:33,767 - INFO - Starting RQ3 Analysis: Fine-tuning Strategy Comparison
-2025-09-09 14:38:33,767 - INFO - ==================================================
-2025-09-09 14:38:33,767 - INFO - Comparing fine-tuning strategies
-2025-09-09 14:38:33,842 - INFO - Analyzing strategy effectiveness by scheme
-2025-09-09 14:38:33,849 - INFO - Performing statistical tests for strategy comparisons
-2025-09-09 14:38:33,960 - INFO - Creating efficiency analysis
-2025-09-09 14:38:33,964 - INFO - Creating RQ3 summary tables
-2025-09-09 14:38:33,975 - INFO - Saving RQ3 results
-2025-09-09 14:38:33,983 - INFO - RQ3 results saved to analysis/results
-2025-09-09 14:38:33,983 - INFO - 
+2025-09-09 15:03:19,727 - INFO - RQ2 KEY FINDINGS: Task Combination Analysis
+2025-09-09 15:03:19,727 - INFO - ==================================================
+2025-09-09 15:03:19,728 - INFO - 1. BEST TASK TYPE: single (-2.46% avg improvement)
+2025-09-09 15:03:19,728 - INFO - 2. BEST SYNERGY: generative (25.0% positive synergy rate)
+2025-09-09 15:03:19,728 - INFO - 3. OPTIMAL TASK COUNT: 1 tasks (-2.46% avg improvement)
+2025-09-09 15:03:19,729 - INFO - 4. SIGNIFICANT IMPROVEMENTS: 0 progressive combinations show significant gains
+2025-09-09 15:03:19,729 - INFO - 5. OVERALL SYNERGY: 15.3% of multi-task combinations show positive synergy
+2025-09-09 15:03:19,729 - INFO - ==================================================
+2025-09-09 15:03:19,729 - INFO - RQ2 Analysis completed successfully!
+2025-09-09 15:03:19,729 - INFO - Starting RQ3 Analysis: Fine-tuning Strategy Comparison
+2025-09-09 15:03:19,729 - INFO - ==================================================
+2025-09-09 15:03:19,729 - INFO - Comparing fine-tuning strategies
+2025-09-09 15:03:19,805 - INFO - Analyzing strategy effectiveness by scheme
+2025-09-09 15:03:19,811 - INFO - Performing statistical tests for strategy comparisons
+2025-09-09 15:03:19,922 - INFO - Creating efficiency analysis
+2025-09-09 15:03:19,926 - INFO - Creating RQ3 summary tables
+2025-09-09 15:03:19,936 - INFO - Saving RQ3 results
+2025-09-09 15:03:19,945 - INFO - RQ3 results saved to analysis/results
+2025-09-09 15:03:19,945 - INFO - 
 ==================================================
-2025-09-09 14:38:33,983 - INFO - RQ3 KEY FINDINGS: Fine-tuning Strategy Comparison
-2025-09-09 14:38:33,983 - INFO - ==================================================
-2025-09-09 14:38:33,984 - INFO - 1. OVERALL STRATEGY PREFERENCE: Full fine-tuning preferred in 66.7% of cases
-2025-09-09 14:38:33,984 - INFO - 2. BEST IMPROVEMENT: 75.38% for ENZYMES-b3
-2025-09-09 14:38:33,985 - INFO - 3. SIGNIFICANT IMPROVEMENTS: 0 combinations show significant gains
-2025-09-09 14:38:33,985 - INFO - 4. EFFICIENCY: 32/54 combinations are highly efficient
-2025-09-09 14:38:33,985 - INFO - 5. AVERAGE TIME COST: 1.1x training time for full fine-tuning
-2025-09-09 14:38:33,985 - INFO - 6. TASK TYPE PREFERENCE: node_classification benefits most from full fine-tuning (100.0%)
-2025-09-09 14:38:33,985 - INFO - ==================================================
-2025-09-09 14:38:33,985 - INFO - RQ3 Analysis completed successfully!
-2025-09-09 14:38:33,986 - INFO - All analyses completed successfully!
+2025-09-09 15:03:19,945 - INFO - RQ3 KEY FINDINGS: Fine-tuning Strategy Comparison
+2025-09-09 15:03:19,945 - INFO - ==================================================
+2025-09-09 15:03:19,946 - INFO - 1. OVERALL STRATEGY PREFERENCE: Full fine-tuning preferred in 66.7% of cases
+2025-09-09 15:03:19,946 - INFO - 2. BEST IMPROVEMENT: 75.38% for ENZYMES-b3
+2025-09-09 15:03:19,946 - INFO - 3. SIGNIFICANT IMPROVEMENTS: 0 combinations show significant gains
+2025-09-09 15:03:19,947 - INFO - 4. EFFICIENCY: 32/54 combinations are highly efficient
+2025-09-09 15:03:19,947 - INFO - 5. AVERAGE TIME COST: 1.1x training time for full fine-tuning
+2025-09-09 15:03:19,947 - INFO - 6. TASK TYPE PREFERENCE: node_classification benefits most from full fine-tuning (100.0%)
+2025-09-09 15:03:19,947 - INFO - ==================================================
+2025-09-09 15:03:19,947 - INFO - RQ3 Analysis completed successfully!
+2025-09-09 15:03:19,947 - INFO - Starting RQ4 Analysis: Domain-Task Affinity Analysis
+2025-09-09 15:03:19,947 - INFO - ==================================================
+2025-09-09 15:03:19,947 - INFO - Creating domain-task affinity matrix
+2025-09-09 15:03:19,977 - INFO - Analyzing cross-domain transfer effectiveness
+2025-09-09 15:03:20,000 - INFO - Analyzing task type affinity patterns
+2025-09-09 15:03:20,006 - INFO - Analyzing specialization vs generalization trade-offs
+2025-09-09 15:03:20,009 - INFO - Performing domain clustering analysis
+2025-09-09 15:03:20,215 - INFO - Analyzing domain adaptation insights
+2025-09-09 15:03:20,231 - INFO - Creating RQ4 summary tables
+2025-09-09 15:03:20,246 - INFO - Saving RQ4 results
+2025-09-09 15:03:20,253 - INFO - RQ4 results saved to analysis/results
+2025-09-09 15:03:20,253 - INFO - 
+==================================================
+2025-09-09 15:03:20,253 - INFO - RQ4 KEY FINDINGS: Domain-Task Affinity Analysis
+2025-09-09 15:03:20,253 - INFO - ==================================================
+2025-09-09 15:03:20,254 - INFO - 1. BEST OVERALL SCHEME: b2 (-0.41% avg improvement)
+2025-09-09 15:03:20,254 - INFO - 2. TASK TYPE PREFERENCES:
+2025-09-09 15:03:20,255 - INFO -    graph_classification: s1 (3.97% avg improvement)
+2025-09-09 15:03:20,255 - INFO -    node_classification: b2 (-4.12% avg improvement)
+2025-09-09 15:03:20,255 - INFO -    link_prediction: s2 (3.84% avg improvement)
+2025-09-09 15:03:20,256 - INFO - 3. SPECIALIZATION PATTERNS:
+2025-09-09 15:03:20,256 - INFO -    Specialist schemes: 4 (b2, b3, s1, s2)
+2025-09-09 15:03:20,256 - INFO -    Generalist schemes: 0 ()
+2025-09-09 15:03:20,257 - INFO - 4. TRANSFER LEARNING: Cross-domain wins in 4/12 cases
+2025-09-09 15:03:20,257 - INFO - 5. DOMAIN ADAPTATION: Benefits in 5/12 cases
+2025-09-09 15:03:20,258 - INFO - 6. BEST DOMAIN PERFORMANCE: PTC_MR with s1 (+26.13%)
+2025-09-09 15:03:20,258 - INFO - ==================================================
+2025-09-09 15:03:20,258 - INFO - RQ4 Analysis completed successfully!
+2025-09-09 15:03:20,258 - INFO - All analyses completed successfully!

@@ -1,0 +1,13 @@
+domain,strategy,task_type,s4_performance,s5_performance,domain_adversarial_benefit,benefits_from_domain_adv
+ENZYMES,linear_probe,graph_classification,0.4444444444444445,0.4666666666666666,4.999999999999982,True
+ENZYMES,full_finetune,graph_classification,0.6222222222222222,0.6499999999999999,4.464285714285698,True
+PTC_MR,linear_probe,graph_classification,0.4952380952380952,0.4095238095238095,-17.307692307692303,False
+PTC_MR,full_finetune,graph_classification,0.4857142857142857,0.5428571428571428,11.764705882352935,True
+Cora_NC,linear_probe,node_classification,0.4539999999999999,0.4496666666666666,-0.9544787077826654,False
+Cora_NC,full_finetune,node_classification,0.5073333333333333,0.5026666666666667,-0.9198423127463726,False
+CiteSeer_NC,linear_probe,node_classification,0.381,0.3976666666666666,4.374453193350815,True
+CiteSeer_NC,full_finetune,node_classification,0.3816666666666666,0.3993333333333333,4.628820960698705,True
+Cora_LP,linear_probe,link_prediction,0.0809997294372294,0.0797568317099567,-1.534446764091817,False
+Cora_LP,full_finetune,link_prediction,0.0839082792207792,0.080241590007215,-4.369877737471445,False
+CiteSeer_LP,linear_probe,link_prediction,0.0986402445260858,0.0977582996856532,-0.894102447403579,False
+CiteSeer_LP,full_finetune,link_prediction,0.0921740972148681,0.0890054678045782,-3.43765711412771,False

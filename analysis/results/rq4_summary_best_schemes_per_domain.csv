@@ -1,0 +1,7 @@
+domain,best_scheme,best_improvement,task_type
+ENZYMES,s5,-3.827751196172255,graph_classification
+PTC_MR,s1,26.126126126126163,graph_classification
+Cora_NC,s1,0.6544502617800979,node_classification
+CiteSeer_NC,b2,-0.6127920337035454,node_classification
+Cora_LP,b2,-0.011662196158106907,link_prediction
+CiteSeer_LP,s2,9.174493778970442,link_prediction

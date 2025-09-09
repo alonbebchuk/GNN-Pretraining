@@ -1,0 +1,13 @@
+domain,strategy,task_type,baseline_performance,single_domain_improvement,cross_domain_improvement,transfer_benefit,better_approach
+ENZYMES,linear_probe,graph_classification,0.4944444444444444,-13.483146067415715,-10.112359550561784,3.370786516853931,cross_domain
+ENZYMES,full_finetune,graph_classification,0.6666666666666666,-0.8333333333333304,-6.66666666666666,-5.8333333333333295,single_domain
+PTC_MR,linear_probe,graph_classification,0.5523809523809523,0.0,-10.344827586206891,-10.344827586206891,single_domain
+PTC_MR,full_finetune,graph_classification,0.5047619047619047,0.0,-3.773584905660375,-3.773584905660375,single_domain
+Cora_NC,linear_probe,node_classification,0.4823333333333333,-12.024879060124395,-5.8742225293711225,6.150656530753272,cross_domain
+Cora_NC,full_finetune,node_classification,0.5363333333333334,-4.0397762585456904,-5.407085146053474,-1.3673088875077832,single_domain
+CiteSeer_NC,linear_probe,node_classification,0.417,-6.9544364508393475,-8.63309352517985,-1.678657074340503,single_domain
+CiteSeer_NC,full_finetune,node_classification,0.4533333333333333,-5.88235294117646,-15.808823529411775,-9.926470588235315,single_domain
+Cora_LP,linear_probe,link_prediction,0.0819466991341991,-0.8460586050350686,-1.1555922410235242,-0.3095336359884556,single_domain
+Cora_LP,full_finetune,link_prediction,0.0872198547979797,-0.17449187320250228,-3.7968139076484686,-3.622322034445966,single_domain
+CiteSeer_LP,linear_probe,link_prediction,0.09664464519913,-2.5683674233910434,2.0648834944181274,4.633250917809171,cross_domain
+CiteSeer_LP,full_finetune,link_prediction,0.0933109226660005,-1.7040957273447712,-1.2183198050688788,0.4857759222758924,cross_domain
