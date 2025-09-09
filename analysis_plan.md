@@ -49,31 +49,42 @@ For all tasks: `accuracy`, `f1`, `precision`, `recall`, `auc`, `loss`
 
 ---
 
-## Notebook Structure and Organization
+## Analysis Structure and Best Practices
 
-The analysis will be conducted using a consolidated set of Jupyter notebooks in the `analysis/` directory. This streamlined approach enables:
+The analysis will be conducted using a combination of Python scripts and Jupyter notebooks in the `analysis/` directory, following coding best practices:
 
-- **Interactive exploration** of data and results
-- **Iterative analysis** with immediate visualization feedback
-- **Reproducible research** with clear documentation of each step
-- **Easier tracking** of analysis flow and dependencies
-- **Better organization** with related analyses grouped together
+**Python Scripts** (for data processing, statistical analysis, and reproducible computations):
+- Reliable, version-controlled, and easily testable
+- Automated data processing with proper error handling
+- Consistent results across different environments
+- Easy to integrate into CI/CD pipelines
 
-### Notebook Structure:
-1. `analysis/01_data_collection_and_aggregation.ipynb` - Data extraction, cleaning, and aggregation across seeds
-2. `analysis/02_research_questions_analysis.ipynb` - Comprehensive analysis of all 4 research questions (RQ1-RQ4)
-3. `analysis/03_task_specific_analysis.ipynb` - Deep dive analysis for graph classification, node classification, and link prediction
-4. `analysis/04_efficiency_and_summary.ipynb` - Computational efficiency analysis and master summary with recommendations
-5. `analysis/05_publication_materials.ipynb` - Generation of publication-ready tables, figures, and supplementary materials
+**Jupyter Notebooks** (for exploratory analysis, visualization, and reporting):
+- Interactive exploration of results and patterns
+- Rich documentation with markdown and inline plots
+- Ideal for presenting findings and creating reports
 
-Each notebook will include:
-- Clear markdown documentation of objectives and methodology
-- Code cells with detailed comments explaining each analysis step
+### Analysis Structure:
+1. **`analysis/data_collection.py`** - Data extraction, cleaning, and aggregation (Python script)
+2. **`analysis/statistical_analysis.py`** - Core statistical computations and hypothesis testing (Python script)
+3. **`analysis/02_research_questions_exploration.ipynb`** - Interactive exploration and visualization of RQ1-RQ4 results
+4. **`analysis/03_task_specific_exploration.ipynb`** - Interactive deep dive analysis for different task types
+5. **`analysis/04_summary_and_publication.ipynb`** - Efficiency analysis, master summary, and publication materials
+
+**Python Scripts** will include:
+- Robust error handling and logging
+- Comprehensive docstrings and type hints
+- Modular functions for reusability
+- Configuration management
+- Data validation and quality checks
+- Automated report generation
+
+**Jupyter Notebooks** will include:
+- Clear markdown documentation of objectives
 - Interactive visualizations for data exploration
-- Statistical analysis with proper significance testing
-- Summary tables and key findings
-- Export functionality for results and figures
-- Clear section breaks and navigation for easy tracking
+- Narrative explanations of findings
+- Summary tables and key insights
+- Export functionality for figures and reports
 
 ---
 
@@ -83,7 +94,7 @@ Each notebook will include:
 
 #### 1.1 Extract All Experimental Results from WandB
 
-**Notebook:** `analysis/01_data_collection_and_aggregation.ipynb`
+**Python Script:** `analysis/data_collection.py`
 
 ```
 Task: Extract all fine-tuning experimental results from WandB
@@ -118,7 +129,7 @@ Expected output: CSV file with 324 rows (one per experiment) and all metrics
 
 #### 1.2 Aggregate Results Across Seeds
 
-**Notebook:** `analysis/01_data_collection_and_aggregation.ipynb` (continued)
+**Python Script:** `analysis/data_collection.py` (continued function)
 
 ```
 Task: Aggregate experimental results across the 3 random seeds
@@ -162,7 +173,8 @@ Expected output: CSV file with 108 rows (6 domains × 9 schemes × 2 strategies)
 
 #### 2.1 RQ1: Pre-training Effectiveness Analysis
 
-**Notebook:** `analysis/02_research_questions_analysis.ipynb`
+**Python Script:** `analysis/statistical_analysis.py` (core computations)  
+**Notebook:** `analysis/02_research_questions_exploration.ipynb` (visualization and exploration)
 
 ```
 Task: Analyze the effectiveness of pre-training compared to from-scratch training (RQ1)
@@ -206,7 +218,8 @@ Expected deliverable: Comprehensive analysis answering whether pre-training impr
 
 #### 2.2 RQ2: Task Combination Analysis
 
-**Notebook:** `analysis/02_research_questions_analysis.ipynb` (continued)
+**Python Script:** `analysis/statistical_analysis.py` (continued functions)  
+**Notebook:** `analysis/02_research_questions_exploration.ipynb` (continued)
 
 ```
 Task: Analyze which task combinations are most effective for pre-training (RQ2)
@@ -260,7 +273,8 @@ Expected deliverable: Evidence-based recommendations for optimal task combinatio
 
 #### 2.3 RQ3: Fine-tuning Strategy Comparison
 
-**Notebook:** `analysis/02_research_questions_analysis.ipynb` (continued)
+**Python Script:** `analysis/statistical_analysis.py` (continued functions)  
+**Notebook:** `analysis/02_research_questions_exploration.ipynb` (continued)
 
 ```
 Task: Compare linear probing vs full fine-tuning strategies (RQ3)
@@ -312,7 +326,8 @@ Expected deliverable: Clear guidelines for choosing fine-tuning strategies based
 
 #### 2.4 RQ4: Domain-Task Affinity Analysis
 
-**Notebook:** `analysis/02_research_questions_analysis.ipynb` (continued)
+**Python Script:** `analysis/statistical_analysis.py` (continued functions)  
+**Notebook:** `analysis/02_research_questions_exploration.ipynb` (continued)
 
 ```
 Task: Analyze which pre-training tasks show strongest affinity for specific downstream domains (RQ4)
@@ -370,7 +385,7 @@ Expected deliverable: Comprehensive understanding of which pre-training approach
 
 #### 3.1 Graph Classification Analysis
 
-**Notebook:** `analysis/03_task_specific_analysis.ipynb`
+**Notebook:** `analysis/03_task_specific_exploration.ipynb`
 
 ```
 Task: Deep analysis of graph classification performance (ENZYMES, PTC_MR)
@@ -397,7 +412,7 @@ Files: `analysis/results/graph_classification_analysis.csv`, `analysis/figures/g
 
 #### 3.2 Node Classification Analysis
 
-**Notebook:** `analysis/03_task_specific_analysis.ipynb` (continued)
+**Notebook:** `analysis/03_task_specific_exploration.ipynb` (continued)
 
 ```
 Task: Deep analysis of node classification performance (Cora_NC, CiteSeer_NC)
@@ -424,7 +439,7 @@ Files: `analysis/results/node_classification_analysis.csv`, `analysis/figures/no
 
 #### 3.3 Link Prediction Analysis
 
-**Notebook:** `analysis/03_task_specific_analysis.ipynb` (continued)
+**Notebook:** `analysis/03_task_specific_exploration.ipynb` (continued)
 
 ```
 Task: Deep analysis of link prediction performance (Cora_LP, CiteSeer_LP)
@@ -455,7 +470,7 @@ Files: `analysis/results/link_prediction_analysis.csv`, `analysis/figures/link_p
 
 #### 4.1 Training Efficiency Analysis
 
-**Notebook:** `analysis/04_efficiency_and_summary.ipynb`
+**Notebook:** `analysis/04_summary_and_publication.ipynb`
 
 ```
 Task: Analyze computational efficiency across all experimental configurations
@@ -496,7 +511,7 @@ Files: `analysis/results/efficiency_analysis.csv`, `analysis/figures/efficiency_
 
 #### 5.1 Create Master Summary Report
 
-**Notebook:** `analysis/04_efficiency_and_summary.ipynb` (continued)
+**Notebook:** `analysis/04_summary_and_publication.ipynb` (continued)
 
 ```
 Task: Generate comprehensive summary report with actionable recommendations
@@ -533,7 +548,7 @@ Files: `analysis/results/master_summary_report.md`, `analysis/results/recommenda
 
 #### 5.2 Generate Academic Paper Tables and Figures
 
-**Notebook:** `analysis/05_publication_materials.ipynb`
+**Notebook:** `analysis/04_summary_and_publication.ipynb` (continued)
 
 ```
 Task: Create publication-ready tables and figures for academic paper
@@ -615,11 +630,11 @@ Files: `analysis/paper_materials/tables/`, `analysis/paper_materials/figures/`, 
 
 ```
 analysis/
-├── 01_data_collection_and_aggregation.ipynb
-├── 02_research_questions_analysis.ipynb
-├── 03_task_specific_analysis.ipynb
-├── 04_efficiency_and_summary.ipynb
-├── 05_publication_materials.ipynb
+├── data_collection.py
+├── statistical_analysis.py
+├── 02_research_questions_exploration.ipynb
+├── 03_task_specific_exploration.ipynb
+├── 04_summary_and_publication.ipynb
 ├── results/
 │   ├── raw_experimental_results.csv
 │   ├── aggregated_results.csv
