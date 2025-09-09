@@ -1,0 +1,4 @@
+efficiency_category,relative_difference_pct_mean,relative_difference_pct_count,time_ratio_mean,time_ratio_std,perf_per_time_cost_mean,perf_per_time_cost_std
+highly_efficient,21.207,32,1.19,0.162,70.998,359.584
+inefficient,-7.18,18,1.052,0.224,28.327,85.158
+moderately_efficient,0.303,4,0.994,0.092,-13.578,39.478
