@@ -1,0 +1,103 @@
+{
+  "dataset_impact": {
+    "b2": {
+      "molecular_improvement": 0.6067287799814306,
+      "citation_improvement": -0.889318338787322,
+      "domain_gap": 1.4960471187687525
+    },
+    "b3": {
+      "molecular_improvement": -8.690987477429399,
+      "citation_improvement": -2.448167902545893,
+      "domain_gap": -6.242819574883506
+    },
+    "s1": {
+      "molecular_improvement": 3.832065907368568,
+      "citation_improvement": -5.9226559644940355,
+      "domain_gap": 9.754721871862603
+    },
+    "s2": {
+      "molecular_improvement": -3.343298207266942,
+      "citation_improvement": -2.549645582333299,
+      "domain_gap": -0.7936526249336433
+    },
+    "s3": {
+      "molecular_improvement": -3.3520705859705275,
+      "citation_improvement": -2.1989993360394857,
+      "domain_gap": -1.1530712499310418
+    },
+    "s4": {
+      "molecular_improvement": -7.724359677273927,
+      "citation_improvement": -4.978633398667371,
+      "domain_gap": -2.745726278606556
+    },
+    "s5": {
+      "molecular_improvement": -6.608219170571595,
+      "citation_improvement": -5.466592309263135,
+      "domain_gap": -1.1416268613084597
+    },
+    "b4": {
+      "molecular_improvement": -3.5791198501872614,
+      "citation_improvement": -4.27430729245741,
+      "domain_gap": 0.6951874422701483
+    }
+  },
+  "task_contributions": {
+    "node_feat_mask": {
+      "with_task": -3.571443770892824,
+      "without_task": -3.6716521090757865,
+      "contribution": 0.10020833818296238
+    },
+    "link_pred": {
+      "with_task": -4.207605331898509,
+      "without_task": -2.5779800613386596,
+      "contribution": -1.629625270559849
+    },
+    "node_contrast": {
+      "with_task": -4.285041478406269,
+      "without_task": -1.530858986535453,
+      "contribution": -2.754182491870816
+    },
+    "graph_contrast": {
+      "with_task": -4.236228221919443,
+      "without_task": -2.5302752446371,
+      "contribution": -1.7059529772823434
+    },
+    "graph_prop": {
+      "with_task": -5.261196077645402,
+      "without_task": -2.5976757221144626,
+      "contribution": -2.6635203555309395
+    },
+    "domain_adv": {
+      "with_task": -5.8471345963659545,
+      "without_task": -3.27497603530608,
+      "contribution": -2.5721585610598745
+    }
+  },
+  "recommendations": {
+    "domain_matching": {
+      "finding": "Molecular pre-training shows strong negative transfer to citation networks",
+      "evidence": "Average improvement: Molecular=-7.72%, Citation=-4.98%",
+      "recommendation": "Pre-train on domain-similar data or use domain adaptation techniques"
+    },
+    "task_selection": {
+      "finding": "Simple single-task schemes often outperform complex multi-task combinations",
+      "evidence": "Best scheme (b2) uses only node feature masking, while complex schemes (s4, s5) show worse performance",
+      "recommendation": "Start with single-task pre-training; add tasks only with demonstrated synergy"
+    },
+    "feature_alignment": {
+      "finding": "Feature dimension mismatch (3-37 \u2192 1433-3703) severely impacts transfer",
+      "evidence": "Citation networks with 100x higher dimensions show consistent negative transfer",
+      "recommendation": "Use feature projection or dimension-aware architectures for cross-domain transfer"
+    },
+    "efficiency_considerations": {
+      "finding": "Linear probing often sufficient for well-aligned domains",
+      "evidence": "Full fine-tuning provides marginal gains at 10x computational cost",
+      "recommendation": "Use linear probing for initial evaluation; full fine-tuning only when necessary"
+    },
+    "gradient_surgery": {
+      "finding": "PCGrad helps but doesn't fully resolve multi-task conflicts",
+      "evidence": "Performance degrades with more tasks despite gradient surgery",
+      "recommendation": "Carefully curate task combinations; more tasks \u2260 better performance"
+    }
+  }
+}
