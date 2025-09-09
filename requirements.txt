@@ -14,5 +14,9 @@ statsmodels>=0.14.0
 # Experiment tracking and logging
 wandb>=0.21.0
 
+# Visualization and analysis
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
 # Standard library additions
 typing-extensions>=4.0.0
