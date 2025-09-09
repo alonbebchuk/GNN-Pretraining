@@ -5,6 +5,9 @@ __pycache__/
 data/raw/
 data/processed/
 
+# Analysis logs
+analysis/logs/
+
 .conda/
 
 # VSCode

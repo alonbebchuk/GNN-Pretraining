@@ -28,7 +28,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('analysis/data_collection.log', mode='w'),  # 'w' mode overwrites
+        logging.FileHandler('analysis/logs/data_collection.log', mode='w'),  # 'w' mode overwrites
         logging.StreamHandler()
     ]
 )
@@ -70,11 +70,13 @@ TEST_METRICS = [
 
 # Output paths
 RESULTS_DIR = Path("analysis/results")
+LOGS_DIR = Path("analysis/logs")
 RAW_RESULTS_FILE = RESULTS_DIR / "raw_experimental_results.csv"
 AGGREGATED_RESULTS_FILE = RESULTS_DIR / "aggregated_results.csv"
 
-# Ensure results directory exists
+# Ensure directories exist
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def validate_run_name(run_name: str) -> Optional[Tuple[str, str, str, int]]:

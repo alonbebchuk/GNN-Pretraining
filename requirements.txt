@@ -4,9 +4,12 @@ torch-geometric>=2.6.0
 
 # Data processing and utilities  
 numpy>=1.26.0
+pandas>=2.0.0
 scikit-learn>=1.5.0
 networkx>=3.3
 tqdm>=4.66.0
+scipy>=1.8.0
+statsmodels>=0.14.0
 
 # Experiment tracking and logging
 wandb>=0.21.0
