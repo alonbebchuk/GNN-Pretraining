@@ -111,7 +111,7 @@ Requirements:
    - task_type ('graph_classification', 'node_classification', 'link_prediction')
    - All test metrics listed above
 
-5. Save the raw results as: `results/raw_experimental_results.csv`
+5. Save the raw results as: `analysis/results/raw_experimental_results.csv`
 
 Expected output: CSV file with 324 rows (one per experiment) and all metrics
 ```
@@ -151,7 +151,7 @@ Requirements:
    - task_type
    - All aggregated metrics (mean, std, min, max, median, sem for each original metric)
 
-6. Save as: `results/aggregated_results.csv`
+6. Save as: `analysis/results/aggregated_results.csv`
 
 Expected output: CSV file with 108 rows (6 domains × 9 schemes × 2 strategies) and aggregated statistics
 ```
@@ -196,10 +196,10 @@ Requirements:
    - Bar plots with error bars and significance markers
 
 7. Save outputs:
-   - `results/rq1_improvement_analysis.csv`
-   - `results/rq1_statistical_tests.csv`
-   - `figures/rq1_effectiveness_boxplots.png`
-   - `figures/rq1_improvement_heatmap.png`
+   - `analysis/results/rq1_improvement_analysis.csv`
+   - `analysis/results/rq1_statistical_tests.csv`
+   - `analysis/figures/rq1_effectiveness_boxplots.png`
+   - `analysis/figures/rq1_improvement_heatmap.png`
 
 Expected deliverable: Comprehensive analysis answering whether pre-training improves performance significantly
 ```
@@ -250,10 +250,10 @@ Requirements:
    - Domain-specific task effectiveness charts
 
 8. Save outputs:
-   - `results/rq2_task_combination_analysis.csv`
-   - `results/rq2_synergy_scores.csv`
-   - `figures/rq2_task_combinations.png`
-   - `figures/rq2_synergy_heatmap.png`
+   - `analysis/results/rq2_task_combination_analysis.csv`
+   - `analysis/results/rq2_synergy_scores.csv`
+   - `analysis/figures/rq2_task_combinations.png`
+   - `analysis/figures/rq2_synergy_heatmap.png`
 
 Expected deliverable: Evidence-based recommendations for optimal task combinations
 ```
@@ -302,10 +302,10 @@ Requirements:
    - Time-to-convergence comparisons
 
 9. Save outputs:
-   - `results/rq3_strategy_comparison.csv`
-   - `results/rq3_efficiency_analysis.csv`
-   - `figures/rq3_performance_vs_cost.png`
-   - `figures/rq3_strategy_effectiveness.png`
+   - `analysis/results/rq3_strategy_comparison.csv`
+   - `analysis/results/rq3_efficiency_analysis.csv`
+   - `analysis/figures/rq3_performance_vs_cost.png`
+   - `analysis/figures/rq3_strategy_effectiveness.png`
 
 Expected deliverable: Clear guidelines for choosing fine-tuning strategies based on constraints and requirements
 ```
@@ -356,10 +356,10 @@ Requirements:
    - Specialization vs generalization scatter plots
 
 9. Save outputs:
-   - `results/rq4_domain_affinity_matrix.csv`
-   - `results/rq4_transfer_analysis.csv`
-   - `figures/rq4_affinity_heatmap.png`
-   - `figures/rq4_transfer_patterns.png`
+   - `analysis/results/rq4_domain_affinity_matrix.csv`
+   - `analysis/results/rq4_transfer_analysis.csv`
+   - `analysis/figures/rq4_affinity_heatmap.png`
+   - `analysis/figures/rq4_transfer_patterns.png`
 
 Expected deliverable: Comprehensive understanding of which pre-training approaches work best for different types of downstream tasks
 ```
@@ -392,7 +392,7 @@ Outputs:
 - Cross-dataset consistency analysis
 - Recommendations for graph classification pre-training
 
-Files: `results/graph_classification_analysis.csv`, `figures/graph_classification_comparison.png`
+Files: `analysis/results/graph_classification_analysis.csv`, `analysis/figures/graph_classification_comparison.png`
 ```
 
 #### 3.2 Node Classification Analysis
@@ -419,7 +419,7 @@ Outputs:
 - Cross-domain transfer quantification
 - Feature adaptation insights
 
-Files: `results/node_classification_analysis.csv`, `figures/node_classification_transfer.png`
+Files: `analysis/results/node_classification_analysis.csv`, `analysis/figures/node_classification_transfer.png`
 ```
 
 #### 3.3 Link Prediction Analysis
@@ -446,7 +446,7 @@ Outputs:
 - Structural transfer insights
 - Link prediction pre-training effectiveness
 
-Files: `results/link_prediction_analysis.csv`, `figures/link_prediction_effectiveness.png`
+Files: `analysis/results/link_prediction_analysis.csv`, `analysis/figures/link_prediction_effectiveness.png`
 ```
 
 ---
@@ -487,7 +487,7 @@ Outputs:
 - Trade-off visualizations
 - Scenario-specific recommendations
 
-Files: `results/efficiency_analysis.csv`, `figures/efficiency_tradeoffs.png`
+Files: `analysis/results/efficiency_analysis.csv`, `analysis/figures/efficiency_tradeoffs.png`
 ```
 
 ---
@@ -528,7 +528,7 @@ Outputs:
 - Comprehensive recommendation guide  
 - Master visualization dashboard
 
-Files: `results/master_summary_report.md`, `results/recommendations_guide.md`, `figures/master_dashboard.png`
+Files: `analysis/results/master_summary_report.md`, `analysis/results/recommendations_guide.md`, `analysis/figures/master_dashboard.png`
 ```
 
 #### 5.2 Generate Academic Paper Tables and Figures
@@ -567,7 +567,7 @@ Outputs:
 - LaTeX source files
 - High-resolution image files
 
-Files: `paper_materials/tables/`, `paper_materials/figures/`, `paper_materials/supplementary/`
+Files: `analysis/paper_materials/tables/`, `analysis/paper_materials/figures/`, `analysis/paper_materials/supplementary/`
 ```
 
 ---
@@ -619,45 +619,42 @@ analysis/
 ├── 02_research_questions_analysis.ipynb
 ├── 03_task_specific_analysis.ipynb
 ├── 04_efficiency_and_summary.ipynb
-└── 05_publication_materials.ipynb
-
-results/
-├── raw_experimental_results.csv
-├── aggregated_results.csv
-├── rq1_improvement_analysis.csv
-├── rq1_statistical_tests.csv
-├── rq2_task_combination_analysis.csv
-├── rq2_synergy_scores.csv
-├── rq3_strategy_comparison.csv
-├── rq3_efficiency_analysis.csv
-├── rq4_domain_affinity_matrix.csv
-├── rq4_transfer_analysis.csv
-├── graph_classification_analysis.csv
-├── node_classification_analysis.csv
-├── link_prediction_analysis.csv
-├── efficiency_analysis.csv
-├── master_summary_report.md
-└── recommendations_guide.md
-
-figures/
-├── rq1_effectiveness_boxplots.png
-├── rq1_improvement_heatmap.png
-├── rq2_task_combinations.png
-├── rq2_synergy_heatmap.png
-├── rq3_performance_vs_cost.png
-├── rq3_strategy_effectiveness.png
-├── rq4_affinity_heatmap.png
-├── rq4_transfer_patterns.png
-├── graph_classification_comparison.png
-├── node_classification_transfer.png
-├── link_prediction_effectiveness.png
-├── efficiency_tradeoffs.png
-└── master_dashboard.png
-
-paper_materials/
-├── tables/
+├── 05_publication_materials.ipynb
+├── results/
+│   ├── raw_experimental_results.csv
+│   ├── aggregated_results.csv
+│   ├── rq1_improvement_analysis.csv
+│   ├── rq1_statistical_tests.csv
+│   ├── rq2_task_combination_analysis.csv
+│   ├── rq2_synergy_scores.csv
+│   ├── rq3_strategy_comparison.csv
+│   ├── rq3_efficiency_analysis.csv
+│   ├── rq4_domain_affinity_matrix.csv
+│   ├── rq4_transfer_analysis.csv
+│   ├── graph_classification_analysis.csv
+│   ├── node_classification_analysis.csv
+│   ├── link_prediction_analysis.csv
+│   ├── efficiency_analysis.csv
+│   ├── master_summary_report.md
+│   └── recommendations_guide.md
 ├── figures/
-└── supplementary/
+│   ├── rq1_effectiveness_boxplots.png
+│   ├── rq1_improvement_heatmap.png
+│   ├── rq2_task_combinations.png
+│   ├── rq2_synergy_heatmap.png
+│   ├── rq3_performance_vs_cost.png
+│   ├── rq3_strategy_effectiveness.png
+│   ├── rq4_affinity_heatmap.png
+│   ├── rq4_transfer_patterns.png
+│   ├── graph_classification_comparison.png
+│   ├── node_classification_transfer.png
+│   ├── link_prediction_effectiveness.png
+│   ├── efficiency_tradeoffs.png
+│   └── master_dashboard.png
+└── paper_materials/
+    ├── tables/
+    ├── figures/
+    └── supplementary/
 ```
 
 This comprehensive analysis plan ensures systematic, rigorous evaluation of all experimental results with proper statistical validation and actionable insights for the research community.
