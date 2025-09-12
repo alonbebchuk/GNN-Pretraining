@@ -32,7 +32,9 @@ The best-performing scheme (b2: node feature masking only) still shows a negativ
 | s5 | -5.85 | 7.95 | -25.86 | 7.55 | All 5 tasks + Domain adv |
 | s4 | -5.89 | 4.87 | -15.81 | 2.06 | All 5 tasks (cross-domain) |
 
-The trend is clear: **simpler pre-training schemes perform less poorly**, while complex multi-task schemes consistently degrade performance.
+The trend reveals a more nuanced pattern: **task compatibility and stability matter more than simplicity alone**. While the simplest stable scheme (b2: node feature masking) performs best, some multi-task combinations (s3, s1, s2) outperform the simple but toxic contrastive scheme (b3). The key insight is that **contrastive learning appears inherently harmful**, creating unstable representations with high variance (11.21 std dev for b3 vs. 6.15 for b2).
+
+**This complexity actually strengthens our failure narrative**: If pre-training success were systematic and predictable, we would see clear patterns. Instead, we see that even supposedly "simple" approaches can be highly toxic and unpredictable, making GNN pre-training unreliable for practical use.
 
 ## 2. The Link Prediction Paradox: When Linear Probing Beats Full Fine-tuning
 
@@ -171,7 +173,7 @@ The extreme domain gap between molecular graphs (small, feature-poor) and citati
 
 3. **Task Interference Dominates**: The failure of ENZYMES (included in pre-training) versus the relative success of PTC_MR (excluded from pre-training) demonstrates that pre-training leads to representation corruption through task interference rather than useful generalization.
 
-4. **Complexity Hurts**: Simpler pre-training schemes (b2) perform less poorly than complex multi-task schemes (s4, s5), suggesting that task interference outweighs any potential synergies.
+4. **Task Toxicity Over Complexity**: The issue isn't complexity per se, but **task compatibility and stability**. Node contrastive learning (b3) is more harmful than some multi-task schemes, while node feature masking (b2) is more benign. This suggests certain pre-training objectives are inherently problematic regardless of complexity.
 
 ### 7.2 Implications
 
