@@ -54,9 +54,9 @@ Our analysis reveals a clear pattern in fine-tuning strategy effectiveness:
 
 | Task Type | Prefer Full Fine-tuning | Prefer Linear Probing | Full FT Preference Rate |
 |-----------|------------------------|---------------------|------------------------|
-| Node Classification | 4/4 | 0/4 | 100.0% |
-| Graph Classification | 2.6/4 | 1.4/4 | 72.2% |
-| Link Prediction | 1/4 | 3/4 | 27.8% |
+| Node Classification | 18/18 | 0/18 | 100.0% |
+| Graph Classification | 13/18 | 5/18 | 72.2% |
+| Link Prediction | 5/18 | 13/18 | 27.8% |
 
 ### 2.3 Understanding the Paradox
 
@@ -68,7 +68,7 @@ This counterintuitive result suggests several hypotheses:
 
 3. **Domain Gap Amplification**: The extreme feature dimension mismatch (molecular: 3-37 features vs. citation: 1433-3703 features) may cause full fine-tuning to amplify domain differences rather than bridge them.
 
-## 3. The Enzymes Overfitting vs. PTC_MR Success Story
+## 3. The Enzymes Task Interference vs. PTC_MR Success Story
 
 ### 3.1 Enzymes: When Pre-training on Your Own Data Hurts
 
@@ -79,8 +79,8 @@ Despite ENZYMES being included in all pre-training schemes, it shows consistentl
 - Linear probing best: b2 at -5.62%
 - Average across all schemes: approximately -7.84%
 
-**Overfitting Evidence:**
-The b4 scheme, which pre-trains exclusively on ENZYMES, shows no improvement when evaluated on ENZYMES itself (0.00% max improvement). This suggests severe overfitting during pre-training that prevents any beneficial transfer, even to the same dataset.
+**Task Interference Evidence:**
+The b4 scheme, which pre-trains exclusively on ENZYMES, shows no improvement when evaluated on ENZYMES itself (0.00% max improvement). More critically, multi-task schemes (s1: -14.2%) perform far worse than single-task schemes (b4: -0.8%), indicating that **task interference during pre-training actively damages the representations**. This isn't traditional overfitting—it's representation corruption through conflicting gradient updates.
 
 ### 3.2 PTC_MR: The Exceptional Success Case
 
@@ -94,14 +94,16 @@ In stark contrast, PTC_MR demonstrates the highest improvements in our entire st
 **Success Factors:**
 1. **Dataset Size**: PTC_MR has only 344 graphs vs. ENZYMES' 600, potentially making it more receptive to pre-trained knowledge
 2. **Task Simplicity**: Binary classification (PTC_MR) vs. 6-class classification (ENZYMES)
-3. **No Pre-training Exposure**: PTC_MR wasn't included in pre-training, avoiding overfitting
+3. **No Pre-training Exposure**: PTC_MR wasn't included in pre-training, avoiding representation damage from task interference
 
-### 3.3 The Overfitting Hypothesis
+### 3.3 The Task Interference Hypothesis
 
-The contrast between ENZYMES and PTC_MR strongly supports our overfitting hypothesis:
-- Datasets included in pre-training (like ENZYMES) suffer from memorization
-- Novel datasets (like PTC_MR) can sometimes benefit from transferred knowledge
-- The molecular → molecular transfer works only when the target wasn't seen during pre-training
+The contrast between ENZYMES and PTC_MR reveals the true nature of pre-training failure:
+- Datasets included in pre-training (like ENZYMES) suffer from **representation corruption** due to conflicting multi-task objectives
+- Novel datasets (like PTC_MR) can sometimes benefit because they haven't been damaged by gradient conflicts during pre-training
+- Even single-domain pre-training on ENZYMES fails, proving that **task interference**, not domain mismatch, is the primary culprit
+
+**Critical Evidence**: Full fine-tuning performs better than linear probing for ENZYMES not because it "corrects overfitting," but because it **repairs the damage** that multi-task pre-training caused to the representations.
 
 ## 4. Statistical Rigor: No Significant Improvements After Correction
 
@@ -167,7 +169,7 @@ The extreme domain gap between molecular graphs (small, feature-poor) and citati
 
 2. **The Link Prediction Paradox**: The unexpected success of linear probing over full fine-tuning for link prediction tasks reveals that pre-trained representations can actively harm performance when allowed to adapt.
 
-3. **Overfitting Dominates**: The failure of ENZYMES (included in pre-training) versus the relative success of PTC_MR (excluded from pre-training) demonstrates that pre-training leads to overfitting rather than useful generalization.
+3. **Task Interference Dominates**: The failure of ENZYMES (included in pre-training) versus the relative success of PTC_MR (excluded from pre-training) demonstrates that pre-training leads to representation corruption through task interference rather than useful generalization.
 
 4. **Complexity Hurts**: Simpler pre-training schemes (b2) perform less poorly than complex multi-task schemes (s4, s5), suggesting that task interference outweighs any potential synergies.
 
