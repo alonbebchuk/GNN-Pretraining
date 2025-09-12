@@ -32,9 +32,26 @@ The best-performing scheme (b2: node feature masking only) still shows a negativ
 | s5 | -5.85 | 7.95 | -25.86 | 7.55 | All 5 tasks + Domain adv |
 | s4 | -5.89 | 4.87 | -15.81 | 2.06 | All 5 tasks (cross-domain) |
 
-The trend reveals a more nuanced pattern: **task compatibility and stability matter more than simplicity alone**. While the simplest stable scheme (b2: node feature masking) performs best, some multi-task combinations (s3, s1, s2) outperform the simple but toxic contrastive scheme (b3). The key insight is that **contrastive learning appears inherently harmful**, creating unstable representations with high variance (11.21 std dev for b3 vs. 6.15 for b2).
+The trend reveals that **pre-training is fundamentally a gamble with poor odds**. A deeper analysis of success rates reveals the true pattern:
 
-**This complexity actually strengthens our failure narrative**: If pre-training success were systematic and predictable, we would see clear patterns. Instead, we see that even supposedly "simple" approaches can be highly toxic and unpredictable, making GNN pre-training unreliable for practical use.
+| Scheme | Success Rate | Mean When Positive | Max Improvement | Overall Mean |
+|--------|--------------|-------------------|-----------------|--------------|
+| b2 | 41.7% | 5.3% | 11.3% | -0.39% |
+| s1 | 33.3% | **16.97%** | **35.85%** | -2.67% |
+| s2 | 33.3% | 5.9% | 15.8% | -2.81% |
+| b3 | 25.0% | 9.2% | 17.0% | -4.53% |
+| s3 | 25.0% | 6.8% | 9.4% | -2.58% |
+| s5 | 16.7% | 4.3% | 7.5% | -5.85% |
+| s4 | 8.3% | 2.1% | 2.1% | -5.89% |
+| b4 | **0.0%** | 0.0% | 0.0% | -4.04% |
+
+**Key Insights:**
+- **Most schemes fail most of the time** (success rates 8-42%)
+- **Single-domain pre-training (b4) never works** (0% success rate)
+- **High-risk schemes (s1) occasionally deliver spectacular results** (35.85% max) but fail 67% of the time
+- **"Reliable" schemes (b2) work more often but with modest gains**
+
+The extremely high variance in s1 (16.89 std dev) now makes sense: it's a high-risk/high-reward approach that either fails dramatically or succeeds spectacularly. Importantly, **when we focus only on the likelihood of achieving positive results, simpler schemes are clearly superior**: single-task schemes average 33.4% success rates, two-task schemes 33.3%, while complex multi-task schemes drop to just 12.5% average success rate.
 
 ## 2. The Link Prediction Paradox: When Linear Probing Beats Full Fine-tuning
 
@@ -173,7 +190,7 @@ The extreme domain gap between molecular graphs (small, feature-poor) and citati
 
 3. **Task Interference Dominates**: The failure of ENZYMES (included in pre-training) versus the relative success of PTC_MR (excluded from pre-training) demonstrates that pre-training leads to representation corruption through task interference rather than useful generalization.
 
-4. **Task Toxicity Over Complexity**: The issue isn't complexity per se, but **task compatibility and stability**. Node contrastive learning (b3) is more harmful than some multi-task schemes, while node feature masking (b2) is more benign. This suggests certain pre-training objectives are inherently problematic regardless of complexity.
+4. **Pre-training as Unreliable Gambling**: Success rates reveal the fundamental problem - even the "best" scheme (b2) only works 42% of the time, while some schemes with spectacular maximum improvements (s1: 35.85%) fail 67% of the time. Single-domain pre-training (b4) never works at all (0% success rate). This gambling nature explains why pre-training appears promising in some studies while failing systematically in comprehensive analysis.
 
 ### 7.2 Implications
 
