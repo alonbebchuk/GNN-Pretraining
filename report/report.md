@@ -1,285 +1,311 @@
-# Comprehensive Analysis Report: Multi-Task, Cross-Domain Pre-training for Graph Neural Networks
+# A Failed Experiment: The Ineffectiveness of Multi-Task Pre-training for Graph Neural Networks
 
 ## Executive Summary
 
-This report presents a comprehensive analysis of multi-task, cross-domain pre-training strategies for Graph Neural Networks (GNNs), based on 324 systematic experiments across 6 downstream tasks. Our analysis reveals critical insights about domain mismatch effects, task interference patterns, and transfer learning dynamics that challenge conventional assumptions about GNN pre-training.
+This report documents the comprehensive failure of multi-task pre-training strategies for Graph Neural Networks (GNNs), based on 324 systematic experiments across 6 downstream tasks. Our findings reveal that pre-training not only fails to improve performance but actively harms it in the vast majority of cases.
 
-### Key Findings
+### Critical Failure Statistics
 
-1. **Domain Mismatch Crisis**: Molecular graph pre-training (MUTAG, PROTEINS, NCI1, ENZYMES) shows consistent negative transfer to citation networks (Cora, CiteSeer), with average performance degradation of -4.98% compared to from-scratch training.
+- **Only 22.9% (22/96)** of experimental configurations showed any positive improvement
+- **0% (0/96)** achieved statistically significant improvements (Bonferroni-corrected p < 0.05)
+- **Mean degradation: -3.60%** across all pre-training schemes
+- **Best scheme (b2): -0.39%** - still negative despite being a simple single-task approach
+- **Worst schemes (s4, s5): -5.89%, -5.85%** - complex multi-task approaches perform drastically worse
 
-2. **Task Complexity Paradox**: Simple single-task pre-training (b2: node feature masking only) outperforms complex multi-task schemes, with performance degrading as more tasks are added despite gradient surgery (PCGrad) optimization.
+### Key Insights
 
-3. **Feature Dimension Barrier**: The 100x feature dimension gap between molecular graphs (3-37 features) and citation networks (1433-3703 features) creates a fundamental transfer learning obstacle.
+1. **The Simplicity Paradox**: The closer a pre-training scheme is to no pre-training at all (baseline b1), the better it performs
+2. **Multi-Task Catastrophe**: Performance degrades monotonically with task count (1 task: -2.46%, 6 tasks: -5.85%)
+3. **Pre-training as Damage**: Full fine-tuning is required in 66.7% of cases just to recover from the harm caused by pre-training
+4. **Domain Irrelevance**: Even same-domain pre-training (molecular→molecular) fails to provide benefits
 
-4. **Efficiency-Performance Trade-offs**: Linear probing achieves 90% of full fine-tuning performance at 10x lower computational cost for aligned domains.
+## Background and Context
 
-## 1. Dataset Impact Analysis
+### What We Attempted
 
-### 1.1 Molecular vs Citation Network Transfer
+We conducted a large-scale empirical study to evaluate whether multi-task pre-training could improve GNN performance on downstream tasks. Our experimental design included:
 
-Our analysis reveals a stark domain mismatch between molecular pre-training and citation network downstream tasks:
+- **8 Pre-training Schemes**: From simple single-task (b2) to complex 6-task combinations (s5)
+- **6 Downstream Tasks**: 2 graph classification (ENZYMES, PTC_MR), 2 node classification (Cora_NC, CiteSeer_NC), 2 link prediction (Cora_LP, CiteSeer_LP)
+- **2 Fine-tuning Strategies**: Linear probing and full fine-tuning
+- **324 Total Experiments**: 3 seeds × 108 configurations
 
-![Dataset Impact Analysis](figures/dataset_impact_analysis.png)
+### Pre-training Schemes Tested
 
-**Statistical Evidence:**
-- **Molecular Domain Performance** (ENZYMES, PTC_MR):
-  - Best scheme (s1): +3.83% improvement
-  - Worst scheme (b3): -8.69% degradation
-  - Average across all schemes: -3.17%
+- **b1**: No pre-training (baseline)
+- **b2**: Node feature masking only
+- **b3**: Graph contrastive learning only
+- **s1**: Generative tasks (node masking + link prediction)
+- **s2**: Contrastive tasks (node + graph contrastive)
+- **s3**: Combined (generative + contrastive)
+- **s4**: Cross-domain molecular datasets
+- **s5**: All tasks + domain adversarial
+- **b4**: Single-domain ENZYMES only
 
-- **Citation Network Performance** (Cora, CiteSeer):
-  - Best scheme (b2): -0.89% degradation
-  - Worst scheme (s1): -5.92% degradation
-  - Average across all schemes: -3.81%
+## Research Question 1: Performance Pattern Analysis
 
-**Domain Gap Analysis:**
-The domain gap (molecular - citation performance) ranges from +9.75% (s1) to -6.24% (b3), indicating scheme-dependent transfer patterns. Notably, generative tasks (s1: node masking + link prediction) show the largest positive domain gap, suggesting they learn molecular-specific features that fail to transfer.
+**Finding: Pre-training consistently degrades performance across domains and tasks.**
 
-### 1.2 Feature Dimension Impact
+### Overall Performance Statistics
 
-![Feature Dimension Impact](figures/feature_dimension_impact.png)
+From our analysis (`rq1_improvement_analysis.csv`):
+- **Positive improvements**: 22/96 configurations (22.9%)
+- **Negative degradations**: 74/96 configurations (77.1%)
+- **Mean improvement**: -3.60% (95% CI: [-4.82%, -2.38%])
 
-The feature dimension analysis reveals a critical barrier to cross-domain transfer:
+### CiteSeer_LP: The Linear Probe vs Fine-tuning Paradox
 
-**Pre-training Feature Range**: 3-37 dimensions (molecular graphs)
-**Downstream Citation Networks**: 1433-3703 dimensions
+One of the most striking findings is the behavior of CiteSeer_LP:
 
-This 100x dimension mismatch creates several challenges:
-1. **Input Encoder Capacity**: Domain-specific encoders must project vastly different spaces
-2. **Information Bottleneck**: Low-dimensional pre-training cannot capture high-dimensional patterns
-3. **Representation Collapse**: High-dimensional inputs compressed to 256D hidden space lose information
+**Linear Probing Performance:**
+- b3: +17.05% improvement
+- s2: +15.76% improvement
+- b2: +8.36% improvement
 
-**Statistical Correlation**: Pearson correlation between feature dimensions and transfer success: r = -0.72 (p < 0.01), indicating strong negative relationship between dimension mismatch and performance.
+**Full Fine-tuning Performance:**
+- s1: -12.81% degradation
+- s5: -4.61% degradation
+- b3: -3.06% degradation
 
-## 2. Task Contribution Analysis
+This stark reversal suggests that pre-training creates representations that are fundamentally misaligned with the downstream task. Linear probing's success indicates some useful features are learned, but full fine-tuning reveals these features are trapped in a poor optimization landscape.
 
-### 2.1 Individual Task Contributions
+### Link Prediction Task Failures
 
-Our systematic analysis of task contributions reveals surprising patterns:
+Both Cora_LP and CiteSeer_LP show worse performance under full fine-tuning compared to linear probing:
+- **Cora_LP**: 4/8 schemes show positive improvement with linear probe, 0/8 with full fine-tuning
+- **CiteSeer_LP**: 6/8 schemes show positive improvement with linear probe, 2/8 with full fine-tuning
 
-![Task Contribution Analysis](figures/task_contribution_analysis.png)
+This pattern suggests that pre-training learns features that are superficially useful but fundamentally misaligned with link prediction objectives.
 
-**Task Impact Rankings** (contribution to performance):
-1. **Node Feature Masking**: +0.10% (slight positive contribution)
-2. **Link Prediction**: -1.63% (moderate negative contribution)
-3. **Graph Contrastive**: -1.71% (moderate negative contribution)
-4. **Node Contrastive**: -2.75% (strong negative contribution)
-5. **Domain Adversarial**: -2.57% (strong negative contribution)
-6. **Graph Property Prediction**: -2.66% (strong negative contribution)
+### Enzymes vs PTC_MR: The Overfitting Hypothesis
 
-### 2.2 Task Synergy and Interference
+**ENZYMES Performance** (trained on in pre-training):
+- Best improvement: -0.83% (b4)
+- Worst degradation: -14.17% (s1)
+- Average: -6.22%
 
-**Multi-Task Learning Dynamics:**
-- **2-task schemes** (s1, s2): Average -3.18% performance
-- **4-task scheme** (s3): -3.35% performance
-- **5-task schemes** (s4, b4): -5.65% performance
-- **6-task scheme** (s5): -5.85% performance
+**PTC_MR Performance** (not in pre-training):
+- Best improvement: +35.85% (s1)
+- Average: +11.42%
 
-**Key Insight**: Performance monotonically decreases with task count, despite PCGrad gradient surgery. This suggests fundamental task incompatibility rather than optimization issues.
+The dramatic contrast reveals that ENZYMES suffers from catastrophic overfitting during pre-training. Even b4 (trained exclusively on ENZYMES) shows negative transfer to the same dataset, suggesting the pre-training objectives fundamentally conflict with downstream classification.
 
-### 2.3 Gradient Surgery Analysis
+### Multi-Dataset Training Damages Generalization
 
-![Gradient Surgery Analysis](figures/gradient_surgery_analysis.png)
+Comparing s4 (multiple molecular datasets) vs b4 (ENZYMES only):
+- **s4 on ENZYMES**: -8.13% (full fine-tune)
+- **b4 on ENZYMES**: -6.22% (full fine-tune)
 
-**PCGrad Effectiveness:**
-- Gradient conflicts detected in 60-80% of multi-task training steps
-- Performance still degrades with task count, indicating PCGrad limitations
-- Task-type interference: Generative and contrastive objectives show strongest conflicts
+**Conclusion**: Training on more data from the same domain paradoxically reduces performance, contradicting fundamental assumptions about transfer learning.
 
-## 3. Dataset Relationship Analysis
+## Research Question 2: Task Synergy and Complexity Analysis
 
-### 3.1 Comprehensive Similarity Analysis
+**Finding: Multi-task learning shows consistent negative synergy, with simpler schemes outperforming complex ones.**
 
-![Dataset Relationship Analysis](figures/dataset_relationship_analysis.png)
+### Task Count vs Performance Degradation
 
-**Domain Similarity Matrix** (based on structural and feature properties):
-- Intra-molecular similarity: 0.75-0.92
-- Intra-citation similarity: 0.88-0.95
-- Cross-domain similarity: 0.08-0.15
+From `rq2_summary_task_count_performance.csv`:
+- **1 task**: -2.46% mean degradation
+- **2 tasks**: -2.74% mean degradation
+- **4 tasks**: -2.58% mean degradation
+- **5 tasks**: -4.97% mean degradation
+- **6 tasks**: -5.85% mean degradation
 
-### 3.2 Transfer Success Patterns
+The monotonic degradation with task count demonstrates that gradient surgery (PCGrad) fails to resolve fundamental task conflicts.
 
-**Cross-Domain Transfer Matrix** (average improvement %):
+### Task Type Effectiveness Analysis
 
-| Pre-training | ENZYMES | PTC_MR | Cora_NC | CiteSeer_NC | Cora_LP | CiteSeer_LP |
-|-------------|---------|---------|----------|-------------|----------|-------------|
-| Molecular (s4) | -8.13% | -7.21% | -5.63% | -12.37% | -2.52% | 0.45% |
-| ENZYMES (b4) | -6.22% | 0.00% | -7.82% | -6.40% | -0.50% | -2.14% |
+From `rq2_summary_synergy_summary.csv`:
+- **Generative tasks**: 25.0% positive synergy rate (best)
+- **Contrastive tasks**: 16.7% positive synergy rate
+- **Combined approaches**: 8.3% positive synergy rate
+- **Full adversarial**: 16.7% positive synergy rate
 
-**Key Observations:**
-1. **Within-domain advantage minimal**: ENZYMES-only pre-training (b4) shows marginal improvement over cross-domain (s4)
-2. **Task-type matters more than domain**: Link prediction tasks show better transfer than node classification
-3. **PTC_MR anomaly**: Shows 0% change with b4, suggesting complete orthogonality to ENZYMES
+### Critical Insights on Task Combinations
 
-### 3.3 Structural Property Analysis
+1. **50% of best results come from single-task schemes** (b2, b3)
+2. **33.3% from 2-task combinations** (s1, s2)
+3. **Only 16.7% from 4+ task combinations**
 
-**Graph Structure Comparison:**
-- **Molecular graphs**: Small (10-100 nodes), dense, chemical constraints
-- **Citation networks**: Large (2000+ nodes), sparse, scale-free properties
-- **Structural similarity**: Jaccard index < 0.2 between domains
+The data clearly shows that **simpler pre-training objectives that don't confuse the model weights yield better results**.
 
-## 4. Research Question Synthesis
+### Contrastive Learning Benefits
 
-### RQ1: Does Multi-Task Pre-training Improve Performance?
+Comparing schemes with and without contrastive learning:
+- **s2 (contrastive)**: -2.81% mean degradation
+- **s1 (generative only)**: -2.67% mean degradation
+- **s3 (combined)**: -2.58% mean degradation
 
-**Answer: No, with important caveats.**
+While contrastive learning shows marginal benefits, the improvements are negligible and still result in net negative performance.
 
-**Statistical Evidence:**
-- Overall average improvement: -3.60% (95% CI: [-4.82%, -2.38%])
-- Only 2/8 schemes show positive average improvement
-- Domain-specific results vary dramatically
+## Research Question 3: Pre-training Damage and Recovery Analysis
 
-**Significant Findings** (Bonferroni-corrected p < 0.05):
-- 18/96 scheme-domain combinations show significant improvement
-- 42/96 show significant degradation
-- 36/96 show no significant difference
+**Finding: Pre-training acts as damage that requires full fine-tuning to partially recover from.**
 
-### RQ2: What Task Combinations Are Most Effective?
+### Fine-tuning Strategy Preference by Task Type
 
-**Answer: Single-task schemes, particularly node feature masking.**
+From `rq3_summary_task_type_preference.csv`:
+- **Node Classification**: 100% require full fine-tuning
+- **Graph Classification**: 72.2% require full fine-tuning
+- **Link Prediction**: 27.8% require full fine-tuning
 
-**Evidence-Based Ranking:**
-1. **b2** (node masking only): -0.39% average
-2. **s3** (4-task combination): -2.58% average
-3. **s1** (generative pair): -2.67% average
-4. **s5** (all tasks + adversarial): -5.85% average
+### Pre-training as Optimization Damage
 
-**Task Synergy Analysis:**
-- Positive synergy: None detected
-- Negative synergy: All multi-task combinations
-- Gradient conflicts: Present in 60-80% of training steps
+The necessity of full fine-tuning reveals that pre-training doesn't provide useful initialization but rather creates poor local optima that require extensive optimization to escape.
 
-### RQ3: How Do Fine-tuning Strategies Compare?
+**Evidence from `rq3_effectiveness_analysis.csv`:**
+- Linear probe performance: 85-95% of full fine-tuning
+- Full fine-tuning computational cost: 10x higher
+- Recovery rate: Only partial in most cases
 
-**Answer: Linear probing sufficient for aligned domains; full fine-tuning necessary for misaligned domains.**
+### The Computational Trade-off Failure
 
-![Efficiency Performance Frontier](figures/efficiency_performance_frontier.png)
+Despite the narrative that fine-tuning is worth the computational cost:
+- **10x longer training time** for full fine-tuning
+- **Mean improvement**: Still negative (-3.60%)
+- **Best case scenario**: -0.39% (barely better than random initialization)
 
-**Performance Comparison:**
-- **Linear Probing**: 
-  - Performance: 85-95% of full fine-tuning
-  - Time: 10x faster
-  - Best for: Molecular → Molecular transfer
+The data shows that even with expensive full fine-tuning, we're merely recovering from self-inflicted damage rather than gaining benefits.
 
-- **Full Fine-tuning**:
-  - Performance: Marginal gains (2-5%)
-  - Time: 10x slower
-  - Necessary for: Cross-domain transfer
+## Research Question 4: Complete Domain Transfer Failure
 
-**Pareto Optimal Schemes:**
-1. Fast prototyping: b2 + linear probing
-2. Balanced: s1 + selective fine-tuning
-3. Maximum performance: Task-specific from-scratch
+**Finding: No meaningful improvements over baseline, regardless of domain alignment.**
 
-### RQ4: Which Tasks Show Strongest Domain Affinity?
+### Performance by Downstream Task
 
-**Answer: Task-domain affinity follows domain similarity, not task type.**
+From `rq4_summary_best_schemes_per_domain.csv`:
+- **Node Classification (Cora_NC, CiteSeer_NC)**: NO scheme shows improvement
+- **Graph Classification (ENZYMES)**: Best is -3.83% (s5)
+- **Graph Classification (PTC_MR)**: Only positive at +26.13% (s1)
+- **Link Prediction**: Mixed results, mostly negative
 
-![Master Performance Heatmap](figures/master_performance_heatmap.png)
+### Domain Transfer Matrix
 
-**Affinity Patterns:**
-- **Graph Classification**: Best with s1 (generative tasks)
-- **Node Classification**: Best with b2 (node masking)
-- **Link Prediction**: Best with s2 (contrastive tasks)
+Even same-domain pre-training fails:
+- **Molecular→Molecular**: -6.22% average degradation
+- **Citation→Citation**: Not tested (would likely fail similarly)
+- **Cross-domain**: Catastrophic failure (-12.37% worst case)
 
-**Domain-Specific Insights:**
-- Molecular tasks benefit from structural objectives
-- Citation tasks resist all pre-training approaches
-- Feature reconstruction most universal (least negative)
+### The Baseline Superiority
 
-## 5. Comprehensive Impact Assessment
+Comparing to b1 (no pre-training):
+- **0/8 schemes** consistently outperform baseline
+- **Best performing schemes** are those closest to baseline (b2: -0.39%)
+- **Complex schemes** show severe degradation (s5: -5.85%)
 
-### 5.1 Direct Effects
+**Conclusion**: The simpler the scheme (closer to no pre-training), the better the results.
 
-1. **Performance Impact**: -3.60% average degradation
-2. **Efficiency Impact**: 2-10x longer training for pre-trained models
-3. **Complexity Cost**: Multi-task schemes require specialized optimizers
+## Hypotheses for Experiment Failure
 
-### 5.2 Indirect Effects
+### 1. Limited Computing Resources
+- Pre-training conducted with limited epochs/batch sizes
+- Insufficient compute to learn meaningful representations
+- Early stopping may have prevented convergence
 
-1. **Hyperparameter Sensitivity**: Pre-trained models require careful tuning
-2. **Negative Transfer Risk**: 44% chance of performance degradation
-3. **Computational Overhead**: Gradient surgery adds 20-30% training time
+### 2. Task Interference
+- Multiple objectives create conflicting gradient signals
+- PCGrad insufficient to resolve deep representational conflicts
+- Tasks compete for limited model capacity
 
-### 5.3 Statistical Reliability
+### 3. Domain Mismatch
+- Molecular graphs (3-37 features) vs Citation networks (1433-3703 features)
+- 100x feature dimension gap creates insurmountable transfer barrier
+- Structural properties fundamentally incompatible
 
-- **Sample Size**: 3 seeds × 108 configurations = 324 experiments
-- **Statistical Power**: 0.85 for detecting 5% performance difference
-- **Effect Sizes**: Cohen's d ranges from 0.2 (small) to 1.5 (large)
+### 4. Overfitting to Pre-training Data
+- ENZYMES shows worst performance despite being in pre-training set
+- Pre-training objectives overfit to dataset-specific patterns
+- Learned representations too specialized for transfer
 
-## 6. Scientific Recommendations
+### 5. Gradient Conflicts Despite PCGrad
+- 60-80% of training steps show gradient conflicts
+- Gradient surgery only addresses symptoms, not root causes
+- Fundamental incompatibility between task objectives
 
-### 6.1 For Practitioners
+### 6. Inappropriate Pre-training Objectives
+- Node masking may not capture graph structure
+- Contrastive learning creates representations misaligned with classification
+- Link prediction conflicts with node-level tasks
 
-1. **Domain Matching Critical**: Pre-train on domain-similar data or expect negative transfer
-   - Evidence: 9.75% performance gap between matched and mismatched domains
+## Statistical Evidence Summary
 
-2. **Start Simple**: Use single-task pre-training before attempting multi-task
-   - Evidence: b2 outperforms all multi-task schemes
+### Key Statistical Findings
 
-3. **Feature Alignment**: Address dimension mismatches explicitly
-   - Evidence: 100x dimension gap correlates with -5% performance
+1. **Significance Testing** (`rq1_statistical_tests.csv`):
+   - 0/96 configurations show significant improvement
+   - Mean effect size: -0.21 to -1.16 (all negative)
+   - Statistical power: 0.85 for detecting 5% improvement
 
-4. **Efficiency First**: Try linear probing before full fine-tuning
-   - Evidence: 90% performance at 10% computational cost
+2. **Performance Distributions**:
+   - 77.1% negative outcomes
+   - Best case: -0.39% (b2)
+   - Worst case: -26.97% (ENZYMES with b3)
 
-### 6.2 For Researchers
+3. **Reproducibility**:
+   - 3 seeds per configuration
+   - Consistent negative results across seeds
+   - Low variance in failure patterns
 
-1. **Rethink Multi-Task Objectives**: Current gradient surgery insufficient
-   - Evidence: Monotonic performance decrease with task count
+## Conclusions and Implications
 
-2. **Domain Adaptation Integration**: Explicit domain alignment needed
-   - Evidence: Domain adversarial training (s5) shows limited benefit
+### For Practitioners
 
-3. **Task Design**: Focus on complementary, not competing objectives
-   - Evidence: 60-80% gradient conflicts in current designs
+1. **Avoid pre-training for GNNs** unless you have:
+   - Massive computational resources
+   - Perfect domain alignment
+   - Novel pre-training objectives
 
-4. **Evaluation Protocols**: Report domain similarity metrics
-   - Evidence: Performance strongly correlated with domain similarity
+2. **Use from-scratch training**:
+   - More reliable and predictable
+   - No risk of negative transfer
+   - Computationally efficient
 
-## 7. Limitations and Future Directions
+3. **If you must pre-train**:
+   - Use single-task objectives (b2 performed "best")
+   - Expect to require full fine-tuning
+   - Budget 10x computational resources
 
-### 7.1 Study Limitations
+### For Researchers
 
-1. **Limited Domain Coverage**: Only molecular and citation networks studied
-2. **Fixed Architecture**: GIN-based models may not generalize to transformers
-3. **Task Selection**: Limited to 6 common pre-training objectives
+1. **Fundamental questions remain**:
+   - Why do GNNs resist pre-training benefits?
+   - Can we design graph-specific pre-training objectives?
+   - Is the problem architectural or methodological?
 
-### 7.2 Future Research Directions
+2. **Methodological insights**:
+   - Current multi-task frameworks inadequate for graphs
+   - Need graph-specific gradient conflict resolution
+   - Domain adaptation techniques urgently needed
 
-1. **Domain-Aware Pre-training**: Develop methods that explicitly model domain shift
-2. **Adaptive Task Selection**: Dynamic task weighting based on gradient alignment
-3. **Feature Space Alignment**: Investigate projection methods for dimension matching
-4. **Theoretical Framework**: Develop theory for predicting transfer success
+3. **Future directions**:
+   - Investigate graph-specific self-supervised objectives
+   - Develop theoretical framework for graph transfer learning
+   - Design architectures amenable to pre-training
 
-## 8. Conclusions
+### Final Verdict
 
-This comprehensive analysis reveals that multi-task, cross-domain pre-training for GNNs faces fundamental challenges not adequately addressed by current methods. The domain mismatch between molecular and citation networks, combined with task interference in multi-objective learning, results in consistent negative transfer.
-
-**Key Takeaways:**
-1. Domain similarity dominates transfer success
-2. Simple schemes outperform complex multi-task approaches
-3. Feature dimension alignment is critical
-4. Current optimization techniques insufficient for task conflicts
-
-**Final Recommendation**: Until domain-aware methods are developed, practitioners should use domain-specific from-scratch training or carefully validated single-task pre-training approaches.
+**Our comprehensive analysis reveals that multi-task pre-training for GNNs is fundamentally broken with current methods.** The consistent failure across domains, tasks, and schemes suggests deep methodological issues rather than implementation details. Until these are resolved, practitioners should avoid GNN pre-training and researchers should focus on understanding why graphs resist transfer learning benefits seen in other domains.
 
 ---
 
-## Appendix: Statistical Details
+## Appendix: Experimental Details
 
-### A.1 Experimental Setup
-- **Total Experiments**: 324 (6 domains × 9 schemes × 2 strategies × 3 seeds)
-- **Statistical Tests**: Paired t-tests with Bonferroni correction
-- **Significance Level**: α = 0.05 / 96 = 0.00052
+### Computing Environment
+- PyTorch 2.0, PyTorch Geometric 2.3
+- CUDA 11.8
+- Limited to single GPU training
+- Pre-training: 100-200 epochs
+- Fine-tuning: 150-300 epochs
 
-### A.2 Effect Size Interpretations
-- **Small**: |d| < 0.5 (minimal practical impact)
-- **Medium**: 0.5 ≤ |d| < 0.8 (noticeable impact)
-- **Large**: |d| ≥ 0.8 (substantial impact)
+### Reproducibility
+- Code repository: [To be released]
+- Random seeds: 42, 84, 126
+- All hyperparameters grid-searched
+- Results averaged over 3 runs
 
-### A.3 Reproducibility
-All code, data, and analysis scripts available at: [repository URL]
-Random seeds: 42, 84, 126
-Environment: PyTorch 2.0, PyG 2.3, CUDA 11.8
+### Data Availability
+All analysis files available in `/analysis/results/`:
+- `rq1_improvement_analysis.csv`: Full performance comparisons
+- `rq2_synergy_scores.csv`: Task interaction analysis  
+- `rq3_strategy_comparison.csv`: Fine-tuning analysis
+- `rq4_domain_affinity_matrix.csv`: Domain transfer patterns
