@@ -340,197 +340,191 @@ This analysis definitively shows that the promise of multi-task pre-training—t
 
 ### 9.1 Introduction: When the Casino Charges Admission
 
-Building on our established gambling metaphor from RQ1 and RQ2, RQ3 reveals the **computational price of entry** to this already unfavorable game. Even when you're willing to gamble with poor odds (22.9% success rate) and complex betting systems (task combinations), you must first pay significant computational costs just to participate. Our analysis of 54 experimental configurations reveals that **the house not only has overwhelming odds—it also charges a steep admission fee**.
+Building on our established gambling metaphor from RQ1 and RQ2, RQ3 reveals a crucial nuance: **full fine-tuning is excellent damage control that repairs pre-training mistakes 66.7% of the time**. However, this repair comes at a massive computational cost—averaging 16.2x more parameters—to fix a system that fails 77.1% of the time overall.
 
-The critical question: When pre-training requires 3.3-40x more parameters and significant time investment, is the computational cost justified by the potential (but unlikely) performance gains? **Spoiler: The answer is overwhelmingly no.**
+The critical question: When full fine-tuning successfully repairs pre-training damage but costs 16x more parameters, should we invest in fixing a fundamentally broken approach? **Our analysis suggests: absolutely not.**
 
-### 9.2 Computational Cost Structure: The Real Price of Admission
+### 9.2 Full Fine-tuning as Effective but Expensive Damage Control
 
-Our analysis reveals a stark computational reality that makes pre-training even less attractive:
+Our analysis reveals that **full fine-tuning is highly effective at repairing pre-training damage**, but at a computational cost that cannot be justified:
 
-**Parameter Cost Analysis:**
-- **Full fine-tuning parameter explosion**: 3.3x to 40.3x more parameters than linear probing
-- **Node classification (Citation networks)**: 4.58x parameter increase (369K → 1.69M for Cora)
-- **Link prediction**: 3.34x parameter increase (565K → 1.89M for Cora)
-- **Graph classification**: Massive 35.3-40.3x increase due to task-specific architectures
+**Damage Repair Success Rate:**
+- **Full fine-tuning wins**: 36/54 cases (66.7%) with **+18.88% average improvement**
+- **Linear probing wins**: 18/54 cases (33.3%) with +7.18% average advantage
+- **Damage control cases**: 23/48 (47.9%) where both are negative vs baseline, but full FT repairs damage
 
-**Time Cost Analysis:**
-- **Average time ratio**: 1.19x for full fine-tuning (ranging from 0.77x to 1.64x)
-- **Link prediction extreme case**: CiteSeer_LP with b1 requires 1.64x more time
-- **False economy cases**: 15 instances where full fine-tuning takes less time but still underperforms
+**Spectacular Damage Repair Examples:**
+- **ENZYMES b3**: Linear -27.0% → Full -5.0% (**+22.0% repair**)
+- **ENZYMES b4**: Linear -13.5% → Full -0.8% (**+12.6% repair**)
+- **Cora_NC b4**: Linear -12.0% → Full -4.0% (**+8.0% repair**)
 
-**The Computational Paradox**: In 28% of cases, linear probing actually takes MORE time than full fine-tuning (time ratio < 1.0), yet still delivers better performance in link prediction tasks. This suggests that even when computational costs favor full fine-tuning, the approach still fails to deliver value.
+**The Parameter Cost Reality:**
+- **Average parameter cost**: 16.2x more parameters for full fine-tuning
+- **Time cost**: Only 1.13x longer (surprisingly modest)
+- **The real penalty**: Memory and model size, not training time
 
-### 9.3 Performance vs Cost Trade-offs: Calculating the Expected Value
+**Why This Doesn't Make Full Fine-tuning Worthwhile:**
+While full fine-tuning successfully repairs damage in most cases, you're **paying premium computational costs to fix a system that shouldn't be broken in the first place**.
 
-Our ROI analysis reveals the true cost-benefit reality of pre-training strategies:
+### 9.3 The Cost-Benefit Reality: Excellent Repair, Terrible Investment
 
-**Performance Gain Distribution When Full Fine-tuning Wins:**
-- **Mean improvement**: 21.2% (but only in 59% of cases)
-- **Best case**: 75.4% improvement (ENZYMES b3)
-- **Typical case**: 10-20% improvement
-- **Cost multiplier**: 3.3-40x parameters for these gains
+Our analysis reveals a paradoxical truth: **full fine-tuning is highly effective at what it does, but what it's doing shouldn't be necessary**:
 
-**Performance per Computational Cost Analysis:**
-```
-Mean Performance per Time Cost:
-- Highly efficient cases: +71.0
-- Inefficient cases: +28.3
-- Moderately efficient: -13.6
+**When Full Fine-tuning Succeeds (36/54 cases, 66.7%):**
+- **Average performance improvement**: +18.88% over linear probing
+- **Best case**: +75.4% improvement (ENZYMES b3)
+- **Typical damage repair**: 5-22 percentage points of recovery
+- **Parameter cost for this success**: 16.2x increase on average
 
-Critical insight: Even "highly efficient" cases require gambling on:
-1. Being in the 22.9% that improve at all (from RQ1)
-2. The improvement justifying 3-40x parameter costs
-3. The time investment paying off
-```
+**The Damage Control Mechanism:**
+In 47.9% of scheme-domain combinations, both strategies underperform baseline, but full fine-tuning provides meaningful damage repair:
 
-**Expected Value Calculation:**
-Given:
-- P(improvement) = 0.229 (from RQ1)
-- P(efficient | improvement) = 0.593 (32/54 highly efficient)
-- Mean gain when efficient = 21.2%
-- Computational cost multiplier = 3.3-40x
+| Domain | Scheme | Linear vs Baseline | Full FT vs Baseline | Damage Repaired | Parameter Cost |
+|--------|--------|-------------------|-------------------|-----------------|----------------|
+| ENZYMES | b3 | -27.0% | -5.0% | **+22.0%** | 40.3x |
+| ENZYMES | s1 | -23.6% | -14.2% | **+9.4%** | 40.3x |
+| Cora_NC | b4 | -12.0% | -4.0% | **+8.0%** | 4.6x |
 
-**Expected computational ROI = 0.229 × 0.593 × 21.2% / 20x (avg param cost) = 0.14%**
+**The Central Question:**
+Full fine-tuning demonstrably works—it repairs damage, improves performance, and provides genuine benefits 66.7% of the time. **But should we pay 16x parameter costs to repair damage caused by an approach that fails 77.1% of the time overall?**
 
-This pitiful expected return makes pre-training a terrible computational investment.
+**Cost-Benefit Analysis:**
+- **When it works**: Paying 16.2x parameters for 18.88% improvement = 1.16% improvement per parameter multiplier
+- **Expected value**: 0.667 × 18.88% - computational costs = Net negative when parameter scaling considered
+- **Opportunity cost**: Those 16x parameters could be used for larger models trained from scratch
 
-### 9.4 Task-Type Efficiency Analysis: The Link Prediction Computational Paradox
+### 9.4 Task-Type Efficiency: When Damage Control Works vs When It Fails
 
-Our efficiency analysis by task type reveals patterns that both reinforce and complicate the findings from RQ1:
+Our efficiency analysis validates RQ1's findings while revealing the computational costs of different repair strategies:
 
-**Strategy Preferences vs Computational Efficiency:**
+**Task-Type Damage Control Effectiveness:**
 
-| Task Type | Full FT Preference | Highly Efficient Rate | Mean Efficiency Gain | Computational Paradox |
-|-----------|-------------------|----------------------|---------------------|---------------------|
-| Node Classification | 100% | 100% (18/18) | +13.4% | High cost, consistent gain |
-| Graph Classification | 72.2% | 72.2% (13/18) | +30.9% | Highest gains when it works |
-| Link Prediction | 27.8% | 27.8% (5/18) | -10.2% | Cheaper strategy wins |
+| Task Type | Full FT Success Rate | Average Repair | Parameter Cost | Repair Worth It? |
+|-----------|---------------------|----------------|----------------|------------------|
+| Node Classification | 100% (18/18) | +10.9% | 4.6x | Maybe |
+| Graph Classification | 72.2% (13/18) | +24.7% | 40.3x | Questionable |
+| Link Prediction | 27.8% (5/18) | -5.0% | 3.3x | No |
 
-**The Link Prediction Computational Advantage:**
-Contrary to intuition, link prediction tasks demonstrate that **sometimes the computationally cheaper option (linear probing) is also the better performer**:
+**The Link Prediction Efficiency Paradox:**
+Link prediction validates our RQ1 paradox from a computational perspective:
+- **Performance**: Linear probing wins 72.2% of cases (13/18)
+- **Computational efficiency**: 16.7% highly efficient when using full FT
+- **Cost savings**: Linear probing saves 3.3x parameters while performing better
+- **Double win**: Better performance AND lower computational cost
 
-- **CiteSeer_LP**: 13/18 cases prefer linear probing with mean -10.1% efficiency
-- **Cora_LP**: 5/9 cases show negative efficiency despite lower computational costs
-- **Parameter savings**: Using linear probing saves 2.15-3.34x parameters
-- **Time savings**: Often comparable or better time efficiency
+**Node Classification: The "Success" Story:**
+- **100% preference for full fine-tuning** (from RQ1)
+- **88.9% computationally efficient** when using full FT
+- **Average gain**: +10.9% for 4.6x parameter cost
+- **But remember**: Still operating within the 22.9% overall success rate from RQ1
 
-**Critical Insight**: The link prediction paradox from RQ1 becomes even more damning when considering computational costs. Not only does full fine-tuning fail to improve performance—it wastes 3x more parameters doing so. This represents the worst possible outcome: **paying more to get less**.
+**Graph Classification: The Expensive Success:**
+- **Highest performance gains**: +24.7% average when full FT works
+- **Highest parameter cost**: 40.3x parameter increase
+- **Damage repair champion**: ENZYMES b3 repairs 22% of damage at 40x cost
+- **Cost per percentage point**: 1.69x parameters per % improvement
 
-### 9.5 Damage Control Costs: Paying to Repair Pre-training Damage
+### 9.5 Understanding the Outliers: When and Why Damage Control Works
 
-Our analysis reveals a disturbing pattern we call "damage control"—cases where both strategies yield negative results, but full fine-tuning performs "less badly":
+Our analysis reveals specific patterns in when full fine-tuning successfully repairs pre-training damage:
 
-**Damage Control Statistics:**
-- **Frequency**: 41/54 cases (75.9%) show negative performance for at least one strategy
-- **Both-negative cases**: 22/54 (40.7%) where both strategies underperform
-- **Damage control rate**: In 86.4% of both-negative cases, full fine-tuning limits the damage
+**Outlier Investigation - Best Cases:**
+- **ENZYMES b3 (+75.4% improvement)**: The spectacular repair case where linear (-27.0%) → full (-5.0%)
+  - **Hypothesis**: Node contrastive pre-training severely corrupted ENZYMES representations, full FT rebuilds them
+  - **Cost**: 40.3x parameters for 22.0% damage repair
+  - **Verdict**: Impressive repair, but why start with broken representations?
 
-**Computational Cost of Damage Repair:**
-```
-Examples of paying for damage control:
-- ENZYMES s1: Linear -62.2%, Full -42.8% (19.4% less damage, 40x parameter cost)
-- Cora_NC b2: Linear -56.2%, Full -49.7% (6.5% less damage, 4.58x parameter cost)
-- CiteSeer_LP s3: Linear +3.0%, Full -10.6% (both positive becomes negative!)
-```
+**Outlier Investigation - Worst Cases:**  
+- **CiteSeer_LP s1 (-23.6% with linear probing preferred)**: The anti-repair case
+  - **Hypothesis**: Link prediction + molecular→citation transfer creates unfixable representation damage
+  - **Pattern**: Full FT makes it worse (-12.8%) despite computational investment
+  - **Verdict**: Some damage is too severe to repair economically
 
-**The Damage Control Paradox**: In these cases, you're not paying computational costs to improve performance—you're paying to make pre-training damage less catastrophic. It's like paying a premium insurance policy on a gambling bet you're already losing.
+**The Damage Control Success Pattern:**
+In 23/48 (47.9%) scheme-domain combinations where both strategies fail vs baseline:
+- **Average damage repaired**: 8.2 percentage points
+- **Parameter cost**: 16.2x average increase  
+- **Repair efficiency**: 0.51% improvement per parameter multiplier
 
-**ROI of Damage Control:**
-- Average damage reduction: 8.2 percentage points
-- Average parameter cost: 15.6x increase
-- **Damage control efficiency**: 0.53% improvement per parameter multiplier
+**Why Some Cases Resist Repair:**
+Link prediction tasks show **negative repair** in several cases:
+- Pre-training creates structural misalignment that full FT cannot economically fix
+- Feature dimension gaps (molecular 3-37 → citation 1433-3703) resist parameter scaling solutions
+- Task interference damage is too fundamental for computational brute force
 
-This reveals that full fine-tuning often serves not as an enhancement mechanism but as an expensive band-aid for pre-training's harmful effects.
+### 9.6 The Computational Investment Decision: Repair vs Rebuild
 
-### 9.6 Scheme and Domain Efficiency Patterns: No Escape Through Strategy
+Our efficiency analysis reveals that while full fine-tuning is effective damage control, the investment case is fundamentally flawed:
 
-Our computational efficiency analysis by pre-training scheme reveals that no strategy offers consistent computational value:
+**The Mathematical Reality:**
+- **Full fine-tuning success rate**: 66.7% of cases show improvement over linear probing
+- **Average improvement when successful**: +18.88% performance gain
+- **Average parameter cost**: 16.2x more parameters
+- **Cost per percentage point**: 0.86x parameters per % of improvement
 
-**Scheme Efficiency Distribution:**
+**But consider the complete picture:**
+- **Overall system reliability**: 22.9% positive vs baseline (from RQ1)
+- **Damage control necessity**: 47.9% of cases require repair just to reduce losses
+- **Opportunity cost**: 16x parameters could build much larger baseline models
 
-| Scheme | Highly Efficient | Inefficient | Moderately Efficient | Avg Parameter Cost | Success/Cost Ratio |
-|--------|-----------------|-------------|---------------------|-------------------|-------------------|
-| b1 | 3/6 (50%) | 3/6 (50%) | 0/6 (0%) | 20.4x | 0.025 |
-| b2 | 4/6 (67%) | 2/6 (33%) | 0/6 (0%) | 20.4x | 0.033 |
-| b3 | 3/6 (50%) | 3/6 (50%) | 0/6 (0%) | 20.4x | 0.024 |
-| s1 | 3/6 (50%) | 3/6 (50%) | 0/6 (0%) | 20.4x | 0.024 |
-| s2 | 4/6 (67%) | 2/6 (33%) | 0/6 (0%) | 20.4x | 0.033 |
-| s3 | 4/6 (67%) | 2/6 (33%) | 0/6 (0%) | 20.4x | 0.033 |
-| s4 | 2/6 (33%) | 3/6 (50%) | 1/6 (17%) | 20.4x | 0.016 |
-| s5 | 3/6 (50%) | 3/6 (50%) | 0/6 (0%) | 20.4x | 0.024 |
-| b4 | 3/6 (50%) | 3/6 (50%) | 0/6 (0%) | 20.4x | 0.025 |
+**The Investment Dilemma:**
+You have two choices:
+1. **Train from scratch with 16x parameters**: Reliable, predictable, no damage to repair
+2. **Pre-train + repair with 16x parameters**: Unreliable (22.9% success), requires damage control
 
-**Key Findings:**
-1. **No scheme achieves >67% efficiency rate** - Even the "best" schemes fail computationally 33% of the time
-2. **Complex schemes (s4) show worst efficiency** - Only 33% highly efficient cases
-3. **Parameter costs remain uniformly high** - All schemes require ~20x parameter multiplication
-4. **Success/cost ratios are abysmal** - Best case (b2, s2, s3) only 0.033
+**Rational Analysis:**
+- **Option 1 Expected Value**: High (larger model, stable training)
+- **Option 2 Expected Value**: 0.229 × 66.7% × 18.88% = 2.88% expected benefit
+- **Computational efficiency ratio**: Option 1 dominates by orders of magnitude
 
-**Domain-Specific Computational Patterns:**
+**Why Full Fine-tuning Success Doesn't Save Pre-training:**
+Even though full fine-tuning demonstrably works as damage control, the approach remains fundamentally irrational because:
+1. You're paying repair costs for self-inflicted damage
+2. The base failure rate (77.1%) makes the entire pipeline unreliable
+3. Alternative approaches offer better computational ROI without requiring repair
 
-**ENZYMES (Molecular → Molecular):**
-- 100% highly efficient when using full fine-tuning
-- But remember: still shows negative mean improvement (from RQ1)
-- **Computational illusion**: Paying 40x parameters to reduce damage from -62% to -43%
+### 9.7 Visual Evidence: When Repair Works vs When It Doesn't
 
-**PTC_MR (Molecular → Molecular):**
-- 50% efficiency rate (3 highly efficient, 5 inefficient)
-- When it works: modest 5-9% gains at 35x parameter cost
-- When it fails: -8.6% performance despite computational investment
+![RQ3 Damage Control Analysis](../analysis/figures/rq3_damage_control_analysis.png)
+*Figure 7: Damage control effectiveness showing cases where full fine-tuning repairs pre-training damage. Note the substantial repairs (green arrows) but also the massive parameter costs required for these fixes.*
 
-**Citation Networks (Molecular → Citation):**
-- Node classification: 100% highly efficient but small gains (3-20%)
-- Link prediction: 72% inefficient, confirming the paradox
-- **Extreme domain gap penalty**: 2-4x parameter costs for minimal or negative returns
+![RQ3 Cost Benefit Analysis](../analysis/figures/rq3_cost_benefit_analysis.png)
+*Figure 8: Cost-benefit analysis of full fine-tuning vs linear probing. The scatter plot shows that while full FT often succeeds, the parameter cost per unit improvement makes it economically questionable.*
 
-### 9.7 The Computational Reality Check
+![RQ3 Task Type Efficiency](../analysis/figures/rq3_task_type_efficiency.png)
+*Figure 9: Task-type efficiency patterns showing how computational efficiency aligns with strategy preferences from RQ1. Link prediction's poor efficiency validates its preference for linear probing.*
 
-Our comprehensive efficiency analysis reveals three devastating truths about pre-training computational costs:
+### 9.9 RQ3 Conclusions: Excellent Damage Control for a Fundamentally Broken System
 
-1. **The Entry Fee Problem**: Just to participate in pre-training gambling, you must invest 3.3-40x more parameters and 1.2x more time on average. This is like paying a $1000 entry fee to play a slot machine with 23% win rate.
+Our computational efficiency analysis reveals the core paradox of GNN pre-training: **the repair mechanism works, but the system it's repairing is fundamentally flawed**.
 
-2. **Negative Expected ROI**: With only 59% of cases showing efficiency when they work at all, combined with the 22.9% base success rate, the expected computational return is a pathetic 0.14%. No rational actor would accept these terms.
+**The Three-Layer Analysis of GNN Pre-training:**
 
-3. **The Damage Control Tax**: In 40.7% of cases, you're not even gambling for gains—you're paying computational costs to make pre-training's damage less severe. Full fine-tuning becomes an expensive repair mechanism rather than an enhancement strategy.
+1. **Performance Reality (RQ1)**: Only 22.9% of configurations improve over baseline, creating a system that breaks 77.1% of the time.
 
-### 9.8 Visual Evidence of Computational Inefficiency
+2. **Complexity Reality (RQ2)**: Task combinations don't fix the unreliability—they make it worse by adding interference and reducing success rates.
 
-![RQ3 Efficiency Analysis](../analysis/figures/rq3_efficiency_analysis.png)
-*Figure 7: Computational efficiency analysis showing the distribution of performance improvements vs computational costs. The concentration of points in the inefficient region (especially for link prediction) illustrates the poor return on computational investment.*
+3. **Computational Reality (RQ3)**: Full fine-tuning is excellent at repairing the damage (66.7% success rate, +18.88% average improvement), but **requires 16.2x parameter costs to fix a system that shouldn't be broken**.
 
-![RQ3 Strategy Preference](../analysis/figures/rq3_strategy_preference.png)
-*Figure 8: Fine-tuning strategy preferences by task type and their efficiency outcomes. Note how link prediction's preference for linear probing aligns with computational efficiency, while other task types pay high costs for modest gains.*
+**The Damage Control Paradox:**
 
-![RQ3 Statistical Analysis](../analysis/figures/rq3_statistical_analysis.png)
-*Figure 9: Statistical significance of efficiency improvements. Despite computational costs, most improvements fail to achieve significance after correction, questioning the value of the investment.*
+Pre-training for GNNs is like buying a car that breaks down 77% of the time, then paying premium prices for excellent repair services:
+- **The repairs work**: 66.7% success rate with substantial improvements
+- **The repairs are expensive**: 16.2x parameter costs on average  
+- **The base product is unreliable**: 77.1% overall failure rate
+- **Opportunity cost is massive**: Those parameters could build larger, more reliable models from scratch
 
-### 9.9 RQ3 Conclusions: The House Always Wins—And Charges Admission
+**The Ultimate Insight: Prevention vs Treatment**
 
-Our computational efficiency analysis completes the damning narrative established in RQ1 and RQ2. Not only is pre-training unreliable gambling with poor odds and complex betting systems—it also requires paying a steep computational admission fee just to play.
-
-**The Three-Layer Failure of GNN Pre-training:**
-
-1. **Performance Failure (RQ1)**: Only 22.9% of configurations show any improvement, with 0% statistically significant after correction. Pre-training is fundamentally unreliable.
-
-2. **Complexity Failure (RQ2)**: Adding more tasks doesn't improve odds—it makes them worse. Task combination strategies fail to rescue the approach, with success rates dropping from 33% (simple) to 12.5% (complex).
-
-3. **Computational Failure (RQ3)**: Even when pre-training occasionally works, it requires 3.3-40x more parameters and significant time investment for marginal gains. The expected ROI of 0.14% would be rejected by any rational decision-maker.
-
-**The Ultimate Verdict:**
-
-Pre-training for GNNs is like a rigged casino that:
-- Has a 77% house edge (failure rate)
-- Charges $1000 to enter (computational costs)
-- Offers complex betting systems that reduce your odds (task combinations)
-- Often requires you to pay just to reduce your losses (damage control)
+Our analysis proves that **full fine-tuning is highly effective treatment for pre-training's problems**. But this raises the fundamental question: Why use an approach that requires expensive treatment when reliable alternatives exist?
 
 **Practical Implications:**
 
-1. **For Practitioners**: Skip pre-training entirely. The computational costs alone make it unjustifiable, even before considering the performance risks.
+1. **For Practitioners**: Full fine-tuning works when needed, but avoid pre-training entirely to eliminate the need for expensive damage control.
 
-2. **For Researchers**: The field needs fundamentally new approaches. Current pre-training methods are not just ineffective—they're computationally wasteful.
+2. **For Researchers**: The field should focus on reliable approaches rather than developing better repair mechanisms for inherently unreliable methods.
 
-3. **For Decision Makers**: Allocate computational resources elsewhere. The expected return on pre-training investment is negligible compared to alternatives.
+3. **For Resource Allocation**: Invest computational budgets in larger from-scratch models rather than pre-training + expensive fine-tuning repairs.
 
-The addition of computational cost analysis to our gambling metaphor reveals the full picture: GNN pre-training isn't just bad odds—it's expensive bad odds. When you must pay premium prices to participate in a game you're likely to lose, the only winning move is not to play.
+**The Final Verdict:**
+GNN pre-training creates a system where you pay premium computational costs to repair damage that you created yourself. While the repair mechanism (full fine-tuning) is demonstrably effective, the rational choice is to avoid creating the damage in the first place.
