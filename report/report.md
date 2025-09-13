@@ -221,11 +221,11 @@ Building on RQ1's revelation that pre-training is unreliable gambling, RQ2 inves
 Our analysis of which schemes perform best across domain-strategy combinations reveals a striking pattern:
 
 **Winning Task Combinations Analysis:**
-- **Single-task schemes (b2, b3) win most often**: 7 out of 12 domain-strategy pairs
+- **Single-task schemes (b2, b3) win most often**: 6 out of 12 domain-strategy pairs
 - **Two-task schemes (s1, s2) occasionally succeed**: 4 out of 12 pairs
-- **Complex multi-task schemes rarely win**: Only 1 out of 12 (b4 on single-domain)
+- **Complex multi-task schemes rarely win**: Only 2 out of 12 (both b4 cases)
 
-**Key Finding**: When examining the "best performers" for each domain-strategy combination, simpler schemes dominate. The single-task b2 (node feature masking) alone accounts for 5 wins, while complex schemes like s4 and s5 never emerge as best performers.
+**Key Finding**: When examining the "best performers" for each domain-strategy combination, simpler schemes dominate. The single-task b2 (node feature masking) alone accounts for 4 wins, while complex schemes like s4 and s5 never emerge as best performers.
 
 This pattern reinforces our gambling metaphor: **simpler bets have better odds**. The more tasks you combine, the more ways the pre-training can go wrong.
 
@@ -243,7 +243,7 @@ Our progressive comparison analysis reveals how adding tasks systematically degr
 - No consistent pattern across domains
 - Average effect across all comparisons: negative
 
-**Critical Insight**: Out of 84 progressive comparisons in our analysis, **0 showed statistically significant improvements after correction**. This demonstrates that task addition is fundamentally unpredictable—another form of gambling where the odds get worse with complexity.
+**Critical Insight**: Out of 84 progressive comparisons in our analysis, **only 1 showed statistically significant improvements after correction**. This demonstrates that task addition is fundamentally unpredictable—another form of gambling where the odds get worse with complexity.
 
 ### 8.4 Task Complexity vs Success: The Systematic Decline
 
@@ -290,7 +290,7 @@ Our synergy analysis quantifies how rarely tasks help each other:
 
 **Synergy Score Statistics:**
 - **Positive synergies**: Only 11 out of 72 task combinations (15.3%)
-- **Mean synergy across all combinations**: -5.84%
+- **Mean synergy across all combinations**: -4.81%
 - **Worst synergy**: -27.12% (PTC_MR s5 linear probe)
 
 **Synergy by Task Type:**
