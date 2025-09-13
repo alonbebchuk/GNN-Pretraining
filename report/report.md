@@ -542,12 +542,12 @@ The intuition is compelling: surely molecular graphs should transfer better to o
 Our domain-task affinity analysis reveals extreme unpredictability across domains:
 
 **Domain Success Rate Analysis:**
-- **ENZYMES**: 0/8 positive cases (0.0% success rate)
-- **PTC_MR**: 3/8 positive cases (37.5% success rate)
-- **Cora_NC**: 1/8 positive cases (12.5% success rate)
-- **CiteSeer_NC**: 0/8 positive cases (0.0% success rate)
-- **Cora_LP**: 1/8 positive cases (12.5% success rate)
-- **CiteSeer_LP**: 3/8 positive cases (37.5% success rate)
+- **ENZYMES**: 0/16 positive cases (0.0% success rate)
+- **PTC_MR**: 8/16 positive cases (50.0% success rate)
+- **Cora_NC**: 1/16 positive cases (6.2% success rate)
+- **CiteSeer_NC**: 0/16 positive cases (0.0% success rate)
+- **Cora_LP**: 4/16 positive cases (25.0% success rate)
+- **CiteSeer_LP**: 9/16 positive cases (56.2% success rate)
 
 **The ENZYMES Paradox:**
 Despite ENZYMES being included in all pre-training schemes, it shows **complete failure** across every approach:
@@ -563,7 +563,7 @@ In stark contrast, PTC_MR shows the highest individual improvement in our study:
 - But the same scheme achieves 0.00% with b4 and -9.91% with s5
 - Success appears random rather than systematic
 
-**Critical Insight**: Two molecular graph datasets (ENZYMES and PTC_MR) from the same domain show completely opposite patterns—one never works (0% success), the other occasionally shows spectacular success (37.5% rate). **Domain expertise cannot predict which will occur**.
+**Critical Insight**: Two molecular graph datasets (ENZYMES and PTC_MR) from the same domain show completely opposite patterns—one never works (0% success), the other shows strong success (50.0% rate). **Domain expertise cannot predict which will occur**.
 
 ### 10.3 Cross-Domain vs Single-Domain Transfer: Two Paths, Same Destination
 
@@ -600,11 +600,11 @@ Our affinity matrix analysis reveals that task-domain combinations that "should"
 
 **Task Type Affinity Analysis:**
 
-| Task Type | Best Scheme | Mean Improvement | Consistency | Domain Variance |
-|-----------|-------------|------------------|-------------|-----------------|
-| Graph Classification | s1 | +3.97% | 8.57 | ENZYMES: -18.18%, PTC_MR: +26.13% |
-| Node Classification | b2 | -4.12% | 4.61 | All domains negative |
-| Link prediction | s2 | +3.84% | 3.59 | High variability |
+| Task Type | Best Scheme | Mean Improvement | Consistency (Std Dev) | Domain Variance |
+|-----------|-------------|------------------|----------------------|-----------------|
+| Graph Classification | s1 | +3.97% | 31.33 | ENZYMES: -18.18%, PTC_MR: +26.13% |
+| Node Classification | b2 | -4.12% | 4.96 | All domains negative |
+| Link prediction | s2 | +3.84% | 7.55 | High variability |
 
 **The Affinity Unpredictability:**
 
@@ -612,7 +612,7 @@ Our affinity matrix analysis reveals that task-domain combinations that "should"
    - Same task type, same pre-training, wildly different outcomes
    - s1 on ENZYMES: -18.18% (catastrophic failure)
    - s1 on PTC_MR: +26.13% (spectacular success)
-   - **44.31 percentage point spread** for identical approach
+   - **44.31 percentage point spread** for identical approach (std dev: 31.33)
 
 2. **Node Classification Universal Failure**:
    - Every scheme shows negative mean improvement
@@ -661,12 +661,12 @@ Our comprehensive domain analysis reveals four fundamental failures of domain ex
 
 **1. Domain Identity Doesn't Predict Success:**
 - ENZYMES (in pre-training) → ENZYMES: Complete failure (0% success)
-- PTC_MR (not in pre-training) → PTC_MR: Mixed success (37.5% rate)
+- PTC_MR (not in pre-training) → PTC_MR: Strong success (50.0% rate)
 - Being in pre-training actually correlates with worse performance
 
 **2. Domain Similarity Is Meaningless:**
 - Molecular → Molecular: Often fails (ENZYMES: 0%, b4: 0%)
-- Molecular → Citation: Sometimes succeeds (CiteSeer_LP: 37.5%)
+- Molecular → Citation: Sometimes succeeds (CiteSeer_LP: 56.2%)
 - Feature dimension gaps (3-37 vs 1433-3703) don't predict failure
 
 **3. Task-Domain Matching Is Random:**
