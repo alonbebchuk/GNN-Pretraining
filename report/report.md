@@ -483,16 +483,16 @@ Even though full fine-tuning demonstrably works as damage control, the approach 
 2. The base failure rate (77.1%) makes the entire pipeline unreliable
 3. Alternative approaches offer better computational ROI without requiring repair
 
-### 9.7 Visual Evidence: When Repair Works vs When It Doesn't
+### 9.7 Visual Evidence: Computational Trade-offs and Repair Effectiveness
 
-![RQ3 Damage Control Analysis](../analysis/figures/rq3_damage_control_analysis.png)
-*Figure 7: Damage control effectiveness showing cases where full fine-tuning repairs pre-training damage. Note the substantial repairs (green arrows) but also the massive parameter costs required for these fixes.*
+![RQ3 Efficiency Analysis](../analysis/figures/rq3_efficiency_analysis.png)
+*Figure 7: Computational efficiency analysis showing performance vs cost trade-offs. While full fine-tuning often succeeds in repairing damage, the parameter cost per unit improvement reveals the economic challenge of this approach.*
 
-![RQ3 Cost Benefit Analysis](../analysis/figures/rq3_cost_benefit_analysis.png)
-*Figure 8: Cost-benefit analysis of full fine-tuning vs linear probing. The scatter plot shows that while full FT often succeeds, the parameter cost per unit improvement makes it economically questionable.*
+![RQ3 Strategy Preference](../analysis/figures/rq3_strategy_preference.png)
+*Figure 8: Fine-tuning strategy preferences by task type showing how computational efficiency aligns with strategy choices. Link prediction's preference for linear probing corresponds to poor full fine-tuning efficiency, while other task types show the computational cost of their damage control needs.*
 
-![RQ3 Task Type Efficiency](../analysis/figures/rq3_task_type_efficiency.png)
-*Figure 9: Task-type efficiency patterns showing how computational efficiency aligns with strategy preferences from RQ1. Link prediction's poor efficiency validates its preference for linear probing.*
+![RQ3 Statistical Analysis](../analysis/figures/rq3_statistical_analysis.png)
+*Figure 9: Statistical analysis of efficiency improvements. Despite the demonstrated effectiveness of full fine-tuning as damage control, the computational costs raise questions about the overall value proposition of requiring such extensive repair mechanisms.*
 
 ### 9.9 RQ3 Conclusions: Excellent Damage Control for a Fundamentally Broken System
 
