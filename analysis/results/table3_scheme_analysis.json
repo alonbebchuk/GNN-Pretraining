@@ -1,0 +1,194 @@
+{
+  "b2_PTC_MR": {
+    "improvement": 11.320754716981137,
+    "strategy": "LIN"
+  },
+  "b3_PTC_MR": {
+    "improvement": 7.54716981132075,
+    "strategy": "FT"
+  },
+  "b4_PTC_MR": {
+    "improvement": 9.433962264150932,
+    "strategy": "LIN"
+  },
+  "s1_PTC_MR": {
+    "improvement": 35.84905660377361,
+    "strategy": "FT"
+  },
+  "s2_PTC_MR": {
+    "improvement": 5.660377358490568,
+    "strategy": "LIN"
+  },
+  "s3_PTC_MR": {
+    "improvement": 9.433962264150932,
+    "strategy": "FT"
+  },
+  "s4_PTC_MR": {
+    "improvement": -1.886792452830182,
+    "strategy": "LIN"
+  },
+  "s5_PTC_MR": {
+    "improvement": 7.54716981132075,
+    "strategy": "FT"
+  },
+  "b2_ENZYMES": {
+    "improvement": -4.999999999999999,
+    "strategy": "FT"
+  },
+  "b3_ENZYMES": {
+    "improvement": -4.999999999999999,
+    "strategy": "FT"
+  },
+  "b4_ENZYMES": {
+    "improvement": -0.8333333333333304,
+    "strategy": "FT"
+  },
+  "s1_ENZYMES": {
+    "improvement": -14.16666666666665,
+    "strategy": "FT"
+  },
+  "s2_ENZYMES": {
+    "improvement": -5.8333333333333295,
+    "strategy": "FT"
+  },
+  "s3_ENZYMES": {
+    "improvement": -5.8333333333333295,
+    "strategy": "FT"
+  },
+  "s4_ENZYMES": {
+    "improvement": -6.66666666666666,
+    "strategy": "FT"
+  },
+  "s5_ENZYMES": {
+    "improvement": -2.500000000000008,
+    "strategy": "FT"
+  },
+  "b2_Cora_NC": {
+    "improvement": -6.277190801740222,
+    "strategy": "FT"
+  },
+  "b3_Cora_NC": {
+    "improvement": -0.5593536357986537,
+    "strategy": "FT"
+  },
+  "b4_Cora_NC": {
+    "improvement": -4.0397762585456904,
+    "strategy": "FT"
+  },
+  "s1_Cora_NC": {
+    "improvement": -2.921068986948424,
+    "strategy": "FT"
+  },
+  "s2_Cora_NC": {
+    "improvement": -4.350528278433827,
+    "strategy": "FT"
+  },
+  "s3_Cora_NC": {
+    "improvement": -1.3051584835301646,
+    "strategy": "FT"
+  },
+  "s4_Cora_NC": {
+    "improvement": -5.407085146053474,
+    "strategy": "FT"
+  },
+  "s5_Cora_NC": {
+    "improvement": -6.277190801740222,
+    "strategy": "FT"
+  },
+  "b2_CiteSeer_NC": {
+    "improvement": -0.1470588235294078,
+    "strategy": "FT"
+  },
+  "b3_CiteSeer_NC": {
+    "improvement": -9.632352941176475,
+    "strategy": "FT"
+  },
+  "b4_CiteSeer_NC": {
+    "improvement": -5.882352941176471,
+    "strategy": "FT"
+  },
+  "s1_CiteSeer_NC": {
+    "improvement": -15.22058823529412,
+    "strategy": "FT"
+  },
+  "s2_CiteSeer_NC": {
+    "improvement": -10.735294117647063,
+    "strategy": "FT"
+  },
+  "s3_CiteSeer_NC": {
+    "improvement": -6.691176470588232,
+    "strategy": "FT"
+  },
+  "s4_CiteSeer_NC": {
+    "improvement": -15.808823529411772,
+    "strategy": "FT"
+  },
+  "s5_CiteSeer_NC": {
+    "improvement": -11.911764705882364,
+    "strategy": "FT"
+  },
+  "b2_Cora_LP": {
+    "improvement": -2.01311920380004,
+    "strategy": "LIN"
+  },
+  "b3_Cora_LP": {
+    "improvement": -3.137622386661034,
+    "strategy": "LIN"
+  },
+  "b4_Cora_LP": {
+    "improvement": -0.17449187320256587,
+    "strategy": "FT"
+  },
+  "s1_Cora_LP": {
+    "improvement": -11.768507448217926,
+    "strategy": "FT"
+  },
+  "s2_Cora_LP": {
+    "improvement": -4.275050893463014,
+    "strategy": "LIN"
+  },
+  "s3_Cora_LP": {
+    "improvement": -2.0422011826671,
+    "strategy": "LIN"
+  },
+  "s4_Cora_LP": {
+    "improvement": -3.7968139076485623,
+    "strategy": "FT"
+  },
+  "s5_Cora_LP": {
+    "improvement": -8.000775519436438,
+    "strategy": "FT"
+  },
+  "b2_CiteSeer_LP": {
+    "improvement": 12.235966042245467,
+    "strategy": "LIN"
+  },
+  "b3_CiteSeer_LP": {
+    "improvement": 21.23135660298296,
+    "strategy": "LIN"
+  },
+  "b4_CiteSeer_LP": {
+    "improvement": 0.9125758539878237,
+    "strategy": "LIN"
+  },
+  "s1_CiteSeer_LP": {
+    "improvement": 14.099917744013185,
+    "strategy": "LIN"
+  },
+  "s2_CiteSeer_LP": {
+    "improvement": 19.895084816786472,
+    "strategy": "LIN"
+  },
+  "s3_CiteSeer_LP": {
+    "improvement": 10.375118339981086,
+    "strategy": "LIN"
+  },
+  "s4_CiteSeer_LP": {
+    "improvement": 5.711359086182536,
+    "strategy": "LIN"
+  },
+  "s5_CiteSeer_LP": {
+    "improvement": 4.7661912374093625,
+    "strategy": "LIN"
+  }
+}

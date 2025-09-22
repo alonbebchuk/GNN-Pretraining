@@ -1,3 +1,0 @@
-better_strategy,significant_corrected_sum,improvement_pct_mean,improvement_pct_std,cohens_d_mean,cohens_d_std
-full_finetune,0,18.884,17.959,3.146,3.681
-linear_probe,0,-7.18,6.975,-1.458,1.46

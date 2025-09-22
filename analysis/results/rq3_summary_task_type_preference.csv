@@ -1,4 +1,0 @@
-task_type,linear_probe_count,full_finetune_count,total,full_finetune_rate
-graph_classification,5,13,18,72.2
-link_prediction,13,5,18,27.8
-node_classification,0,18,18,100.0

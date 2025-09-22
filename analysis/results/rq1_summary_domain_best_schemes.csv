@@ -1,7 +1,0 @@
-domain,full_finetune,linear_probe
-CiteSeer_LP,s2,b3
-CiteSeer_NC,b2,b2
-Cora_LP,b4,b2
-Cora_NC,b3,s1
-ENZYMES,b4,b2
-PTC_MR,s1,s1

@@ -1,7 +1,0 @@
-task_type,synergy_pct_mean,synergy_pct_std,synergy_pct_count,is_positive_synergy_sum,positive_synergy_rate
-combined,-3.428,3.925,12,1,8.3
-contrastive,-3.74,4.481,12,2,16.7
-cross_domain,-6.57,5.719,12,1,8.3
-full_adv,-6.552,8.018,12,2,16.7
-generative,-3.847,13.338,12,3,25.0
-single_domain,-4.729,5.652,12,2,16.7

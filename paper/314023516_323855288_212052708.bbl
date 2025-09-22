@@ -1,0 +1,124 @@
+\begin{thebibliography}{24}
+\providecommand{\natexlab}[1]{#1}
+
+\bibitem[{Caruana(1997)}]{caruana1997multitask}
+Rich Caruana. 1997.
+\newblock Multitask learning.
+\newblock \emph{Machine learning}, 28(1):41--75.
+
+\bibitem[{Chen et~al.(2020)Chen, Kornblith, Norouzi, and Hinton}]{chen2020simple}
+Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. 2020.
+\newblock A simple framework for contrastive learning of visual representations.
+\newblock In \emph{International conference on machine learning}, pages 1597--1607.
+
+\bibitem[{Devlin et~al.(2019)Devlin, Chang, Lee, and Toutanova}]{devlin2019bert}
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019.
+\newblock Bert: Pre-training of deep bidirectional transformers for language understanding.
+\newblock \emph{arXiv preprint arXiv:1810.04805}.
+
+\bibitem[{Fey and Lenssen(2019)}]{fey2019fast}
+Matthias Fey and Jan~Eric Lenssen. 2019.
+\newblock Fast graph representation learning with pytorch geometric.
+\newblock In \emph{ICLR Workshop on Representation Learning on Graphs and Manifolds}.
+
+\bibitem[{Ganin et~al.(2016)Ganin, Ustinova, Ajakan, Germain, Larochelle, Laviolette, Marchand, and Lempitsky}]{ganin2016dann}
+Yaroslav Ganin, Evgeniya Ustinova, Hana Ajakan, Pascal Germain, Hugo Larochelle, Fran{\c{c}}ois Laviolette, Mario Marchand, and Victor Lempitsky. 2016.
+\newblock Domain-adversarial training of neural networks.
+\newblock \emph{The journal of machine learning research}, 17:2096--2030.
+
+\bibitem[{He et~al.(2016)He, Zhang, Ren, and Sun}]{he2016deep}
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2016.
+\newblock Deep residual learning for image recognition.
+\newblock In \emph{Proceedings of the IEEE conference on computer vision and pattern recognition}, pages 770--778.
+
+\bibitem[{Hou et~al.(2022)Hou, Liu, Cen, Dong, Yang, Wang, and Tang}]{hou2022graphmae}
+Zhenqin Hou, Xiao Liu, Yukuo Cen, Yuxiao Dong, Hongxia Yang, Chunjie Wang, and Jie Tang. 2022.
+\newblock Graphmae: Self-supervised masked graph autoencoders.
+\newblock In \emph{Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining}, pages 594--604.
+
+\bibitem[{Hu et~al.(2019)Hu, Liu, Gomes, Zitnik, Liang, Pande, and Leskovec}]{hu2019strategies}
+Weihua Hu, Bowen Liu, Joseph Gomes, Marinka Zitnik, Percy Liang, Vijay Pande, and Jure Leskovec. 2019.
+\newblock Strategies for pre-training graph neural networks.
+\newblock \emph{arXiv preprint arXiv:1905.12265}.
+
+\bibitem[{Liben-Nowell and Kleinberg(2007)}]{liben2007link}
+David Liben-Nowell and Jon Kleinberg. 2007.
+\newblock The link-prediction problem for social networks.
+\newblock \emph{Journal of the American Society for Information Science and Technology}, 58(7):1019--1031.
+
+\bibitem[{Liu et~al.(2022{\natexlab{a}})Liu, Nie, Wang, Tang, Xiao, and Tang}]{liu2022graphmvp}
+Shengchao Liu, Hanchen Nie, Kaixiong Wang, Jian Tang, Shuiwang Xiao, and Jiliang Tang. 2022{\natexlab{a}}.
+\newblock Pre-training molecular graph representation with 3d geometry.
+\newblock \emph{arXiv preprint arXiv:2110.07728}.
+
+\bibitem[{Liu et~al.(2022{\natexlab{b}})Liu, Yu, Liang, Pan, Dong, Jin, Yu, and Zhang}]{liu2022graph}
+Yixin Liu, Shirui Yu, Ming Liang, Shirui Pan, Ming Dong, Chen Jin, Philip~S Yu, and Chengqi Zhang. 2022{\natexlab{b}}.
+\newblock Graph self-supervised learning: a survey.
+\newblock \emph{IEEE Transactions on Knowledge and Data Engineering}, 35(5):5216--5233.
+
+\bibitem[{Morris et~al.(2020)Morris, Kriege, Bause, Kersting, Mutzel, and Neumann}]{tudataset}
+Christopher Morris, Nils~M Kriege, Franka Bause, Kristian Kersting, Petra Mutzel, and Marion Neumann. 2020.
+\newblock Tu dortmund university graph data collection.
+\newblock \url{https://chrsmrrs.github.io/datasets/docs/datasets/}.
+
+\bibitem[{Newman(2003)}]{newman2003structure}
+Mark~EJ Newman. 2003.
+\newblock The structure and function of complex networks.
+\newblock \emph{SIAM review}, 45(2):167--256.
+
+\bibitem[{Pan and Yang(2010)}]{pan2010survey}
+Sinno~Jialin Pan and Qiang Yang. 2010.
+\newblock A survey on transfer learning.
+\newblock \emph{IEEE Transactions on knowledge and data engineering}, 22(10):1345--1359.
+
+\bibitem[{Paszke et~al.(2019)Paszke, Gross, Massa, Lerer, Bradbury, Chanan, Killeen, Lin, Gimelshein, Antiga et~al.}]{paszke2019pytorch}
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, and 1 others. 2019.
+\newblock Pytorch: An imperative style, high-performance deep learning library.
+\newblock In \emph{Advances in neural information processing systems}, volume~32, pages 8024--8035. Curran Associates, Inc.
+
+\bibitem[{Qiu et~al.(2020)Qiu, Chen, Dong, Zhang, Yang, Ding, Wang, and Tang}]{qiu2020gcc}
+Jiezhong Qiu, Qibin Chen, Yuxiao Dong, Jing Zhang, Hongxia Yang, Ming Ding, Kuansan Wang, and Jie Tang. 2020.
+\newblock Gcc: Graph contrastive coding for graph neural network pre-training.
+\newblock In \emph{Proceedings of the 26th ACM SIGKDD international conference on knowledge discovery \& data mining}, pages 1150--1160.
+
+\bibitem[{Sen et~al.(2008)Sen, Namata, Bilgic, Getoor, Galligher, and Eliassi-Rad}]{sen2008collective}
+Prithviraj Sen, Galileo Namata, Mustafa Bilgic, Lise Getoor, Brian Galligher, and Tina Eliassi-Rad. 2008.
+\newblock Collective classification in network data.
+\newblock \emph{AI magazine}, 29(3):93--106.
+
+\bibitem[{Sun et~al.(2020)Sun, Hoffmann, Verma, and Tang}]{sun2020infograph}
+Fan-Yun Sun, Jordan Hoffmann, Vikas Verma, and Jian Tang. 2020.
+\newblock Infograph: Unsupervised and semi-supervised graph-level representation learning via mutual information maximization.
+\newblock In \emph{International conference on learning representations}.
+
+\bibitem[{Veli{\v{c}}kovi{\'c} et~al.(2019)Veli{\v{c}}kovi{\'c}, Fedus, Hamilton, Li{\`o}, Bengio, and Hjelm}]{velickovic2019dgi}
+Petar Veli{\v{c}}kovi{\'c}, William Fedus, William~L Hamilton, Pietro Li{\`o}, Yoshua Bengio, and R~Devon Hjelm. 2019.
+\newblock Deep graph infomax.
+\newblock In \emph{International Conference on Learning Representations}.
+
+\bibitem[{Xie et~al.(2022)Xie, Xu, Zhang, Wang, and Ji}]{xie2022self}
+Yaochen Xie, Zhao Xu, Jingtun Zhang, Zhengyang Wang, and Shuiwang Ji. 2022.
+\newblock Self-supervised learning of graph neural networks: A unified review.
+\newblock \emph{IEEE transactions on pattern analysis and machine intelligence}, 45(6):6828--6847.
+
+\bibitem[{Xu et~al.(2019)Xu, Hu, Leskovec, and Jegelka}]{xu2019how}
+Keyulu Xu, Weihua Hu, Jure Leskovec, and Stefanie Jegelka. 2019.
+\newblock How powerful are graph neural networks?
+\newblock In \emph{International conference on learning representations}.
+
+\bibitem[{You et~al.(2020)You, Chen, Sui, Chen, Wang, and Shen}]{you2020graphcl}
+Yuning You, Tianlong Chen, Yongduo Sui, Ting Chen, Zhangyang Wang, and Yang Shen. 2020.
+\newblock Graph contrastive learning with augmentations.
+\newblock In \emph{Advances in neural information processing systems}, volume~33, pages 5812--5823.
+
+\bibitem[{Yu et~al.(2020)Yu, Kumar, Gupta, Levine, Hausman, and Finn}]{yu2020pcgrad}
+Tianhe Yu, Saurabh Kumar, Abhishek Gupta, Sergey Levine, Karol Hausman, and Chelsea Finn. 2020.
+\newblock Gradient surgery for multi-task learning.
+\newblock In \emph{Advances in neural information processing systems}, volume~33, pages 5824--5836.
+
+\bibitem[{Zhou et~al.(2020)Zhou, Cui, Hu, Zhang, Yang, Liu, Wang, Li, and Sun}]{zhou2020graph}
+Jie Zhou, Ganqu Cui, Shengding Hu, Zhengyan Zhang, Cheng Yang, Zhiyuan Liu, Lifeng Wang, Changcheng Li, and Maosong Sun. 2020.
+\newblock Graph neural networks: A review of methods and applications.
+\newblock \emph{AI Open}, 1:57--81.
+
+\end{thebibliography}

@@ -1,0 +1,129 @@
+\relax 
+\bibstyle{acl_natbib}
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{zhou2020graph}
+\citation{he2016deep,devlin2019bert}
+\citation{hu2019strategies}
+\citation{xie2022self,liu2022graph}
+\citation{velickovic2019dgi,sun2020infograph}
+\citation{hu2019strategies}
+\citation{you2020graphcl,hou2022graphmae}
+\citation{qiu2020gcc,liu2022graphmvp}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Why this matters.}{1}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Key Contributions.}{1}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{1}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Graph pre-training approaches.}{1}{section*.3}\protected@file@percent }
+\citation{caruana1997multitask}
+\citation{pan2010survey}
+\citation{yu2020pcgrad}
+\citation{tudataset,sen2008collective}
+\citation{xu2019how}
+\citation{hou2022graphmae}
+\citation{liben2007link}
+\citation{you2020graphcl}
+\citation{newman2003structure}
+\citation{ganin2016dann}
+\citation{yu2020pcgrad}
+\citation{chen2020simple}
+\citation{paszke2019pytorch}
+\citation{fey2019fast}
+\@writefile{toc}{\contentsline {paragraph}{Multi-task learning in graphs.}{2}{section*.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Our contributions.}{2}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Methodology}{2}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Experimental design.}{2}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Pre-training schemes.}{2}{section*.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Research Questions and Contributions.}{2}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Results}{2}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{RQ1 - Efficiency Gains Across Domains and Schemes.}{2}{section*.9}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces \textbf  {Full Fine-tuning Strategy} - Complete efficiency comparison vs. from-scratch full fine-tuning baseline (b1). Shows time per epoch speedup, convergence speedup, and overall speedup across domain-scheme combinations. Values >1 indicate speedup, <1 indicate slower performance.}}{3}{table.caption.10}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:full-finetuning}{{1}{3}{\textbf {Full Fine-tuning Strategy} - Complete efficiency comparison vs. from-scratch full fine-tuning baseline (b1). Shows time per epoch speedup, convergence speedup, and overall speedup across domain-scheme combinations. Values >1 indicate speedup, <1 indicate slower performance}{table.caption.10}{}}
+\@writefile{toc}{\contentsline {paragraph}{RQ2 - Selective Performance Success.}{3}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{RQ3 - Strategy Selection Trade-offs.}{3}{section*.13}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces \textbf  {Linear Probing Strategy} - Complete efficiency comparison vs. from-scratch full fine-tuning baseline (b1). Shows time per epoch speedup, convergence speedup, overall speedup, and parameter efficiency across domain-scheme combinations. Values >1 indicate speedup, <1 indicate slower performance. Parameter efficiency demonstrates substantial reduction by freezing GNN backbones.}}{3}{table.caption.11}\protected@file@percent }
+\newlabel{tab:linear-probing}{{2}{3}{\textbf {Linear Probing Strategy} - Complete efficiency comparison vs. from-scratch full fine-tuning baseline (b1). Shows time per epoch speedup, convergence speedup, overall speedup, and parameter efficiency across domain-scheme combinations. Values >1 indicate speedup, <1 indicate slower performance. Parameter efficiency demonstrates substantial reduction by freezing GNN backbones}{table.caption.11}{}}
+\@writefile{toc}{\contentsline {paragraph}{RQ4 - Deployment Framework.}{3}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Systematic Failure Mode Analysis.}{4}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Strategy-Specific Performance Analysis.}{4}{section*.18}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces \textbf  {Full Fine-tuning Performance Analysis.} Performance improvements across all downstream tasks using full fine-tuning strategy. Values show percentage improvement over from-scratch baseline (b1). Positive values indicate performance gains, negative values indicate degradation. Task types: Graph Classification (GC), Node Classification (NC), Link Prediction (LP). See Appendix B for detailed pre-training task specifications.}}{4}{table.caption.16}\protected@file@percent }
+\newlabel{tab:full-finetune-performance}{{3}{4}{\textbf {Full Fine-tuning Performance Analysis.} Performance improvements across all downstream tasks using full fine-tuning strategy. Values show percentage improvement over from-scratch baseline (b1). Positive values indicate performance gains, negative values indicate degradation. Task types: Graph Classification (GC), Node Classification (NC), Link Prediction (LP). See Appendix B for detailed pre-training task specifications}{table.caption.16}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces \textbf  {Linear Probing Performance Analysis.} Performance improvements across all downstream tasks using linear probing strategy. Values show percentage improvement over from-scratch baseline (b1). Positive values indicate performance gains, negative values indicate degradation. Task types: Graph Classification (GC), Node Classification (NC), Link Prediction (LP). See Appendix B for detailed pre-training task specifications.}}{4}{table.caption.17}\protected@file@percent }
+\newlabel{tab:linear-probe-performance}{{4}{4}{\textbf {Linear Probing Performance Analysis.} Performance improvements across all downstream tasks using linear probing strategy. Values show percentage improvement over from-scratch baseline (b1). Positive values indicate performance gains, negative values indicate degradation. Task types: Graph Classification (GC), Node Classification (NC), Link Prediction (LP). See Appendix B for detailed pre-training task specifications}{table.caption.17}{}}
+\@writefile{toc}{\contentsline {paragraph}{Strategy trade-offs.}{4}{section*.19}\protected@file@percent }
+\bibdata{gnn_pretrain}
+\bibcite{caruana1997multitask}{{1}{1997}{{Caruana}}{{}}}
+\bibcite{chen2020simple}{{2}{2020}{{Chen et~al.}}{{Chen, Kornblith, Norouzi, and Hinton}}}
+\bibcite{devlin2019bert}{{3}{2019}{{Devlin et~al.}}{{Devlin, Chang, Lee, and Toutanova}}}
+\bibcite{fey2019fast}{{4}{2019}{{Fey and Lenssen}}{{}}}
+\bibcite{ganin2016dann}{{5}{2016}{{Ganin et~al.}}{{Ganin, Ustinova, Ajakan, Germain, Larochelle, Laviolette, Marchand, and Lempitsky}}}
+\bibcite{he2016deep}{{6}{2016}{{He et~al.}}{{He, Zhang, Ren, and Sun}}}
+\bibcite{hou2022graphmae}{{7}{2022}{{Hou et~al.}}{{Hou, Liu, Cen, Dong, Yang, Wang, and Tang}}}
+\bibcite{hu2019strategies}{{8}{2019}{{Hu et~al.}}{{Hu, Liu, Gomes, Zitnik, Liang, Pande, and Leskovec}}}
+\bibcite{liben2007link}{{9}{2007}{{Liben-Nowell and Kleinberg}}{{}}}
+\bibcite{liu2022graphmvp}{{10}{2022{a}}{{Liu et~al.}}{{Liu, Nie, Wang, Tang, Xiao, and Tang}}}
+\bibcite{liu2022graph}{{11}{2022{b}}{{Liu et~al.}}{{Liu, Yu, Liang, Pan, Dong, Jin, Yu, and Zhang}}}
+\bibcite{tudataset}{{12}{2020}{{Morris et~al.}}{{Morris, Kriege, Bause, Kersting, Mutzel, and Neumann}}}
+\bibcite{newman2003structure}{{13}{2003}{{Newman}}{{}}}
+\bibcite{pan2010survey}{{14}{2010}{{Pan and Yang}}{{}}}
+\bibcite{paszke2019pytorch}{{15}{2019}{{Paszke et~al.}}{{Paszke, Gross, Massa, Lerer, Bradbury, Chanan, Killeen, Lin, Gimelshein, Antiga et~al.}}}
+\bibcite{qiu2020gcc}{{16}{2020}{{Qiu et~al.}}{{Qiu, Chen, Dong, Zhang, Yang, Ding, Wang, and Tang}}}
+\bibcite{sen2008collective}{{17}{2008}{{Sen et~al.}}{{Sen, Namata, Bilgic, Getoor, Galligher, and Eliassi-Rad}}}
+\bibcite{sun2020infograph}{{18}{2020}{{Sun et~al.}}{{Sun, Hoffmann, Verma, and Tang}}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Limitations and Future Work}{5}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusions}{5}{section.6}\protected@file@percent }
+\bibcite{velickovic2019dgi}{{19}{2019}{{Veli{\v {c}}kovi{\'c} et~al.}}{{Veli{\v {c}}kovi{\'c}, Fedus, Hamilton, Li{\`o}, Bengio, and Hjelm}}}
+\bibcite{xie2022self}{{20}{2022}{{Xie et~al.}}{{Xie, Xu, Zhang, Wang, and Ji}}}
+\bibcite{xu2019how}{{21}{2019}{{Xu et~al.}}{{Xu, Hu, Leskovec, and Jegelka}}}
+\bibcite{you2020graphcl}{{22}{2020}{{You et~al.}}{{You, Chen, Sui, Chen, Wang, and Shen}}}
+\bibcite{yu2020pcgrad}{{23}{2020}{{Yu et~al.}}{{Yu, Kumar, Gupta, Levine, Hausman, and Finn}}}
+\bibcite{zhou2020graph}{{24}{2020}{{Zhou et~al.}}{{Zhou, Cui, Hu, Zhang, Yang, Liu, Wang, Li, and Sun}}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Performance improvement heatmap by domain and pre-training scheme-strategy combinations. Red indicates positive improvements, blue indicates negative transfer. The selective nature of positive transfer is clearly visible, with molecular domains showing strong affinity for specific schemes (s1\_FT for PTC\_MR), while citation domains favor different combinations (b3\_LIN for link prediction tasks).}}{7}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:domain-heatmap}{{1}{7}{Performance improvement heatmap by domain and pre-training scheme-strategy combinations. Red indicates positive improvements, blue indicates negative transfer. The selective nature of positive transfer is clearly visible, with molecular domains showing strong affinity for specific schemes (s1\_FT for PTC\_MR), while citation domains favor different combinations (b3\_LIN for link prediction tasks)}{figure.caption.21}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Performance improvement patterns by task type reveal systematic optimization guidelines. Graph Classification (GC) shows high variability with notable peaks (s1\_FT), Node Classification (NC) exhibits consistent modest negative transfers, while Link Prediction (LP) demonstrates reliable positive improvements with linear probing strategies (b3\_LinearProbe). These patterns enable task-type-first deployment protocols.}}{7}{figure.caption.22}\protected@file@percent }
+\newlabel{fig:task-heatmap}{{2}{7}{Performance improvement patterns by task type reveal systematic optimization guidelines. Graph Classification (GC) shows high variability with notable peaks (s1\_FT), Node Classification (NC) exhibits consistent modest negative transfers, while Link Prediction (LP) demonstrates reliable positive improvements with linear probing strategies (b3\_LinearProbe). These patterns enable task-type-first deployment protocols}{figure.caption.22}{}}
+\citation{yu2020pcgrad}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Implementation Details}{8}{appendix.A}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Architecture Specifications}{8}{subsection.A.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{GNN Backbone.}{8}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Task-Specific Heads.}{8}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Training Hyperparameters}{8}{subsection.A.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Pre-training.}{8}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Fine-tuning.}{8}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Multi-task Learning Components}{8}{subsection.A.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{PCGrad Gradient Surgery.}{8}{section*.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Adaptive Loss Balancing.}{8}{section*.28}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Domain Adversarial Training.}{8}{section*.29}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.4}Pre-training Tasks}{8}{subsection.A.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Node Feature Masking.}{8}{section*.30}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Graph Augmentation.}{8}{section*.31}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Contrastive Learning.}{8}{section*.32}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.5}Data Processing}{8}{subsection.A.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Dataset Splits.}{8}{section*.33}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Graph Properties (12-dimensional).}{8}{section*.34}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Feature Scaling.}{8}{section*.35}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.6}Evaluation Protocol}{8}{subsection.A.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Metrics.}{8}{section*.36}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Statistical Setup.}{8}{section*.37}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Hardware.}{8}{section*.38}\protected@file@percent }
+\citation{devlin2019bert}
+\@writefile{toc}{\contentsline {section}{\numberline {B}Pre-training Task Technical Details}{9}{appendix.B}\protected@file@percent }
+\newlabel{sec:pretrain-tasks}{{B}{9}{Pre-training Task Technical Details}{appendix.B}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.1}Node Feature Masking (NFM)}{9}{subsection.B.1}\protected@file@percent }
+\newlabel{sec:nfm}{{B.1}{9}{Node Feature Masking (NFM)}{subsection.B.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.2}Link Prediction (LP)}{9}{subsection.B.2}\protected@file@percent }
+\newlabel{sec:lp}{{B.2}{9}{Link Prediction (LP)}{subsection.B.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.3}Node Contrastive Learning}{9}{subsection.B.3}\protected@file@percent }
+\newlabel{sec:node-contrast}{{B.3}{9}{Node Contrastive Learning}{subsection.B.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.4}Graph Contrastive Learning}{9}{subsection.B.4}\protected@file@percent }
+\newlabel{sec:graph-contrast}{{B.4}{9}{Graph Contrastive Learning}{subsection.B.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.5}Graph Property Prediction}{10}{subsection.B.5}\protected@file@percent }
+\newlabel{sec:graph-prop}{{B.5}{10}{Graph Property Prediction}{subsection.B.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.6}Domain Adversarial Training}{10}{subsection.B.6}\protected@file@percent }
+\newlabel{sec:domain-adv}{{B.6}{10}{Domain Adversarial Training}{subsection.B.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Hyperparameter Details}{10}{appendix.C}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {C.1}Pre-training Configuration}{10}{subsection.C.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {C.2}Fine-tuning Configuration}{10}{subsection.C.2}\protected@file@percent }
+\gdef \@abspage@last{10}
