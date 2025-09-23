@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.4.20)  22 SEP 2025 02:46
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.4.20)  22 SEP 2025 11:01
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -537,18 +537,8 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
 
-Underfull \hbox (badness 6559) in paragraph at lines 50--51
-[]\T1/ptm/b/n/10.95 (+20) Code and Data: \T1/ptm/m/n/10.95 (+20) Full im-ple-men-ta-tions,
- []
-
-
-Underfull \hbox (badness 3547) in paragraph at lines 50--51
-\T1/ptm/m/n/10.95 (+20) mod-els, and re-pro-ducible ex-per-i-ments avail-
- []
-
-
 Underfull \hbox (badness 10000) in paragraph at lines 50--51
-\T1/ptm/m/n/10.95 (+20) able at [][]$\T1/zi4/m/n/10.95 https : / / github . com / alonbebchuk /
+[][]$\T1/zi4/m/n/10.95 https : / / github . com / alonbebchuk /
  []
 
 
@@ -605,21 +595,6 @@ Underfull \hbox (badness 3965) in paragraph at lines 183--184
  []
 
 
-Underfull \hbox (badness 1365) in paragraph at lines 183--184
-\T1/ptm/m/n/10.95 (+20) performance trade-offs, with pat-terns vary-ing
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 183--184
-\T1/ptm/m/n/10.95 (+20) +17.0% vs b3_FT\TS1/cmr/m/n/10.95 ^^Y\T1/ptm/m/n/10.95 (+20) CiteSeer_LP: +2.4%),
- []
-
-
-Underfull \hbox (badness 5711) in paragraph at lines 183--184
-\T1/ptm/m/n/10.95 (+20) while molec-u-lar clas-si-fi-ca-tion shows mixed
- []
-
-
 
 
 Underfull \hbox (badness 1163) in paragraph at lines 185--186
@@ -653,11 +628,11 @@ Underfull \vbox (badness 10000) has occurred while \output is active []
 [4] (./314023516_323855288_212052708.bbl
 
 LaTeX Font Info:    Font shape `T1/zi4/m/n' will be
-(Font)              scaled to size 10.0pt on input line 62.
+(Font)              scaled to size 10.0pt on input line 85.
 
 
 [5]
-Underfull \hbox (badness 1460) in paragraph at lines 120--123
+Underfull \hbox (badness 1460) in paragraph at lines 164--168
 []\T1/ptm/m/n/10 (+20) Jie Zhou, Ganqu Cui, Shengding Hu, Zhengyan
  []
 
@@ -667,18 +642,11 @@ File: figs/domain_performance_heatmap.png Graphic file (type png)
 <use figs/domain_performance_heatmap.png>
 Package pdftex.def Info: figs/domain_performance_heatmap.png  used on input line 268.
 (pdftex.def)             Requested size: 409.71692pt x 250.3063pt.
-
-
-LaTeX Warning: `!h' float specifier changed to `!ht'.
-
 <figs/task_type_performance_heatmap.png, id=241, 933.0057pt x 426.6339pt>
 File: figs/task_type_performance_heatmap.png Graphic file (type png)
 <use figs/task_type_performance_heatmap.png>
 Package pdftex.def Info: figs/task_type_performance_heatmap.png  used on input line 275.
 (pdftex.def)             Requested size: 409.71692pt x 187.34842pt.
-
-LaTeX Warning: `!h' float specifier changed to `!ht'.
-
 
 
 
@@ -686,16 +654,6 @@ LaTeX Warning: `!h' float specifier changed to `!ht'.
 [6
 
 ] [7 <./figs/domain_performance_heatmap.png> <./figs/task_type_performance_heatmap.png>]
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 329--330
- []\T1/ptm/b/n/10.95 (+20) Statistical Setup.[] \T1/ptm/m/n/10.95 (+20) Seeds: 42,
- []
-
-
-Underfull \hbox (badness 10000) in paragraph at lines 329--330
-\T1/ptm/m/n/10.95 (+20) 84, 126. De-ter-min-is-tic train-ing:
- []
 
 
 Underfull \hbox (badness 10000) in paragraph at lines 329--330
@@ -746,13 +704,13 @@ Package rerunfilecheck Info: File `314023516_323855288_212052708.out' has not ch
 Here is how much of TeX's memory you used:
  16543 strings out of 469626
  260238 string characters out of 5475183
- 715471 words of memory out of 5000000
+ 716471 words of memory out of 5000000
  42531 multiletter control sequences out of 15000+600000
  705764 words of font info for 410 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 90i,12n,93p,1457b,703s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 90i,12n,93p,1456b,703s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <c:/texlive/2025/texmf-dist/fonts/type1/public/inconsolata/Inconsolata-zi4r.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb><c:/texlive/2025/texmf-dist/fonts/type1/public/cm-super/sfrm1095.pfb><c:/texlive/2025/texmf-dist/fonts/type1/urw/times/utmb8a.pfb><c:/texlive/2025/texmf-dist/fonts/type1/urw/times/utmr8a.pfb><c:/texlive/2025/texmf-dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on 314023516_323855288_212052708.pdf (10 pages, 996149 bytes).
+Output written on 314023516_323855288_212052708.pdf (10 pages, 996088 bytes).
 PDF statistics:
  416 PDF objects out of 1000 (max. 8388607)
  364 compressed objects within 4 object streams

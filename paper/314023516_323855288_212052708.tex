@@ -47,7 +47,7 @@ While GNN pre-training approaches suggest potential for cross-domain performance
 
 \textbf{Keywords:} graph neural networks, pre-training, transfer learning, multi-task learning, computational efficiency, systematic evaluation, domain adaptation, failure analysis
 
-\textbf{Code and Data:} Full implementations, models, and reproducible experiments available at \url{https://github.com/alonbebchuk/GNN-Pretraining.git}
+\textbf{Code and Data:} Full implementations, models, and reproducible experiments available at \\\url{https://github.com/alonbebchuk/GNN-Pretraining.git}
 
 \section{Introduction}
 Graph Neural Networks (GNNs) are widely used for learning representations from relational data across diverse domains including molecules, proteins, citation networks, and knowledge graphs \citep{zhou2020graph}.
@@ -180,19 +180,19 @@ PTC\_MR & \multicolumn{7}{c}{\textbf{35.3x}} \\
 
 \paragraph{RQ2 - Selective Performance Success.} Performance improvements require precise domain-scheme matching. Our analysis reveals 74\% of cross-domain transfers show negative performance, while optimal matches achieve notable gains (s1\_FT→PTC\_MR: +35.8\% peak, s2\_LIN→CiteSeer\_LP: +15.8\%). Figure~\ref{fig:domain-heatmap} visualizes these domain-specific patterns, showing clear performance clustering by domain-scheme combinations.
 
-\paragraph{RQ3 - Strategy Selection Trade-offs.} The choice between \textbf{linear probing} and \textbf{full fine-tuning strategies} creates distinct efficiency-performance trade-offs, with patterns varying significantly by domain-scheme combinations (Tables~\ref{tab:full-finetuning} and~\ref{tab:linear-probing}). Link prediction tasks strongly favor linear probing strategy (b3\_LIN→CiteSeer\_LP: +17.0\% vs b3\_FT→CiteSeer\_LP: +2.4\%), while molecular classification shows mixed patterns—PTC\_MR benefits from full fine-tuning strategy (s1\_FT: +35.8\% vs s1\_LIN: +17.2\%), ENZYMES shows no substantial improvement with either strategy.
+\paragraph{RQ3 - Strategy Selection Trade-offs.} The choice between \textbf{linear probing} and \textbf{full fine-tuning strategies} creates distinct efficiency-performance trade-offs, with patterns varying significantly by domain-scheme combinations (Tables~\ref{tab:full-finetuning} and~\ref{tab:linear-probing}). Link prediction tasks strongly favor linear probing strategy (b3\_LIN→CiteSeer\_LP: +17.0\% vs b3\_FT→CiteSeer\_LP: +2.4\%), while molecular classification shows mixed patterns: PTC\_MR benefits from full fine-tuning strategy (s1\_FT: +35.8\% vs s1\_LIN: +17.2\%), ENZYMES shows no substantial improvement with either strategy.
 
 \paragraph{RQ4 - Deployment Framework.} Our systematic evaluation transforms ad-hoc pre-training into principled deployment through a five-step evidence-based protocol. \textbf{Step 1}: Identify task type (GC/NC/LP) to determine optimal transfer strategy (linear probing vs full fine-tuning). \textbf{Step 2}: Characterize domain properties (molecular vs citation networks) for scheme compatibility assessment. \textbf{Step 3}: Consult our empirical efficiency and performance matrices to rank candidate combinations. \textbf{Step 4}: Balance peak performance potential against consistency requirements based on deployment constraints. \textbf{Step 5}: Implement with multiple seeds for statistical reliability (see Appendix A.6 for detailed protocol). Figure~\ref{fig:task-heatmap} provides the task-type specialization patterns essential for systematic selection.
 
 \paragraph{Systematic Failure Mode Analysis.} Our analysis reveals four predictable failure patterns that enable proactive avoidance strategies:
 
-\textbf{Dataset-Specific Brittleness:} Some datasets exhibit consistent negative transfer regardless of pre-training configuration, suggesting fundamental difficulties with transfer learning approaches. ENZYMES exemplifies this pattern, showing -5.0\% to -14.2\% degradation across all schemes—including b4 which pre-trains exclusively on ENZYMES itself—indicating intrinsic dataset characteristics that resist transfer learning benefits.
+\textbf{Dataset-Specific Brittleness:} Some datasets exhibit consistent negative transfer regardless of pre-training configuration, suggesting fundamental difficulties with transfer learning approaches. ENZYMES exemplifies this pattern, showing -5.0\% to -14.2\% degradation across all schemes, including b4 which pre-trains exclusively on ENZYMES itself, indicating intrinsic dataset characteristics that resist transfer learning benefits.
 
 \textbf{Task Complexity Gaps:} Mismatched complexity between pre-training tasks and downstream requirements creates dramatic performance variations. Multi-task scheme s1 demonstrates this dichotomy: achieving exceptional +35.8\% gains on PTC\_MR while failing at -6.1\% on Cora\_LP, where simpler schemes (b2: +4.3\%, b3: +3.1\%) succeed, suggesting the complex multi-task approach overwhelms simpler downstream requirements.
 
 \textbf{Optimization Interference:} Complex multi-task schemes can underperform simpler alternatives due to conflicting gradient updates. On PTC\_MR, simple scheme b2 (+11.3\%) outperforms complex scheme s2 (+3.8\%), revealing optimization interference despite PCGrad mitigation (see Appendix A.3).
 
-\textbf{Strategy Misalignment:} Wrong transfer strategy selection dramatically reduces effectiveness. CiteSeer\_LP illustrates this clearly: b3\_LIN achieves +17.0\% while b3\_FT manages only +2.4\%—an 85\% reduction in gains purely from strategy misalignment.
+\textbf{Strategy Misalignment:} Wrong transfer strategy selection dramatically reduces effectiveness. CiteSeer\_LP illustrates this clearly: b3\_LIN achieves +17.0\% while b3\_FT manages only +2.4\% - an 85\% reduction in gains purely from strategy misalignment.
 
 
 
@@ -244,7 +244,7 @@ s5 & -25.9 & -5.6 & -6.8 & -4.6 & -2.7 & \textbf{+1.2} \\
 \label{tab:linear-probe-performance}
 \end{table}
 
-\paragraph{Strategy-Specific Performance Analysis.} Our systematic evaluation across all downstream tasks reveals fundamental differences between transfer strategies (Tables~\ref{tab:full-finetune-performance} and~\ref{tab:linear-probe-performance}). \textbf{Full Fine-tuning Patterns:} Shows selective effectiveness with PTC\_MR achieving strong gains (s1: +35.8\%, s3: +9.4\%, s5: +7.5\%) while most other domains exhibit negative transfer, particularly Node Classification tasks (-0.6\% to -15.8\%). CiteSeer\_LP shows mixed results with only s2 achieving positive transfer (+2.4\%). \textbf{Linear Probing Excellence:} Demonstrates superior performance on Link Prediction tasks, with both Cora\_LP (b2: +4.3\%, b3: +3.1\%, s3: +4.3\%) and CiteSeer\_LP (b2: +8.4\%, b3: +17.0\%, s1: +10.2\%, s2: +15.8\%, s3: +6.6\%, s4: +2.1\%, s5: +1.2\%) showing consistent positive transfer. However, shows degradation on Graph Classification tasks, with only PTC\_MR maintaining some positive results (b2: +1.7\%, s1: +17.2\%). \textbf{Critical Finding:} Strategy selection is task-type dependent—Link Prediction strongly favors Linear Probing with consistent positive transfer, while Graph Classification requires Full Fine-tuning for optimal results.
+\paragraph{Strategy-Specific Performance Analysis.} Our systematic evaluation across all downstream tasks reveals fundamental differences between transfer strategies (Tables~\ref{tab:full-finetune-performance} and~\ref{tab:linear-probe-performance}). \textbf{Full Fine-tuning Patterns:} Shows selective effectiveness with PTC\_MR achieving strong gains (s1: +35.8\%, s3: +9.4\%, s5: +7.5\%) while most other domains exhibit negative transfer, particularly Node Classification tasks (-0.6\% to -15.8\%). CiteSeer\_LP shows mixed results with only s2 achieving positive transfer (+2.4\%). \textbf{Linear Probing Excellence:} Demonstrates superior performance on Link Prediction tasks, with both Cora\_LP (b2: +4.3\%, b3: +3.1\%, s3: +4.3\%) and CiteSeer\_LP (b2: +8.4\%, b3: +17.0\%, s1: +10.2\%, s2: +15.8\%, s3: +6.6\%, s4: +2.1\%, s5: +1.2\%) showing consistent positive transfer. However, shows degradation on Graph Classification tasks, with only PTC\_MR maintaining some positive results (b2: +1.7\%, s1: +17.2\%). \textbf{Critical Finding:} Strategy selection is task-type dependent: Link Prediction strongly favors Linear Probing with consistent positive transfer, while Graph Classification requires Full Fine-tuning for optimal results.
 
 
 \paragraph{Strategy trade-offs.} \textbf{Linear probing} enables substantial parameter reduction but faces computational bottlenecks, revealing that parameter efficiency doesn't guarantee proportional time savings. \textbf{Full fine-tuning} proves effective for molecular domains but creates misalignment in link prediction tasks.
@@ -263,14 +263,14 @@ We transform GNN pre-training from trial-and-error to evidence-based deployment 
 % -------------------------
 \bibliography{gnn_pretrain}
 
-\begin{figure*}[!h]
+\begin{figure*}[!ht]
 \centering
 \includegraphics[width=0.9\textwidth]{domain_performance_heatmap.png}
 \caption{Performance improvement heatmap by domain and pre-training scheme-strategy combinations. Red indicates positive improvements, blue indicates negative transfer. The selective nature of positive transfer is clearly visible, with molecular domains showing strong affinity for specific schemes (s1\_FT for PTC\_MR), while citation domains favor different combinations (b3\_LIN for link prediction tasks).}
 \label{fig:domain-heatmap}
 \end{figure*}
 
-\begin{figure*}[!h]
+\begin{figure*}[!ht]
 \centering
 \includegraphics[width=0.9\textwidth]{task_type_performance_heatmap.png}
 \caption{Performance improvement patterns by task type reveal systematic optimization guidelines. Graph Classification (GC) shows high variability with notable peaks (s1\_FT), Node Classification (NC) exhibits consistent modest negative transfers, while Link Prediction (LP) demonstrates reliable positive improvements with linear probing strategies (b3\_LinearProbe). These patterns enable task-type-first deployment protocols.}
@@ -326,7 +326,7 @@ We transform GNN pre-training from trial-and-error to evidence-based deployment 
 
 \paragraph{Metrics.} Graph/Node Classification: accuracy, F1, precision, recall. Link Prediction: AUC, accuracy, F1, precision, recall. Binary tasks use probabilities from output column 1. Multi-class uses macro-averaged metrics.
 
-\paragraph{Statistical Setup.} Seeds: 42, 84, 126. Deterministic training: \texttt{torch.backends.cudnn.deterministic = True}. Early stopping on validation AUC (link prediction) or accuracy (classification) with 50\% patience.
+\paragraph{Statistical Setup.} Seeds: 42, 84, 126. Deterministic training: \\\texttt{torch.backends.cudnn.deterministic = True}. Early stopping on validation AUC (link prediction) or accuracy (classification) with 50\% patience.
 
 \paragraph{Hardware.} All experiments on CUDA-enabled GPUs. PyTorch 1.12+, PyTorch Geometric 2.0+. Models implemented with AdamW optimizer ($\beta_1 = 0.9$, $\beta_2 = 0.999$, $\varepsilon = 10^{-8}$).
 
